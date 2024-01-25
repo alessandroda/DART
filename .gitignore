@@ -231,4 +231,5 @@ test_ran_unif
 !restart_file_tool/
 !system_simulation/
 !wakeup_filter/
-
+models/lorenz_63/
+models/lorenz_63/work/
