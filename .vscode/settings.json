@@ -1,0 +1,28 @@
+{
+    "fortran.fortls.disabled": false,
+    "python.analysis.extraPaths": [
+        "./increase-resolution-machine-learning/src"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "python.formatting.provider": "black",
+    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+    },
+    "isort.args":["--profile", "black"],
+    "editor.rulers": [
+        119
+    ],
+    "[json]": {
+        "editor.defaultFormatter": "vscode.json-language-features"
+    },
+    "esbonio.sphinx.confDir": "",
+    "[FortranFreeForm]": {
+        "editor.defaultFormatter": "fortran-lang.linter-gfortran"
+    },
+    "fortran.fortls.suffixes": [
+        ".f90"
+    ]
+}

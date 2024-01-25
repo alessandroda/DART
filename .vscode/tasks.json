@@ -1,0 +1,13 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build_dart",
+            "type": "shell",
+            "command": "./quickbuild.sh",
+            "options": {
+                "cwd": "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM_DA/work"
+            }
+        }
+    ]
+}
