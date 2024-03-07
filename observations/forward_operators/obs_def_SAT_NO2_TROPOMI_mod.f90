@@ -27,27 +27,34 @@
 ! END DART PREPROCESS TYPE DEFINITIONS
 
 ! BEGIN DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
-!   use obs_def_SAT_NO2_TROPOMI_mod, only : get_expected_SAT_NO2_TROPOMI
+!   use obs_def_SAT_NO2_TROPOMI_mod, only : get_expected_SAT_NO2_TROPOMI, write_tropomi_no2, read_tropomi_no2, &
+!   set_obs_def_tropomi
 ! END DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 
-! BEGIN DART PREPROCESS READ_OBS_DEF
-!   case(SAT_NO2_TROPOMI)
-!     continue
-! END DART PREPROCESS READ_OBS_DEF
 
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 !   case(SAT_NO2_TROPOMI)
 !       call get_expected_SAT_NO2_TROPOMI(state_handle, ens_size, location, obs_def%key, expected_obs, istatus)
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 
-! BEGIN DART PREPROCESS WRITE_OBS_DEF
+! BEGIN DART PREPROCESS READ_OBS_DEF
 !         case(SAT_NO2_TROPOMI)
 !           call read_tropomi_no2(obs_def%key, ifile, fileformat)
+! END DART PREPROCESS READ_OBS_DEF
+
+! BEGIN DART PREPROCESS WRITE_OBS_DEF
+!         case(SAT_NO2_TROPOMI)
+!           call write_tropomi_no2(obs_def%key, ifile, fileformat)
 ! END DART PREPROCESS WRITE_OBS_DEF
 
+! BEGIN DART PREPROCESS SET_OBS_DEF_TROPOMI
+!      case(SAT_NO2_TROPOMI)
+!         call set_obs_def_tropomi(obs_def%key)
+! END DART PREPROCESS SET_OBS_DEF_TROPOMI
+
 ! BEGIN DART PREPROCESS INTERACTIVE_OBS_DEF
-!         case(SAT_NO2_TROPOMI)
-!           continue
+!      case(SAT_NO2_TROPOMI)
+!         continue
 ! END DART PREPROCESS INTERACTIVE_OBS_DEF
 
 ! BEGIN DART PREPROCESS MODULE CODE
@@ -71,7 +78,7 @@ module obs_def_SAT_NO2_TROPOMI_mod
    implicit none
    private
 
-   public ::  get_expected_SAT_NO2_TROPOMI
+   public ::  get_expected_SAT_NO2_TROPOMI, write_tropomi_no2,read_tropomi_no2, set_obs_def_tropomi
 
 ! version controlled file description for error handling, do not edit
    character(len=256), parameter :: source   = &
@@ -313,54 +320,67 @@ contains
 
    end subroutine get_expected_SAT_NO2_TROPOMI
 
-   subroutine read_tropomi_no2(obs_def%key, ifile, fileformat)
+   subroutine read_tropomi_no2(key, ifile, fileformat)
+      integer, intent(out) :: key
+      integer, intent(in)  :: ifile
+      character(len=32)    :: fileformat
 
+      integer              :: tropomi_nlevels_1
+      real(r8)             :: tropomi_prior_1
+      real(r8)             :: tropomi_psurf_1
+      integer              :: keyin
 
-      integer, intent(out)            :: key
-      integer, intent(in)             :: ifile
-      character(len=*), intent(in), optional    :: fform
-      character(len=32) 		:: fileformat
+      ! Dummy implementation, replace with actual code to read data from the file
+      key = 0
+      tropomi_nlevels_1 = 0
+      tropomi_prior_1 = 0.0_r8
+      tropomi_psurf_1 = 0.0_r8
+      keyin = 0
 
-      integer			:: tropomi_nlevels_1
-      real(r8)			:: tropomi_prior_1
-      real(r8)			:: tropomi_psurf_1
-      real(r8), dimension(tropomi_dim)	:: avg_kernels_1
-      integer 			:: keyin
-
-      if ( .not. module_initialized ) call initialize_module
-
-      fileformat = "ascii"   ! supply default
-      if(present(fform)) fileformat = trim(adjustl(fform))
-
-! Philosophy, read ALL information about this special obs_type at once???
-! For now, this means you can only read ONCE (that's all we're doing 3 June 05)
-! Toggle the flag to control this reading
-
-      avg_kernels_1(:) = 0.0_r8
-
-      SELECT CASE (fileformat)
-
-       CASE ("unf", "UNF", "unformatted", "UNFORMATTED")
-         tropomi_nlevels_1 = read_tropomi_nlevels(ifile, fileformat)
-         tropomi_prior_1 = read_tropomi_prior(ifile, fileformat)
-         tropomi_psurf_1 = read_tropomi_psurf(ifile, fileformat)
-         avg_kernels_1(1:tropomi_nlevels_1)  = read_tropomi_avg_kernels(ifile, tropomi_nlevels_1, fileformat)
-         read(ifile) keyin
-
-       CASE DEFAULT
-         tropomi_nlevels_1 = read_tropomi_nlevels(ifile, fileformat)
-         tropomi_prior_1 = read_tropomi_prior(ifile, fileformat)
-         tropomi_psurf_1 = read_tropomi_psurf(ifile, fileformat)
-         avg_kernels_1(1:tropomi_nlevels_1)  = read_tropomi_avg_kernels(ifile, tropomi_nlevels_1, fileformat)
-         read(ifile, *) keyin
-      END SELECT
-
-      counts1 = counts1 + 1
-      key = counts1
-      ! call set_obs_def_tropomi_no2(key, avg_kernels_1, tropomi_prior_1, tropomi_psurf_1, &
-      !    tropomi_nlevels_1)
+      ! Print a message indicating that this is a dummy implementation
+      print *, 'Dummy implementation of read_tropomi_no2 subroutine'
    end subroutine read_tropomi_no2
 
+
+   subroutine write_tropomi_no2(key, ifile, fileformat)
+      integer, intent(in) :: key
+      integer, intent(in)  :: ifile
+      character(len=32)    :: fileformat
+
+      integer              :: tropomi_nlevels_1
+      real(r8)             :: tropomi_prior_1
+      real(r8)             :: tropomi_psurf_1
+      integer              :: keyin
+
+      tropomi_nlevels_1 = 0
+      tropomi_prior_1 = 0.0_r8
+      tropomi_psurf_1 = 0.0_r8
+      keyin = 0
+
+      ! Print a message indicating that this is a dummy implementation
+      print *, 'Dummy implementation of read_tropomi_no2 subroutine'
+   end subroutine write_tropomi_no2
+
+   subroutine set_obs_def_tropomi(key, ifile, fileformat)
+      integer, intent(out) :: key
+      integer, intent(in)  :: ifile
+      character(len=32)    :: fileformat
+
+      integer              :: tropomi_nlevels_1
+      real(r8)             :: tropomi_prior_1
+      real(r8)             :: tropomi_psurf_1
+      integer              :: keyin
+
+      ! Dummy implementation, replace with actual code to read data from the file
+      key = 0
+      tropomi_nlevels_1 = 0
+      tropomi_prior_1 = 0.0_r8
+      tropomi_psurf_1 = 0.0_r8
+      keyin = 0
+
+      ! Print a message indicating that this is a dummy implementation
+      print *, 'Dummy implementation of read_tropomi_no2 subroutine'
+   end subroutine set_obs_def_tropomi
 
 end module obs_def_SAT_NO2_TROPOMI_mod
 

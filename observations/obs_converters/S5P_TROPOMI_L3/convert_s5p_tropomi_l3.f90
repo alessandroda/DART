@@ -1,39 +1,3 @@
-obs_sequence
-obs_type_definitions
-1 
-40 SAT_NO2_TROPOMI
-num_copies:            1  num_qc:            1
-num_obs:        15635  max_num_obs:        15635
-S5P observation
-Data QC
-first:            1  last:        15635
-OBS            1
-1.4446879504248500E-005
-1.0000000000000000
--1           2          -1
-obdef
-loc3d
-0.3197373561306912        0.6855060535438297         1.000000000000000      2
-kind
-40 
-39934     1 53406
-1.0949940161462099E-020
-OBS            2
-4.1643546865088865E-005
-1.0000000000000000
-1  3          -1
-obdef
-loc3d
-0.3796081136233579        0.7073823240021766         1.000000000000000      2
-kind
-40 
-39934     1 53406
-1.2133543508100601E-019
-OBS            3
-2.1344370907172561E-005
-1.0000000000000000
-2  4          -1
-obdef
 program convert_s5p_tropomi_L2
    use location_mod, only : VERTISPRESSURE
    use netcdf

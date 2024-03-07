@@ -7,7 +7,7 @@
             "name" : "Run convert tropomi",
             "type" : "cppdbg",
             "request": "launch",
-            "program": "/mnt/mumbai_n4r5/dausilio/projects/DART/observations/obs_converters/S5P_TROPOMI_L3/work/convert_s5p_tropomi_l3",
+            "program": "/mnt/mumbai_n4r5/dausilio/projects/DART/observations/obs_converters/S5P_TROPOMI_L3/work/preprocess",
             "args": [],
             "stopAtEntry": true,
             "cwd" : "/mnt/mumbai_n4r5/dausilio/projects/DART/observations/obs_converters/S5P_TROPOMI_L3/work/",
