@@ -104,8 +104,12 @@ module obs_def_SAT_NO2_TROPOMI_mod
    real(r8) :: pressure_top = 20000.0       ! top pressure in pascals
    logical  :: separate_surface_level = .true.  ! false: level 1 of 3d grid is sfc
    ! true: sfc is separate from 3d grid
-   integer  :: num_pressure_intervals = 30  ! number of intervals if model_levels is F
-
+   integer  :: num_pressure_intervals = 30
+   integer, parameter :: levels = 34
+   integer, parameter :: max_obs = 100000 ! number of intervals if model_levels is F
+   real,dimension(levels, max_obs) :: kernel_trop_px
+   real,dimension(levels, max_obs) :: pressure_px
+   character(len=6), parameter :: S5Pstring = 'FO_params'
 
    namelist /obs_def_SAT_NO2_TROPOMI_nml/ model_levels, pressure_top,  &
       separate_surface_level, num_pressure_intervals
@@ -345,38 +349,26 @@ contains
    subroutine write_tropomi_no2(key, ifile, fileformat)
       integer, intent(in) :: key
       integer, intent(in)  :: ifile
-      character(len=32)    :: fileformat
+      character(len=*),  intent(in), optional :: fileformat
 
-      integer              :: tropomi_nlevels_1
-      real(r8)             :: tropomi_prior_1
-      real(r8)             :: tropomi_psurf_1
-      integer              :: keyin
+      write(ifile, *) trim(S5Pstring)
+      write(ifile, *) key
+      write(ifile, *) pressure_px(:,key)
+      write(ifile, *) kernel_trop_px(:,key)
 
-      tropomi_nlevels_1 = 0
-      tropomi_prior_1 = 0.0_r8
-      tropomi_psurf_1 = 0.0_r8
-      keyin = 0
-
-      ! Print a message indicating that this is a dummy implementation
-      print *, 'Dummy implementation of read_tropomi_no2 subroutine'
    end subroutine write_tropomi_no2
 
-   subroutine set_obs_def_tropomi(key, ifile, fileformat)
-      integer, intent(out) :: key
-      integer, intent(in)  :: ifile
+   subroutine set_obs_def_tropomi(key, kernel_trop_px_1, pressure_px_1)
+      integer, intent(in) :: key
+      integer :: i
       character(len=32)    :: fileformat
+      real,dimension(34) :: kernel_trop_px_1, pressure_px_1
 
-      integer              :: tropomi_nlevels_1
-      real(r8)             :: tropomi_prior_1
-      real(r8)             :: tropomi_psurf_1
-      integer              :: keyin
+      do i = 1, 34
+         kernel_trop_px(i,key) = kernel_trop_px_1(i)
+         pressure_px(i, key) = pressure_px_1(i)
+      end do
 
-      ! Dummy implementation, replace with actual code to read data from the file
-      key = 0
-      tropomi_nlevels_1 = 0
-      tropomi_prior_1 = 0.0_r8
-      tropomi_psurf_1 = 0.0_r8
-      keyin = 0
 
       ! Print a message indicating that this is a dummy implementation
       print *, 'Dummy implementation of read_tropomi_no2 subroutine'

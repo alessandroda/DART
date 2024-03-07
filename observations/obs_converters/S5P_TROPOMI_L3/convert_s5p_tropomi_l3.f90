@@ -1,4 +1,15 @@
 program convert_s5p_tropomi_L2
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! author: Alessandro D'Ausilio
+! email: a.dausilio@aria-net.it
+! convert_S5p_tropomi_L2 - reads the satellite data as downloaded from the
+! CAMS satellite operator.
+! It sets also the metadata to be included in the obs_seq.out in order to execute
+! the forward operator.
+! 07.03.2024 -> add metadata
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+   use types_mod, only : r8, missing_r8
    use location_mod, only : VERTISPRESSURE
    use netcdf
    use netcdf_utilities_mod, only : nc_open_file_readonly, nc_close_file
@@ -12,8 +23,8 @@ program convert_s5p_tropomi_L2
    use sat_obs_mod,   only : T_SatObs, ReadSatObs, SatObsDone
    use time_manager_mod, only : time_type, set_calendar_type, set_date, &
       increment_time, get_time, operator(-), GREGORIAN
-   use types_mod, only : r8, missing_r8
    use utilities_mod, only : initialize_utilities, finalize_utilities
+   use obs_def_SAT_NO2_TROPOMI_mod, only : set_obs_def_tropomi
 
    implicit none
 
@@ -38,7 +49,7 @@ program convert_s5p_tropomi_L2
    real(r8) :: qc, obsv, vval
    real(r8), allocatable :: lat(:), lon(:), pres(:, :), qa_value(:), amf(:), tmp(:), vcd(:), vcd_errvar(:), time(:), tobs(:)
    integer, parameter :: num_qc  = 1, num_copies = 1
-   integer  :: ncid, nobs, n, i, oday, osec, nused, nlayeri, nlayer
+   integer  :: ncid, nobs, n, i, oday, osec, nused, nlayeri, nlayer, obsindx
    logical  :: file_exist, first_obs
 
    call initialize_utilities('convert_s5p_tropomi_l3')
@@ -115,8 +126,11 @@ program convert_s5p_tropomi_L2
 
       ! extract actual time of observation in file into oday, osec.
       call get_time(time_obs, osec, oday)
+
+      call set_obs_def_tropomi(n, tsat_obs%kernel_trop(1,:,n), tsat_obs%pressure(:,n))
+
       call create_3d_obs(REAL(tsat_obs%lat(n),8),REAL(tsat_obs%lon(n), 8), 1.0_r8, VERTISPRESSURE, REAL(tsat_obs%vcd(1, n), 8), &
-         SAT_NO2_TROPOMI, REAL(tsat_obs%vcd_errvar(1, 1, n), 8), oday, osec, qc, obs)
+         SAT_NO2_TROPOMI, REAL(tsat_obs%vcd_errvar(1, 1, n), 8), oday, osec, qc, obs, key = n)
       call add_obs_to_seq(obs_seq, obs, time_obs, prev_obs, prev_time, first_obs)
 
    end do obsloop2
