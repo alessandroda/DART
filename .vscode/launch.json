@@ -1,15 +1,16 @@
 {
     "version" : "0.2.0",
     "configurations": [
+      {"name":"Python Debugger: Current File","type":"debugpy","request":"launch","program":"${file}","console":"integratedTerminal"},
     
         {
-            "name" : "Run DART",
+            "name" : "Run convert tropomi",
             "type" : "cppdbg",
             "request": "launch",
-            "program": "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM_DA/work/model_mod_check",
+            "program": "/mnt/mumbai_n4r5/dausilio/projects/DART/observations/obs_converters/S5P_TROPOMI_L3/work/convert_s5p_tropomi_l3",
             "args": [],
             "stopAtEntry": true,
-            "cwd" : "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM_DA/work",
+            "cwd" : "/mnt/mumbai_n4r5/dausilio/projects/DART/observations/obs_converters/S5P_TROPOMI_L3/work/",
             "externalConsole": false,
             "MIMode": "gdb",
             "preLaunchTask": "",
@@ -25,6 +26,52 @@
                 }
             ],
         },
+        {
+            "name" : "Run filter",
+            "type" : "cppdbg",
+            "request": "launch",
+            "program": "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/filter",
+            "args": [],
+            "stopAtEntry": true,
+            "cwd" : "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/",
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "preLaunchTask": "",
+            "setupCommands": [
+                {
+                  "description": "Enable pretty-printing for gdb",
+                  "text": "-enable-pretty-printing",
+                  "ignoreFailures": true
+                },
+                {
+                  "description": "Fix pretty-printing for gdb",
+                  "text": "set charset UTF-8"
+                }
+            ],
+        },
+        {
+          "name" : "Run Lorenz case",
+          "type" : "cppdbg",
+          "request": "launch",
+          "program": "/mnt/mumbai_n4r5/dausilio/projects/DART/models/lorenz_63/work/filter",
+          "args": [],
+          "stopAtEntry": true,
+          "cwd" : "/mnt/mumbai_n4r5/dausilio/projects/DART/models/lorenz_63/work/",
+          "externalConsole": false,
+          "MIMode": "gdb",
+          "preLaunchTask": "",
+          "setupCommands": [
+              {
+                "description": "Enable pretty-printing for gdb",
+                "text": "-enable-pretty-printing",
+                "ignoreFailures": true
+              },
+              {
+                "description": "Fix pretty-printing for gdb",
+                "text": "set charset UTF-8"
+              }
+          ],
+      },
         {
             "name": "Intel Debug Attach",
             "type": "cppvsdbg",

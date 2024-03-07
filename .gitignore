@@ -1,5 +1,6 @@
 *.mod
 *.o
+*.nc.gz
 *.swp
 *__pycache__*
 *obscount.txt
@@ -227,3 +228,7 @@ test_ran_unif
 !wakeup_filter/
 models/lorenz_63/
 models/lorenz_63/work/
+observations/obs_converters/MADIS/data/satwnd_input.nc
+observations/obs_converters/S5P_TROPOMI_L3/data/S5p_NO2_16685.nc
+observations/obs_converters/S5P_TROPOMI_L3/data/satwnd_input.nc
+observations/obs_converters/S5P_TROPOMI_L3/work/S5p_NO2_16685.nc
