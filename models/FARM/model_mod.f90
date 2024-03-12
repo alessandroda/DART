@@ -9,11 +9,11 @@ module model_mod
 ! with the DART data assimilation infrastructure. Do not change the arguments
 ! for the public routines.
 
-   use        types_mod,        only : r8, i8, MISSING_R8, MISSING_I, vtablenamelength
+   use        types_mod,        only : r8, i8, MISSING_R8, MISSING_I, vtablenamelength, i4, r4
 
    use        time_manager_mod, only : time_type, set_time, set_calendar_type
 
-   use        location_mod,     only : location_type, get_close_type, &
+   use        location_mod,     only : location_type, get_close_type, get_dist, query_location, get_location, &
       loc_get_close_obs => get_close_obs, &
       loc_get_close_state => get_close_state, &
       set_location, set_location_missing
@@ -24,14 +24,21 @@ module model_mod
       find_namelist_in_file, check_namelist_read, string_to_integer, &
       string_to_real, string_to_logical, to_upper
 
-   use obs_kind_mod, only: QTY_NO2, get_index_for_quantity, get_num_quantities, get_name_for_quantity
+   use        quad_utils_mod,  only : quad_interp_handle, init_quad_interp, &
+      set_quad_coords, finalize_quad_interp, &
+      quad_lon_lat_locate, quad_lon_lat_evaluate, &
+      GRID_QUAD_IRREG_SPACED_REGULAR,  &
+      QUAD_LOCATED_CELL_CENTERS
+
+   use obs_kind_mod, only: QTY_NO2, QTY_PRESSURE, get_index_for_quantity, get_num_quantities, get_name_for_quantity
    use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, &
       nc_add_global_creation_time, &
       nc_begin_define_mode, nc_end_define_mode, &
       nc_open_file_readonly, nc_get_dimension_size, &
       nc_variable_exists, nc_get_variable, nc_get_variable_size
-
-   use state_structure_mod, only : add_domain, get_domain_size, get_model_variable_indices
+   use distributed_state_mod, only : get_state, get_state_array
+   use state_structure_mod, only : add_domain, get_domain_size, get_model_variable_indices, get_dart_vector_index, &
+      get_num_variables
 
    use ensemble_manager_mod, only : ensemble_type
 
@@ -72,6 +79,7 @@ module model_mod
    logical :: module_initialized = .false.
    integer :: dom_id ! used to access the state structure
    type(time_type) :: assimilation_time_step
+   integer, allocatable :: state_kinds_list(:)
 
 ! Example Namelist
 ! Use the namelist for options to be set at runtime.
@@ -80,7 +88,7 @@ module model_mod
    integer  :: time_step_seconds   = 3600
    integer, parameter :: MAX_NUM_STATE_VARIABLES = 30
    integer, parameter :: MAX_NUM_COLUMNS = 5
-
+   character(len=256) :: errstring
 ! state_variables defines the contents of the state vector.
 ! each line of this input should have the form:
 !
@@ -125,7 +133,7 @@ module model_mod
 
    type(farm_grid) :: grid_data
 
-   integer, parameter :: MAX_STATE_VARIABLES = 1
+   integer, parameter :: MAX_STATE_VARIABLES = 2
    integer, parameter :: num_state_table_columns = 5
 
 contains
@@ -200,13 +208,45 @@ contains
       integer,             intent(in) :: qty
       real(r8),           intent(out) :: expected_obs(ens_size) !< array of interpolated values
       integer,            intent(out) :: istatus(ens_size)
+      real(r8) :: val(ens_size)
+      integer  :: which_vert, status1, varid
+      integer  :: four_lons(4), four_lats(4)
+      integer  :: status_array(ens_size)
+      real(r8) :: lon_lat_vert(3)
+      real(r8) :: quad_vals(ens_size,4)
+      integer(i4) :: imem, ens_ith, index_loc_lat, index_loc_lon, index_loc_vert
+      integer(i8) :: index_state
+      real(r8) :: cell_lat
+      logical :: isfound
+      integer, dimension(2) :: cell_idxs
+      integer :: ivar
+      type(quad_interp_handle) :: interp_handle
 
+      real(r8) :: ps(ens_size)
       if ( .not. module_initialized ) call static_init_model
 
-      expected_obs(:) = MISSING_R8
+      ivar = get_varid_from_kind(qty)
+      if (ivar < 1) then
+         istatus = 88
+         return
+      endif
 
-
-      istatus(:) = 1
+      lon_lat_vert = get_location(location)
+      if (qty == QTY_PRESSURE) then
+         call find_cell(lon_lat_vert(2), lon_lat_vert(1), grid_data%lats%vals, grid_data%lons%vals, cell_idxs, isfound )
+         if(isfound .neqv. .true.) then
+            istatus(:) = 88
+            return
+         end if
+         call find_index_of_value(lon_lat_vert(3), index_loc_vert, 'levs', isfound)
+         if(isfound .neqv. .true.) then
+            istatus(:) = 89
+            return
+         end if
+         index_state =  get_dart_vector_index(cell_idxs(2), cell_idxs(1), index_loc_vert, dom_id, ivar)
+         expected_obs = get_state(index_state,state_handle)
+         istatus(:) = 0
+      endif
 
    end subroutine model_interpolate
 
@@ -468,7 +508,7 @@ contains
          clamp_vals(i,1) = string_to_real(minvalstr)
          clamp_vals(i,2) = string_to_real(maxvalstr)
          update_list( i) = string_to_logical(updatestr, 'UPDATE')
-
+         state_kinds_list = kind_list
          nfields = nfields + 1
 
       enddo ParseVariables
@@ -489,4 +529,115 @@ contains
          clamp_vals, update_list)
 
    end subroutine set_farm_variable_info
+
+   subroutine find_cell(obs_lat, obs_lon, lat, lon, cells, cell_found)
+      real(8), intent(in) :: obs_lat, obs_lon    ! Array containing latitude and longitude of the location
+      real(8), intent(in) :: lat(:)         ! Array of latitude values for the grid
+      real(8), intent(in) :: lon(:)         ! Array of longitude values for the grid
+      integer, intent(out) :: cells(2)      ! Array containing indices of the cell
+      logical, intent(out) :: cell_found    ! Flag indicating if the cell is found
+
+      integer :: i, j
+      real(8) :: lat_min, lat_max, lon_min, lon_max
+
+      ! Initialize cell_found flag
+      cell_found = .false.
+
+      ! Check if the location is within the grid boundaries
+      lat_min = minval(lat)
+      lat_max = maxval(lat)
+      lon_min = minval(lon)
+      lon_max = maxval(lon)
+
+      if (obs_lat < lat_min .or. obs_lat > lat_max .or. &
+         obs_lon < lon_min .or. obs_lon > lon_max) then
+         ! Location is outside the grid boundaries
+         return
+      end if
+
+      ! Iterate over grid cells to find the location
+      do i = 1, size(lat) - 1
+         if (obs_lat >= lat(i) .and. obs_lat <= lat(i + 1)) then
+            do j = 1, size(lon) - 1
+               if (obs_lon >= lon(j) .and. obs_lon <= lon(j + 1)) then
+                  ! Location is within the current cell
+                  cells(1) = i
+                  cells(2) = j
+                  cell_found = .true.
+                  return
+               end if
+            end do
+         end if
+      end do
+
+   end subroutine find_cell
+
+
+   subroutine find_index_of_value(target_value, index, component, isfound)
+      real(r8), intent(in) :: target_value
+      character(len=*), intent(in) :: component
+      integer, intent(out) :: index
+      logical,intent(out) :: isfound
+      integer :: i
+
+      ! Initialize index to 0 (not found)
+      index = 0
+
+      select case (trim(component))
+       case('lats')
+         ! Search for target_value in vals array
+         do i = 1, size(grid_data%lats%vals)
+            if (grid_data%lats%vals(i) == target_value) then
+               index = i
+               exit
+            end if
+         end do
+       case('lons')
+         do i = 1, size(grid_data%lons%vals)
+            if (grid_data%lons%vals(i) == target_value) then
+               index = i
+               exit
+            end if
+         end do
+       case('levs')
+         do i = 1, size(grid_data%levs%vals)
+            if (grid_data%levs%vals(i) == target_value) then
+               index = i
+               exit
+            end if
+         end do
+       case default
+         write(*,*) 'Invalid component specified.'
+      end select
+
+      ! Display the result
+      if (index /= 0) then
+         write(*, *) 'Index of ', target_value, ' in vals(:) is ', index
+         isfound = .true.
+      else
+         write(*, *) 'Value not found in vals(:)'
+         isfound = .false.
+      end if
+   end subroutine find_index_of_value
+
+
+!--------------------------------------------------------------------
+!> given a kind, return what variable number it is
+!--------------------------------------------------------------------
+   function get_varid_from_kind(dart_kind)
+
+      integer, intent(in) :: dart_kind
+      integer             :: get_varid_from_kind
+
+      integer :: i
+
+      do i = 1, get_num_variables(dom_id)
+         if (dart_kind == state_kinds_list(i)) then
+            get_varid_from_kind = i
+            return
+         endif
+      end do
+
+   end function get_varid_from_kind
+
 end module model_mod

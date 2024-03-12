@@ -3,24 +3,28 @@
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 
-! !!! obs_def_SAT_NO2_TROPOMI_mod
-! !!! author : Alessandro D'Ausilio
-! !!! email : a.dausilio@aria-net.it
-! !!! This is the forward operator for the assimilation of S5P tropomi NO2 in FARM. preprocess will use this to insert
-! !!! appropriate definitions of SAT_NO2_TROPOMI in DEFAULT_obs_def_mod.f90 template and generate the source files
-! !!! obs_def_mod.f90 and obs_kind_mod.f90 that are used by filter and other DART programs.
-! !!! The observation requires the forward operator and as such in the DART PREPROCESS TYPE DEFINITION there is not
-! !!! the keyword COMMON_CODE.
-! !!! What happens is that the code calls the forward operator defined here in the method get_expected_SAT_NO2_TROPOMI
-! !!! and returns the corresponding value.
-! !!! Things TODO
-! !!! 1. given the state_handle, location, obs_def%key find the vector of pressure and no2 conc in FARM (interpolation?)
-! !!! 2. filter;filter_main;filter_setup_obs_sequence(..);read_obs_seq();read_obs();read_obs_def()
-! !!! this call stack leads to read_obs_def() which can be a user defined function in this module. This will be used to
-! !!! read the satellite info like pressure, troposheric kernel that together with the value of the observations will
-! !!! do the interpolation. An implementation like the one here is in obs_def_CO_Nadir_mod.f90
-! !!! 3. Apply the CSO steps by doing to AVG operation and give back the ys
-! !!! 4. do this for all the ensemble
+! ! obs_def_SAT_NO2_TROPOMI_mod
+! ! author : Alessandro D'Ausilio
+! ! email : a.dausilio@aria-net.it
+!****************************************************************************************************
+! This section defines the forward operator for assimilating S5P Tropomi NO2 in
+! FARM. The 'preprocess' function utilizes this operator to incorporate appropriate
+! definitions of SAT_NO2_TROPOMI in the DEFAULT_obs_def_mod.f90 template. Subsequently, it generates
+! the source files obs_def_mod.f90 and obs_kind_mod.f90, crucial for filter and other DART programs.
+! The DART PREPROCESS TYPE DEFINITION excludes the keyword COMMON_CODE since the observation requires
+! the forward operator.
+!
+! The subroutine 'get_expected_SAT_NO2_TROPOMI' is employed by the filter and performs the A*V operation.
+! As of 07.03.2024, the variable 'G' appears unnecessary.
+!
+! The 'convert_s5p_tropomi_l3' subroutine creates obs_seq.out, generating a 3D observation and adding
+! kernel and pressure vectors via set_obs_def_tropomi. It subsequently calls 'write_tropomi_no2'
+! to write the observations into the observation sequence file.
+!
+! During filter execution, the code initially passes through 'read_tropomi_no2' to read previously set
+! and written Tropomi NO2 observations, performing interpolation.
+!****************************************************************************************************
+
 
 ! BEGIN DART PREPROCESS TYPE DEFINITIONS
 ! SAT_NO2_TROPOMI, QTY_NO2
@@ -67,11 +71,11 @@ module obs_def_SAT_NO2_TROPOMI_mod
       check_namelist_read, find_namelist_in_file
    use     location_mod, only : location_type, set_location, get_location, &
       write_location, read_location, &
-      VERTISLEVEL, VERTISPRESSURE, VERTISSURFACE
+      VERTISLEVEL, VERTISPRESSURE, VERTISSURFACE, VERTISHEIGHT
    use time_manager_mod, only : time_type, read_time, write_time, &
       set_time, set_time_missing
    use  assim_model_mod, only : interpolate
-   use     obs_kind_mod, only : QTY_NO2
+   use     obs_kind_mod, only : QTY_NO2, QTY_PRESSURE
    use ensemble_manager_mod,  only : ensemble_type
    use obs_def_utilities_mod, only : track_status
 
@@ -79,6 +83,8 @@ module obs_def_SAT_NO2_TROPOMI_mod
    private
 
    public ::  get_expected_SAT_NO2_TROPOMI, write_tropomi_no2,read_tropomi_no2, set_obs_def_tropomi
+
+   integer, parameter               :: max_model_levs = 16
 
 ! version controlled file description for error handling, do not edit
    character(len=256), parameter :: source   = &
@@ -94,7 +100,9 @@ module obs_def_SAT_NO2_TROPOMI_mod
    real(r8), parameter :: density = 1000.0_r8   ! water density in kg/m^3
 
    integer :: max_pressure_intervals = 1000   ! increase as needed
-
+   real(r8)   :: farm_heights(16) =(/ &
+      20.,   65.,  125.,  210.,  325.,  480.,  690.,  975., 1360., &
+      1880., 2580., 3525., 4805., 6290., 7790., 9290./)
 ! default samples the atmosphere between the surface and 200 hPa
 ! at the model level numbers.  if model_levels is set false,
 ! then the default samples at 40 heights, evenly divided in
@@ -105,8 +113,9 @@ module obs_def_SAT_NO2_TROPOMI_mod
    logical  :: separate_surface_level = .true.  ! false: level 1 of 3d grid is sfc
    ! true: sfc is separate from 3d grid
    integer  :: num_pressure_intervals = 30
-   integer, parameter :: levels = 34
+   integer, parameter :: levels = 34 ! hardcoded
    integer, parameter :: max_obs = 100000 ! number of intervals if model_levels is F
+   integer,  dimension(max_obs)   :: tropomi_nlevels
    real,dimension(levels, max_obs) :: kernel_trop_px
    real,dimension(levels, max_obs) :: pressure_px
    character(len=6), parameter :: S5Pstring = 'FO_params'
@@ -143,185 +152,61 @@ contains
 
 !------------------------------------------------------------------------------
    subroutine get_expected_SAT_NO2_TROPOMI(state_handle, ens_size, location, key, val, istatus)
-
 !------------------------------------------------------------------------------
-! Purpose:  To calculate total precipitable water in a column over oceans.
-! inputs:
-!    state_vector:    DART state vector
-!    location:        Observation location
+!------------------------------------------------------------------------------
+!  Author: Alessandro D'Ausilio ,  Version 0: 08/03/2024
+!  Model refers to FARM
+!  tropomi refers to satellite data
 !
-! output parameters:
-!    SAT_NO2_TROPOMI:     total amount of liquid water (in cm) if all atmospheric water
-!               vapor in the column was condensed.
-!    istatus: 0 if ok, a positive value for error
 !------------------------------------------------------------------------------
-!  Author: Hui Liu ,  Version 1.1: May 25, 2011 for WRF
-!  updated by n. collins  14 june 2012
-!------------------------------------------------------------------------------
-
       type(ensemble_type), intent(in)  :: state_handle
       integer,             intent(in)  :: ens_size
       type(location_type), intent(in)  :: location
+      integer,             intent(in)  :: key
       real(r8),            intent(out) :: val(ens_size)
       integer,             intent(out) :: istatus(ens_size)
 
-! local variables
-      real(r8) :: lon, lat, height, obsloc(3)
-      type(location_type) :: location2
-
-! we'll compute the midpoint value for each pressure range, so allocate one
-! more than the number of expected values.
-      real(r8) :: pressure(ens_size, max_pressure_intervals+1), qv(ens_size, max_pressure_intervals+1)
-      real(r8) :: pressure_interval(ens_size), psfc(ens_size)
-      integer  :: which_vert, k, lastk, first_non_surface_level
-      integer  :: this_istatus(ens_size)
-      logical  :: return_now
-      integer :: key
-
+      integer             :: imem
+      integer             :: num_levs, lev
+      real(r8)            :: p_col(ens_size, max_model_levs)
+      real(r8)            :: tropomi_pres_local(ens_size, 34)
+      integer             :: p_col_istatus(ens_size)
+      type(location_type) :: locS
+      real(r8)            :: mloc(3), mloc1(3), mloc2(3)
       if ( .not. module_initialized ) call initialize_module
-
       val = MISSING_R8
-      istatus = 0
 
-! check for bad values in the namelist which exceed the size of the
-! arrays that are hardcoded here.
-
-      if (num_pressure_intervals > max_pressure_intervals) then
-         call error_handler(E_ERR, 'get_expected_SAT_NO2_TROPOMI', &
-            'num_pressure_intervals greater than max allowed', &
-            source, revision, revdate, &
-            text2='increase max_pressure_intervals in obs_def_SAT_NO2_TROPOMI_mod.f90', &
-            text3='and recompile.');
+      mloc = get_location(location)
+      if (mloc(2)>90.0_r8) then
+         mloc(2)=90.0_r8
+      elseif (mloc(2)<-90.0_r8) then
+         mloc(2)=-90.0_r8
       endif
-
-! location is the lat/lon where we need to compute the column quantity
-      obsloc   = get_location(location)
-      lon      = obsloc(1)                       ! degree: 0 to 360
-      lat      = obsloc(2)                       ! degree: -90 to 90
-
-! get the pressure at the surface first.
-
-! This assumes the column is over an ocean where the surface
-! is at 0m elevation.  If you are going to use this over land, the
-! height below must be the elevation (in m) of the surface at this location.
-      which_vert = VERTISSURFACE
-      height = 0.0
-      location2 = set_location(lon, lat, height,  which_vert)
-
-! interpolate the surface pressure and specific humidity at the desired location
-! assumes the values returned from the interpolation will be in these units:
-!   surface pressure :  Pa
-!   moisture         :  kg/kg
-      call interpolate(state_handle, ens_size, location2, QTY_NO2, pressure(:, 1), this_istatus)
-      call track_status(ens_size, this_istatus, val, istatus, return_now)
-      if (return_now) return
-
-! save this for use below
-      psfc = pressure(:, 1)
-
-! there are two options for constructing the column of values.  if 'model_levels'
-! is true, we query the model by vertical level number.  the 'separate_surface_level'
-! flag should be set to indicate if the lowest level of the 3d grid is the
-! surface or if the surface values are a separate quantity below the 3d grid.
-
-      if (model_levels) then
-
-         ! some models have a 3d grid of values and the lowest level contains
-         ! the surface quantities.  others have a separate field for the
-         ! surface values and the 3d grid starts at some given elevation.
-         ! if the namelist value 'separate_surface_level'  is true, we will
-         ! ask to interpolate a surface pressure first and then work up the
-         ! 3d column starting at level 1.  if it is false, we assume level 1
-         ! was the surface pressure and we start here at level 2.
-
-         if (separate_surface_level) then
-            first_non_surface_level = 1
-         else
-            first_non_surface_level = 2
-         endif
-
-         ! construct a pressure column on model levels
-
-         ! call the model until the interpolation call fails (above the top level)
-         ! (this is not a fatal error unless the first call fails).
-         ! also exit the loop if the pressure is above the namelist-specified pressure top
-
-         lastk = 2
-         LEVELS: do k=first_non_surface_level, 10000   ! something unreasonably large
-
-            ! call the model_mod to get the pressure and specific humidity at each level
-            ! from the model and fill out the pressure and qv arrays.  the model must
-            ! support a vertical type of level number.
-
-            which_vert = VERTISLEVEL
-            location2 = set_location(lon, lat, real(k, r8),  which_vert)
-!>@todo --- This may be different for each ensemble memeber ---
-            call interpolate(state_handle, ens_size, location2, QTY_NO2, pressure(:, lastk), this_istatus)
-            call track_status(ens_size, this_istatus, val, istatus, return_now)
-            if (any(pressure(:, lastk) < pressure_top)) exit LEVELS
-            if (return_now) return
-            lastk = lastk + 1
-         enddo LEVELS
-
-         lastk = lastk - 1
-
-         ! if we got no valid values, set istatus and return here.
-         ! 'SAT_NO2_TROPOMI' return value is already set to missing_r8
-         if (lastk == 1) then
-            istatus = 3
-            return
-         endif
-
-      else
-
-         ! construct an explicit pressure column and get qv at each pressure level.
-         ! each column will be at a different set of heights because it
-         ! divides the surface pressure and 'pressure_top' evenly into
-         ! 'num_pressure_intervals'.  so each column will have the same
-         ! number of samples, but each may be at different pressure values
-         ! depending on the surface pressure.
-         pressure_interval = (psfc - pressure_top)/num_pressure_intervals
-         lastk = num_pressure_intervals + 1
-
-         ! construct a pressure column at fixed pressure intervals
-         ! pressure(:, 1) is always the surface pressure.
-
-         do k=2, lastk
-            where (istatus == 0 ) pressure(:, k) =  pressure(:, 1) - pressure_interval * (k-1)
-         end do
-
-         ! call the model_mod to get the specific humidity at each location from the model
-         ! and fill out the qv array.
-         do k=2, lastk
-
-            which_vert = VERTISPRESSURE
-            !>@todo - there should be only a single location here.  for now, use 1
-            !> but what to do in the general case?  set a fixed top and bottom pressure??
-            location2 = set_location(lon, lat, pressure(1, k),  which_vert)
-
-            call interpolate(state_handle, ens_size, location2,  QTY_NO2, qv(:, k), this_istatus)
-            call track_status(ens_size, this_istatus, val, istatus, return_now)
-            if (return_now) return
-
-         enddo
-      endif
-
-! whichever way the column was made (pressure levels or model levels),
-! sum the values in the column, computing the area under the curve.
-! pressure is in pascals (not hPa or mb), and moisture is in kg/kg.
-      val = 0.0
-      do k=1, lastk - 1
-         where (istatus == 0) &
-            val = val + 0.5 * (qv(:, k) + qv(:, k+1) ) * (pressure(:, k) - pressure(:, k+1) )
+!     For each ensemble pass the satellite pressure
+      do imem = 1, ens_size
+         tropomi_pres_local(imem, :) = pressure_px(:,key)
       enddo
 
-! convert to centimeters of water and return
-      where (istatus == 0)
-         val = 100.0 * val /(density*gravity)   ! -> cm
-      elsewhere
-         val = missing_r8
-      endwhere
+      istatus = 0
+      p_col = MISSING_R8
+      lev = 1
+!     FARM pressure field at pixel position
+      model_levels: do
+         locS = set_location(mloc(1),mloc(2),farm_heights(lev),VERTISHEIGHT)
+         call interpolate(state_handle, ens_size, locS, QTY_PRESSURE, p_col(:, lev), p_col_istatus)
+         if (any(p_col_istatus /= 0)) then
+            p_col(:, lev) = MISSING_R8
+            num_levs = lev - 1
+            exit model_levels
+         endif
+         lev = lev + 1
+      enddo model_levels
 
+
+      do imem= 1, ens_size
+         val(imem) =  1
+      end do
+      istatus = 0
    end subroutine get_expected_SAT_NO2_TROPOMI
 
    subroutine read_tropomi_no2(key, ifile, fileformat)
@@ -346,22 +231,22 @@ contains
    end subroutine read_tropomi_no2
 
 
-   subroutine write_tropomi_no2(key, ifile, fileformat)
+   subroutine write_tropomi_no2(key, ifile, fform)
       integer, intent(in) :: key
       integer, intent(in)  :: ifile
-      character(len=*),  intent(in), optional :: fileformat
-
-      write(ifile, *) trim(S5Pstring)
-      write(ifile, *) key
-      write(ifile, *) pressure_px(:,key)
-      write(ifile, *) kernel_trop_px(:,key)
+      character(len=*),  intent(in), optional :: fform
+      print *, 'Dummy implementation of write subroutine'
+      ! write(ifile, *) trim(S5Pstring)
+      ! write(ifile, *) key
+      ! write(ifile, *) pressure_px(:,key)
+      ! write(ifile, *) kernel_trop_px(:,key)
 
    end subroutine write_tropomi_no2
 
    subroutine set_obs_def_tropomi(key, kernel_trop_px_1, pressure_px_1)
       integer, intent(in) :: key
       integer :: i
-      character(len=32)    :: fileformat
+      character(len=32)    :: fform
       real,dimension(34) :: kernel_trop_px_1, pressure_px_1
 
       do i = 1, 34
@@ -369,9 +254,6 @@ contains
          pressure_px(i, key) = pressure_px_1(i)
       end do
 
-
-      ! Print a message indicating that this is a dummy implementation
-      print *, 'Dummy implementation of read_tropomi_no2 subroutine'
    end subroutine set_obs_def_tropomi
 
 end module obs_def_SAT_NO2_TROPOMI_mod

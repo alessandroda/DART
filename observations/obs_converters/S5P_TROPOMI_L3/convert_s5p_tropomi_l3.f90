@@ -23,7 +23,8 @@ program convert_s5p_tropomi_L2
    use sat_obs_mod,   only : T_SatObs, ReadSatObs, SatObsDone
    use time_manager_mod, only : time_type, set_calendar_type, set_date, &
       increment_time, get_time, operator(-), GREGORIAN
-   use utilities_mod, only : initialize_utilities, finalize_utilities
+   use utilities_mod, only : initialize_utilities, finalize_utilities, find_namelist_in_file, check_namelist_read, &
+      nmlfileunit, do_nml_file, do_nml_term
    use obs_def_SAT_NO2_TROPOMI_mod, only : set_obs_def_tropomi
 
    implicit none
@@ -42,7 +43,7 @@ program convert_s5p_tropomi_L2
    type(obs_type)          :: obs, prev_obs
    type(T_SatObs)          :: tsat_obs
    type(time_type)         :: comp_day0, time_obs, prev_time, gregorian_sat_obs_time
-   character(len=16),  parameter ::s5p_netcdf_file = 'S5p_NO2_16685.nc'
+   character(len=16),  parameter ::s5p_netcdf_file = 'S5p_NO2_16742.nc'
    character(len=129), parameter :: s5p_out_file    = 'obs_seq.out'
    character(len=*),parameter        :: pollutant='NO2'
    integer,  allocatable :: used(:), tused(:), sorted_used(:)
@@ -50,14 +51,37 @@ program convert_s5p_tropomi_L2
    real(r8), allocatable :: lat(:), lon(:), pres(:, :), qa_value(:), amf(:), tmp(:), vcd(:), vcd_errvar(:), time(:), tobs(:)
    integer, parameter :: num_qc  = 1, num_copies = 1
    integer  :: ncid, nobs, n, i, oday, osec, nused, nlayeri, nlayer, obsindx
+   integer  :: iunit, rcio ! integers to read namelist
    logical  :: file_exist, first_obs
+
+!-----------------------------------------------------------------------
+! Namelist with default values
+!-----------------------------------------------------------------------
+
+   real :: dom_west = -180.0
+   real :: dom_east = 180.0
+   real :: dom_north = 90.0
+   real :: dom_south = -90.0
+   integer  :: nz = 16 ! FARM model layers
+   real     :: dlon = 0.1
+   real     :: dlat = 0.1
+   logical  :: filter_on_model_grid = .false.
+   namelist /model_grid_nml/ dom_west, dom_east, dom_south, dom_north, nz, dlon, dlat, filter_on_model_grid
 
    call initialize_utilities('convert_s5p_tropomi_l3')
 
+
+! Read the namelist entry
+   call find_namelist_in_file("input.nml", "model_grid_nml", iunit)
+   read(iunit, nml = model_grid_nml, iostat = rcio)
+   call check_namelist_read(iunit, rcio, "model_grid_nml")
+
+   ! Record the namelist values used for the run ...
+   if (do_nml_file()) write(nmlfileunit, nml=model_grid_nml)
+   if (do_nml_term()) write(     *     , nml=model_grid_nml)
    ! put the reference date into DART format
    call set_calendar_type(GREGORIAN)
    first_obs = .true.
-
 
    !  either read existing obs_seq or create a new one
    call static_init_obs_sequence()
@@ -98,7 +122,11 @@ program convert_s5p_tropomi_L2
       ! check the lat/lon values to see if they are ok
       if ( tsat_obs%lat(n) >  90.0_r8 .or. tsat_obs%lat(n) <  -90.0_r8 ) cycle obsloop1
       if ( tsat_obs%lon(n) > 180.0_r8 .or. tsat_obs%lon(n) < -180.0_r8 ) cycle obsloop1
-
+      if (filter_on_model_grid) then
+         ! Check if lat/lon values are within the specified domain
+         if ( tsat_obs%lat(n) > dom_north .or. tsat_obs%lat(n) < dom_south ) cycle obsloop1
+         if ( tsat_obs%lon(n) > dom_east .or. tsat_obs%lon(n) < dom_west ) cycle obsloop1
+      endif
       ! change lon from -180 to 180 into 0-360
       if ( tsat_obs%lon(n) < 0.0_r8 )  tsat_obs%lon(n) = tsat_obs%lon(n) + 360.0_r8
       ! filter obs with qa lower than 0.75

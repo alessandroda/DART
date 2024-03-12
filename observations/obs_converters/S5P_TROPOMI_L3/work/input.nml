@@ -56,3 +56,15 @@
    latlim2    =   90.0
    verbose    = .false.
    /
+
+&model_grid_nml
+   dom_west = 5.325,
+   dom_east = 19.20,
+   dom_south = 35.380,
+   dom_north = 47.81,
+   nz = 16,
+   dlon = 0.15,
+   dlat = 0.104,
+   filter_on_model_grid = .true.,
+   /
+/

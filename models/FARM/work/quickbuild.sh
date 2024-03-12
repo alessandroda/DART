@@ -8,9 +8,9 @@ main() {
 
 export DART=$(git rev-parse --show-toplevel)
 source "$DART"/build_templates/buildfunctions.sh
-
 MODEL=FARM
 LOCATION=threed_sphere
+EXTRA=$DART/models/cam-common-code
 
 
 programs=(
@@ -18,15 +18,21 @@ closest_member_tool
 filter
 model_mod_check
 perfect_model_obs
+perturb_single_instance
+wakeup_filter
 )
 
 serial_programs=(
+advance_time
 create_fixed_network_seq
 create_obs_sequence
 fill_inflation_restart
-integrate_model
 obs_common_subset
 obs_diag
+obs_selection
+obs_seq_coverage
+obs_seq_to_netcdf
+obs_seq_verify
 obs_sequence_tool
 )
 
