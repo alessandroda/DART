@@ -9,7 +9,7 @@
    read_input_state_from_file = .false.,
    single_file_in             = .false.
    !AD'A the path is 100% wrong
-   input_state_files          = "farminput.nc"
+   input_state_files          = "conc_g2_20210105.nc"
 
    write_output_state_to_file = .true.,
    single_file_out            = .true.
@@ -66,7 +66,7 @@
    obs_sequence_out_name        = "obs_seq.final",
    num_output_obs_members       = 20,
    init_time_days               = 153406,
-   init_time_seconds            = 39960,
+   init_time_seconds            = 41425,
    first_obs_days               = 153406,
    first_obs_seconds            = 0,
    last_obs_days                = -1,
@@ -130,12 +130,12 @@
   /
 
 &model_nml
-   farm_template_filename = 'farminput.nc'
-   state_variables  = 'c_NO2', 'QTY_NO2', 'NA', 'NA', 'UPDATE'   
+   farm_template_filename = 'conc_g2_20210105.nc'
+   state_variables  = 'c_NO2', 'QTY_NO2', 'NA', 'NA', 'UPDATE',
+                      'P',     'QTY_PRESSURE','NA', 'NA', 'UPDATE'
    time_step_days      = 0,
 !A.D using DA_SATOFFLINE approach
    time_step_seconds   = 180
-   state_variables  = 'c_NO2',     'QTY_NO2',         'NA', 'NA', 'UPDATE'
    /
 
 &utilities_nml
@@ -189,15 +189,19 @@
    /
 
 &model_mod_check_nml
-   input_state_files    = 'farminput.nc'
+   input_state_files    = 'conc_g2_20210105.nc'
    output_state_files   = 'mmc_output.nc'
    test1thru            = 0
    run_tests            = 1,2,3,4,5,7
-   x_ind                = 55800
-   loc_of_interest      = 19.20000000, 47.80600000, 0.325
-   quantity_of_interest = 'c_NO2'
-   interp_test_dx       = 0.02
-   interp_test_xrange   = 0.0, 1.0
+   x_ind                = 100000
+   loc_of_interest      = 9.00000000  47.39000000, 2000
+   quantity_of_interest = 'QTY_NO2'
+   interp_test_dx       = 0.5
+   interp_test_dy       = 0.5
+   interp_test_dz       = 100
+   interp_test_xrange   = 4, 20
+   interp_test_yrange   = 35, 48
+   interp_test_zrange   = 0.0, 10000
    verbose              = .true.
    /
 
