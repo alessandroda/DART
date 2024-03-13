@@ -67,4 +67,7 @@
    dlat = 0.104,
    filter_on_model_grid = .true.,
    /
+&obs_def_SAT_NO2_TROPOMI_nml
+   /
+
 /

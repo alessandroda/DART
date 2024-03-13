@@ -155,7 +155,7 @@ program convert_s5p_tropomi_L2
       ! extract actual time of observation in file into oday, osec.
       call get_time(time_obs, osec, oday)
 
-      call set_obs_def_tropomi(n, tsat_obs%kernel_trop(1,:,n), tsat_obs%pressure(:,n))
+      call set_obs_def_tropomi(n, REAL(tsat_obs%kernel_trop(1,:,n), 8), REAL(tsat_obs%pressure(:,n), 8))
 
       call create_3d_obs(REAL(tsat_obs%lat(n),8),REAL(tsat_obs%lon(n), 8), 1.0_r8, VERTISPRESSURE, REAL(tsat_obs%vcd(1, n), 8), &
          SAT_NO2_TROPOMI, REAL(tsat_obs%vcd_errvar(1, 1, n), 8), oday, osec, qc, obs, key = n)

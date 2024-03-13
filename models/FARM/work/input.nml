@@ -130,9 +130,10 @@
   /
 
 &model_nml
-   farm_template_filename = 'conc_g2_20210105.nc'
+   farm_template_filename = 'conc_g2_20210105_2.nc'
    state_variables  = 'c_NO2', 'QTY_NO2', 'NA', 'NA', 'UPDATE',
                       'P',     'QTY_PRESSURE','NA', 'NA', 'UPDATE'
+                      'SP',     'QTY_SURFACE_PRESSURE','NA', 'NA', 'UPDATE'
    time_step_days      = 0,
 !A.D using DA_SATOFFLINE approach
    time_step_seconds   = 180
