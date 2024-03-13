@@ -30,7 +30,7 @@ module model_mod
       GRID_QUAD_IRREG_SPACED_REGULAR,  &
       QUAD_LOCATED_CELL_CENTERS
 
-   use obs_kind_mod, only: QTY_NO2, QTY_PRESSURE, get_index_for_quantity, get_num_quantities, get_name_for_quantity
+   use obs_kind_mod, only: QTY_NO2, QTY_PRESSURE, QTY_SURFACE_PRESSURE, get_index_for_quantity, get_num_quantities, get_name_for_quantity
    use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, &
       nc_add_global_creation_time, &
       nc_begin_define_mode, nc_end_define_mode, &
@@ -133,7 +133,7 @@ module model_mod
 
    type(farm_grid) :: grid_data
 
-   integer, parameter :: MAX_STATE_VARIABLES = 2
+   integer, parameter :: MAX_STATE_VARIABLES = 3
    integer, parameter :: num_state_table_columns = 5
 
 contains
@@ -246,8 +246,16 @@ contains
          index_state =  get_dart_vector_index(cell_idxs(2), cell_idxs(1), index_loc_vert, dom_id, ivar)
          expected_obs = get_state(index_state,state_handle)
          istatus(:) = 0
-      endif
-
+      else if (qty == QTY_SURFACE_PRESSURE) then
+         call find_cell(lon_lat_vert(2), lon_lat_vert(1), grid_data%lats%vals, grid_data%lons%vals, cell_idxs, isfound )
+         if(isfound .neqv. .true.) then
+            istatus(:) = 90
+            return
+         end if
+         index_state =  get_dart_vector_index(cell_idxs(2), cell_idxs(1), index_loc_vert, dom_id, ivar)
+         expected_obs = get_state(index_state,state_handle)
+         istatus(:) = 0
+      end if
    end subroutine model_interpolate
 
 
