@@ -1,6 +1,21 @@
 import netCDF4
+import xarray as xr
 
-file_name_list = ["conc_g2_20210105.nc", "conc_g2_20210106.nc", "conc_g2_20210107.nc"]
+# ds = xr.open_dataset(
+#     "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/conc_g2_20210105.nc"
+# )
+# ds_meteo = xr.open_dataset(
+#     "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/GAP_g2_20210105.nc"
+# )
+# ds["P"] = ds_meteo["P"]
+# ds["SP"] = ds_meteo["SP"]
+# ds.to_netcdf(
+#     "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/conc_g2_20210105_3.nc"
+# )
+
+file_name_list = [
+    "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/output_file.nc"
+]
 for file_name in file_name_list:
     nc_file = netCDF4.Dataset(file_name, "r+")
 
@@ -10,6 +25,9 @@ for file_name in file_name_list:
     nc_file["time"].calendar = "gregorian"
 
     # remove scale_factor and offset from the file
+    del nc_file["P"].add_offset
+    del nc_file["P"].scale_factor
+
     del nc_file["c_NO2"].add_offset
     del nc_file["c_NO2"].scale_factor
 
