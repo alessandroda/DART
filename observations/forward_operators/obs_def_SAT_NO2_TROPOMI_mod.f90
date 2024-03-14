@@ -168,25 +168,26 @@ contains
       real(r8),            intent(out) :: val(ens_size)
       integer,             intent(out) :: istatus(ens_size)
 
-      integer             :: imem
-      integer             :: num_levs, nz, iz, level_ith
-      real(r8),allocatable                  :: model_p(:, :)
-      real(r8), allocatable    :: tropomi_pres_local(:,:)
-      integer             :: p_col_istatus(ens_size)
-      type(location_type) :: locS
-      real(r8)            :: mloc(3), mloc1(3), mloc2(3)
+      integer                          :: imem
+      integer                          :: num_levs, nz, iz, level_ith
+      real(r8)                         :: model_p(ens_size, max_model_p_levs)
+      real(r8)                         :: model_conc(ens_size, max_model_levs)
+      real(r8)                         :: model_conc_2d_kl(ens_size, tropomi_dim)
+      real(r8)                         :: model_conc_vcd(ens_size)
+      real(r8)                         :: tropomi_pres_local(ens_size,tropomi_dim +1)
+      real(r8)                         :: tropomi_trop_kernel_local(ens_size,tropomi_dim)
+      integer                          :: p_col_istatus(ens_size), int_conc_status(ens_size)
+      type(location_type)              :: locS
+      real(r8)                         :: mloc(3), mloc1(3), mloc2(3)
 !Vertical for LayerAverage
-      integer                           :: indexSP_kernel,indexSP_model
-      real(r8),allocatable                  :: modelP_scaled(:)
-      real(r8)        :: sp(ens_size)
-      integer,allocatable               :: iiv(:),jjv(:),nwv
-      real(r8),allocatable                  :: dxv(:),dyv(:),wwv(:)
-
+      integer                          :: indexSP_kernel,indexSP_model
+      real(r8)                         :: sp(ens_size)
+      integer                          :: iiv(tropomi_dim*max_model_levs),jjv(tropomi_dim*max_model_levs),nwv
+      real(r8)                         :: dxv(max_model_levs),dyv(max_model_levs),wwv(tropomi_dim*max_model_levs)
+      logical                          :: return_now
       if ( .not. module_initialized ) call initialize_module
-      val = MISSING_R8
+      val = 0.0_r8
 
-      allocate(tropomi_pres_local(ens_size, tropomi_dim + 1))
-      tropomi_pres_local = 0.0_r8
 
       mloc = get_location(location)
       if (mloc(2)>90.0_r8) then
@@ -194,17 +195,20 @@ contains
       elseif (mloc(2)<-90.0_r8) then
          mloc(2)=-90.0_r8
       endif
-!     For each ensemble pass the satellite pressure
+      !     For each ensemble pass the satellite pressure
+      tropomi_pres_local = 0.0_r8
+      tropomi_trop_kernel_local = 0.0_r8
       do imem = 1, ens_size
          do level_ith = 1, tropomi_dim
             tropomi_pres_local(imem, level_ith) = pressure_px(level_ith,key)
+            tropomi_trop_kernel_local(imem, level_ith) = kernel_trop_px(level_ith, key)
          enddo
       enddo
 
-      allocate(model_p(ens_size, max_model_p_levs))
       istatus = 0
       nz = 1
       !     FARM pressure field at pixel position
+      model_p = 0.0_r8
       model_levels: do
          locS = set_location(mloc(1),mloc(2),farm_heights(nz),VERTISHEIGHT)
          call interpolate(state_handle, ens_size, locS, QTY_PRESSURE, model_p(:, nz), p_col_istatus)
@@ -218,10 +222,29 @@ contains
       ! nz should be at this point 16
       ! num_levs u
 !     FARM surface pressure field at pixel position
+      sp = 0.0_r8
       call interpolate(state_handle, ens_size, locS, QTY_SURFACE_PRESSURE, sp(:), p_col_istatus)
+      call track_status(ens_size, p_col_istatus, sp(:), istatus, return_now)
+      if (return_now) return
       if (any(p_col_istatus /= 0)) then
          sp(:) = MISSING_R8
       endif
+
+      model_conc = 0.0_r8
+      nz = 1
+      !     FARM species field at pixel position
+      model_levels_conc: do
+         locS = set_location(mloc(1),mloc(2),farm_heights(nz),VERTISHEIGHT)
+         call interpolate(state_handle, ens_size, locS, QTY_NO2, model_conc(:, nz), int_conc_status)
+         call track_status(ens_size, int_conc_status, model_conc(:, nz), istatus, return_now)
+         if(return_now) return
+         if (any(int_conc_status /= 0)) then
+            model_conc(:, nz) = MISSING_R8
+            num_levs = nz - 1
+            exit model_levels_conc
+         endif
+         nz = nz + 1
+      enddo model_levels_conc
 
       !_____________________________________________________
       !PRESSURE.............................................
@@ -235,12 +258,7 @@ contains
       !Change Units hPa-> Pa
       model_p=model_p*100
       !......................................................
-      allocate( iiv(tropomi_dim*max_model_levs))
-      allocate( jjv(tropomi_dim*max_model_levs))
-      allocate( wwv(tropomi_dim*max_model_levs))
-      allocate( dxv(max_model_levs))
-      allocate( dyv(max_model_levs))
-      allocate( nwv)
+
 
       call FindIndexSurfacePressure(tropomi_dim,tropomi_pres_local(1, :), indexSP_kernel)
 
@@ -250,23 +268,33 @@ contains
          model_p(imem, :) = model_p(imem, :) / model_p(imem,indexSP_model) * tropomi_pres_local(imem, indexSP_kernel)
          model_p(imem, 1)=model_p(imem, 1)+0.1
       enddo
-
+      iiv = 0
+      jjv = 0
+      dxv = 0.0_r8
+      dyv = 0.0_r8
+      nwv = 0
+      wwv  = 0.0_r8
       call ComputeWeight(max_model_levs,tropomi_dim,model_p(1, :),tropomi_pres_local(1,:),                   & !input
          iiv(:),jjv(:),dxv(:),dyv(:),nwv,wwv(:))
+      model_conc_2d_kl = 0.0_r8
+      do imem = 1, ens_size
+         call ApplyWeightedSum(max_model_levs, tropomi_dim, nwv, iiv(:), jjv(:), wwv(:), dxv(:), &
+            model_conc(imem,:), model_conc_2d_kl(imem, :))
+      enddo
 
-      do imem= 1, ens_size
-         val(imem) =  1
+      ! conversion ug/m3 * Pa to mol/m2
+      do imem = 1, ens_size
+         do level_ith = 1, tropomi_dim
+            model_conc_2d_kl(imem, level_ith) = UnitConversion_ugm3Pa_molm2(model_conc_2d_kl(imem, level_ith))
+         end do
       end do
-      istatus = 0
+      model_conc_vcd = 0.0_r8
+      do imem = 1, ens_size
+         call ApplyKernel(tropomi_dim, tropomi_trop_kernel_local(imem, :), model_conc_2d_kl(imem, :), model_conc_vcd(imem))
+      end do
 
-      deallocate( iiv )
-      deallocate( jjv )
-      deallocate( wwv )
-      deallocate( dxv )
-      deallocate( dyv )
-      deallocate( nwv )
-      deallocate(tropomi_pres_local)
-      deallocate(model_p)
+      val = model_conc_vcd
+      istatus = 0
 
    end subroutine get_expected_SAT_NO2_TROPOMI
 
@@ -599,6 +627,129 @@ contains
 
    end subroutine write_tropomi_avg_kernels
 
+!-----------------------------------------------------------------
+   subroutine ApplyWeightedSum(nx,ny,nw,ii, jj, ww, dx, f, g )
+      !
+      ! Compute partial sums:
+      !
+      !   g(j) = sum f(i) * w(i,j)
+      !           i
+      !
+      ! with w(i,j) the faction of source interval i
+      ! that overlaps with target interval j.
+      !
+      implicit none
+
+      ! --- in/out ---------------------------------
+
+      integer, intent(in)       ::  nx
+      integer, intent(in)       ::  ny
+      integer, intent(in)       ::  nw
+      integer, intent(in)       ::  jj(nx*ny)
+      integer, intent(in)       ::  ii(nx*ny)
+      real(r8), intent(in)       ::  dx(nx)
+      real(r8), intent(in)       ::  ww(nx*ny)
+      real(r8), intent(in)       ::  f(nx)  ! (1:nx)
+      real(r8), intent(out)      ::  g(ny)  ! (1:ny)
+
+      ! --- const ----------------------------------
+
+
+      ! --- local ----------------------------------
+
+      integer     ::  iw
+
+      ! --- begin ----------------------------------
+
+
+      ! init result:
+      g = 0.0
+      ! loop over mapping weights:
+      do iw = 1, nw
+         ! add contribution:
+         g(jj(iw)) = g(jj(iw)) + f(ii(iw)) * dx(ii(iw))                  &
+            * ww(iw)
+!        g(jj(iw)) = g(jj(iw)) + f(ii(iw)) * ww(iw)
+
+      end do ! iw
+
+   end subroutine ApplyWeightedSum
+
+
+!------------------------------------------------------------
+   real function UnitConversion_ppbPa_molm2(varin)
+
+      !if varin = ppb*Pa -> output of ApplyWeightedSum to concentration in ppb then
+      !  (mole tr)/m2 =
+      ! ppb*Pa
+      ! / [g]   :  Pa/[g] = (kg air/m2)
+      ! / ((kg air)/(mole air))
+      ! * (mole tr)/(mole  air)/ppb
+
+      !if varin =  -> output of ApplyWeightedSumAdj to gradient (xo-Hyb)/(HBHT+R) then
+      ! 1/ppb =
+      ! Pa/[(mol tr)/m2]
+      ! / [g]   :  Pa/[g] = (kg air)/m2
+      ! / ((kg air)/(mole air))
+      ! * (mole tr)/(mole * air)/ppb
+      implicit none
+      ! in/out --------------------------------
+      real     :: varin
+      ! local ----------------------------------
+      ! gravity constant:
+      real, parameter     ::  grav   = 9.80665 ! m/s2
+      ! mole mass of air:
+      real, parameter     ::  xm_air = 28.964e-3     ! kg/mol : ~80% N2, ~20% O2
+      ! begin ----------------------------------
+
+      ! unit conversion:
+      UnitConversion_ppbPa_molm2         =   &   !  (mole tr)/m2 =
+         varin   &   ! ppb*Pa
+         / grav   &   ! / [g]   :  Pa/[g] = (kg air/m2)
+         / xm_air &   ! / ((kg air)/(mole air))
+         * 1.0e-9      ! * (mole tr)/(mole  air)/ppb
+   end function UnitConversion_ppbPa_molm2
+
+
+   real function UnitConversion_ugm3Pa_molm2(varin)
+
+      implicit none
+      ! in/out --------------------------------
+      real(r8)     :: varin
+      ! local ----------------------------------
+      ! gravity constant:
+      real, parameter     ::  grav   = 9.80665 ! m/s2
+      ! mole mass of air:
+      real, parameter     ::  rho_air = 1.225     ! kg_air/m3
+      real, parameter     ::  Mw = 46.0055     ! g_tr/mol_tr
+      ! begin ----------------------------------
+
+      ! unit conversion:
+      UnitConversion_ugm3Pa_molm2         =   &   !  (mole tr)/m2 =
+         varin   &   ! ug/m3*kg/m*s2
+         / grav   &   ! m/s2
+         / rho_air & ! kg/m3
+         / Mw &   ! / ((g air)/(mole air))
+         * 1.0e-6      ! * g / ug
+   end function UnitConversion_ugm3Pa_molm2
+
+
+!---------------------------------------------------------
+   subroutine ApplyKernel(nlayer,A_data,x_data,y_data)
+      implicit none
+      integer,intent(in)   :: nlayer
+      integer :: layeri
+      real(r8), intent(in)     :: A_data(nlayer)
+      real(r8), intent(in)     :: x_data(nlayer)
+      real(r8), intent(out)    :: y_data
+
+      ! --- begin ----------------------------------
+      y_data = 0.0_r8
+      do layeri = 1, nlayer
+         y_data = y_data + A_data(layeri)*x_data(layeri)
+      end do
+   end subroutine ApplyKernel
+!---------------------------------------------------------
 
 end module obs_def_SAT_NO2_TROPOMI_mod
 

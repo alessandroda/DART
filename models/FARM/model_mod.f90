@@ -232,7 +232,7 @@ contains
       endif
 
       lon_lat_vert = get_location(location)
-      if (qty == QTY_PRESSURE) then
+      if (qty == QTY_PRESSURE .OR. qty == QTY_NO2) then
          call find_cell(lon_lat_vert(2), lon_lat_vert(1), grid_data%lats%vals, grid_data%lons%vals, cell_idxs, isfound )
          if(isfound .neqv. .true.) then
             istatus(:) = 88
@@ -620,10 +620,10 @@ contains
 
       ! Display the result
       if (index /= 0) then
-         write(*, *) 'Index of ', target_value, ' in vals(:) is ', index
+         ! write(*, *) 'Index of ', target_value, ' in vals(:) is ', index
          isfound = .true.
       else
-         write(*, *) 'Value not found in vals(:)'
+         ! write(*, *) 'Value not found in vals(:)'
          isfound = .false.
       end if
    end subroutine find_index_of_value
