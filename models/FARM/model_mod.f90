@@ -225,6 +225,8 @@ contains
       real(r8) :: ps(ens_size)
       if ( .not. module_initialized ) call static_init_model
 
+      istatus(:) = 0
+
       ivar = get_varid_from_kind(qty)
       if (ivar < 1) then
          istatus = 88
@@ -240,7 +242,7 @@ contains
          end if
          call find_index_of_value(lon_lat_vert(3), index_loc_vert, 'levs', isfound)
          if(isfound .neqv. .true.) then
-            istatus(:) = 89
+            istatus(:) = 77
             return
          end if
          index_state =  get_dart_vector_index(cell_idxs(2), cell_idxs(1), index_loc_vert, dom_id, ivar)
@@ -256,6 +258,7 @@ contains
          expected_obs = get_state(index_state,state_handle)
          istatus(:) = 0
       end if
+      istatus(:) = 0
    end subroutine model_interpolate
 
 

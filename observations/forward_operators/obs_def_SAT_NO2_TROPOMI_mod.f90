@@ -215,6 +215,9 @@ contains
          if (any(p_col_istatus /= 0)) then
             model_p(:, nz) = MISSING_R8
             num_levs = nz - 1
+            if(nz == 17) then
+               istatus = 0
+            end if
             exit model_levels
          endif
          nz = nz + 1
@@ -224,8 +227,8 @@ contains
 !     FARM surface pressure field at pixel position
       sp = 0.0_r8
       call interpolate(state_handle, ens_size, locS, QTY_SURFACE_PRESSURE, sp(:), p_col_istatus)
-      call track_status(ens_size, p_col_istatus, sp(:), istatus, return_now)
-      if (return_now) return
+      ! call track_status(ens_size, p_col_istatus, sp(:), istatus, return_now)
+      ! if (return_now) return
       if (any(p_col_istatus /= 0)) then
          sp(:) = MISSING_R8
       endif
@@ -236,11 +239,14 @@ contains
       model_levels_conc: do
          locS = set_location(mloc(1),mloc(2),farm_heights(nz),VERTISHEIGHT)
          call interpolate(state_handle, ens_size, locS, QTY_NO2, model_conc(:, nz), int_conc_status)
-         call track_status(ens_size, int_conc_status, model_conc(:, nz), istatus, return_now)
-         if(return_now) return
+         ! call track_status(ens_size, int_conc_status, model_conc(:, nz), istatus, return_now)
+         ! if(return_now) return
          if (any(int_conc_status /= 0)) then
             model_conc(:, nz) = MISSING_R8
             num_levs = nz - 1
+            if(nz == 17) then
+               istatus = 0
+            end if
             exit model_levels_conc
          endif
          nz = nz + 1
