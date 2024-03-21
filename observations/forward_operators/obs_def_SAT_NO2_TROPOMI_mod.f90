@@ -161,15 +161,17 @@ contains
 !  tropomi refers to satellite data
 !
 !------------------------------------------------------------------------------
+      ! Input parameters
       type(ensemble_type), intent(in)  :: state_handle
       integer,             intent(in)  :: ens_size
       type(location_type), intent(in)  :: location
       integer,             intent(in)  :: key
+      ! Output parameters
       real(r8),            intent(out) :: val(ens_size)
       integer,             intent(out) :: istatus(ens_size)
 
-      integer                          :: imem
-      integer                          :: num_levs, nz, iz, level_ith
+      ! Local variables
+      integer                          :: imem, num_levs, nz, iz, level_ith
       real(r8)                         :: model_p(ens_size, max_model_p_levs)
       real(r8)                         :: model_conc(ens_size, max_model_levs)
       real(r8)                         :: model_conc_2d_kl(ens_size, tropomi_dim)
@@ -178,26 +180,28 @@ contains
       real(r8)                         :: tropomi_trop_kernel_local(ens_size,tropomi_dim)
       integer                          :: p_col_istatus(ens_size), int_conc_status(ens_size)
       type(location_type)              :: locS
-      real(r8)                         :: mloc(3), mloc1(3), mloc2(3)
-!Vertical for LayerAverage
-      integer                          :: indexSP_kernel,indexSP_model
+      real(r8)                         :: mloc(3)
       real(r8)                         :: sp(ens_size)
+      integer                          :: indexSP_kernel,indexSP_model
       integer                          :: iiv(tropomi_dim*max_model_levs),jjv(tropomi_dim*max_model_levs),nwv
       real(r8)                         :: dxv(max_model_levs),dyv(max_model_levs),wwv(tropomi_dim*max_model_levs)
-      logical                          :: return_now
-      if ( .not. module_initialized ) call initialize_module
+      ! !Vertical for LayerAverage
+      ! logical                          :: return_now
+      ! if ( .not. module_initialized ) call initialize_module
+
       val = 0.0_r8
-
-
       mloc = get_location(location)
+
       if (mloc(2)>90.0_r8) then
          mloc(2)=90.0_r8
       elseif (mloc(2)<-90.0_r8) then
          mloc(2)=-90.0_r8
       endif
-      !     For each ensemble pass the satellite pressure
+      ! Initialize arrays
       tropomi_pres_local = 0.0_r8
       tropomi_trop_kernel_local = 0.0_r8
+
+      ! Populate tropomi_pres_local and tropomi_trop_kernel_local arrays
       do imem = 1, ens_size
          do level_ith = 1, tropomi_dim
             tropomi_pres_local(imem, level_ith) = pressure_px(level_ith,key)
@@ -205,21 +209,19 @@ contains
          enddo
       enddo
 
+      ! Initialize istatus
       istatus = 0
       nz = 1
       !     FARM pressure field at pixel position
       model_p = 0.0_r8
       model_levels: do
+         if(nz == max_model_p_levs) then
+            istatus = 0
+            exit model_levels
+         end if
          locS = set_location(mloc(1),mloc(2),farm_heights(nz),VERTISHEIGHT)
          call interpolate(state_handle, ens_size, locS, QTY_PRESSURE, model_p(:, nz), p_col_istatus)
-         if (any(p_col_istatus /= 0)) then
-            model_p(:, nz) = MISSING_R8
-            num_levs = nz - 1
-            if(nz == 17) then
-               istatus = 0
-            end if
-            exit model_levels
-         endif
+         if (any(p_col_istatus /= 0)) return
          nz = nz + 1
       enddo model_levels
       ! nz should be at this point 16
@@ -227,8 +229,6 @@ contains
 !     FARM surface pressure field at pixel position
       sp = 0.0_r8
       call interpolate(state_handle, ens_size, locS, QTY_SURFACE_PRESSURE, sp(:), p_col_istatus)
-      ! call track_status(ens_size, p_col_istatus, sp(:), istatus, return_now)
-      ! if (return_now) return
       if (any(p_col_istatus /= 0)) then
          sp(:) = MISSING_R8
       endif
@@ -267,13 +267,13 @@ contains
 
 
       call FindIndexSurfacePressure(tropomi_dim,tropomi_pres_local(1, :), indexSP_kernel)
-
       call FindIndexSurfacePressure(nz+1,model_p(1, :),indexSP_model)
 
       do imem = 1, ens_size
          model_p(imem, :) = model_p(imem, :) / model_p(imem,indexSP_model) * tropomi_pres_local(imem, indexSP_kernel)
          model_p(imem, 1)=model_p(imem, 1)+0.1
       enddo
+      ! Compute weights for vertical interpolation
       iiv = 0
       jjv = 0
       dxv = 0.0_r8
