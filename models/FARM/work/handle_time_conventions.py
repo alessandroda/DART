@@ -10,11 +10,11 @@ import xarray as xr
 # ds["P"] = ds_meteo["P"]
 # ds["SP"] = ds_meteo["SP"]
 # ds.to_netcdf(
-#     "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/conc_g2_20210105_3.nc"
+#     "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/template_farm.nc"
 # )
 
 file_name_list = [
-    "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/output_file.nc"
+    "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/CAMEO/to_DART/model_54000_153391.nc"
 ]
 for file_name in file_name_list:
     nc_file = netCDF4.Dataset(file_name, "r+")
@@ -28,7 +28,10 @@ for file_name in file_name_list:
     del nc_file["P"].add_offset
     del nc_file["P"].scale_factor
 
-    del nc_file["c_NO2"].add_offset
-    del nc_file["c_NO2"].scale_factor
+    del nc_file["T"].add_offset
+    del nc_file["T"].scale_factor
+
+    del nc_file["c_SO2"].add_offset
+    del nc_file["c_SO2"].scale_factor
 
     nc_file.close()

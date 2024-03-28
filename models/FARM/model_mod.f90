@@ -30,7 +30,7 @@ module model_mod
       GRID_QUAD_IRREG_SPACED_REGULAR,  &
       QUAD_LOCATED_CELL_CENTERS
 
-   use obs_kind_mod, only: QTY_NO2, QTY_PRESSURE, QTY_SURFACE_PRESSURE, get_index_for_quantity, get_num_quantities, get_name_for_quantity
+   use obs_kind_mod, only: QTY_NO2, QTY_PRESSURE, QTY_SURFACE_PRESSURE, QTY_SO2, get_index_for_quantity, get_num_quantities, get_name_for_quantity
    use netcdf_utilities_mod, only : nc_add_global_attribute, nc_synchronize_file, &
       nc_add_global_creation_time, &
       nc_begin_define_mode, nc_end_define_mode, &
@@ -234,7 +234,7 @@ contains
       endif
 
       lon_lat_vert = get_location(location)
-      if (qty == QTY_PRESSURE .OR. qty == QTY_NO2) then
+      if (qty == QTY_PRESSURE .OR. qty == QTY_NO2 .OR. qty == QTY_SO2) then
          call find_cell(lon_lat_vert(2), lon_lat_vert(1), grid_data%lats%vals, grid_data%lons%vals, cell_idxs, isfound )
          if(isfound .neqv. .true.) then
             istatus(:) = 88

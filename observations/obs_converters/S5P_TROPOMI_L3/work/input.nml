@@ -6,7 +6,10 @@
    output_obs_def_mod_file = '../../../../observations/forward_operators/obs_def_mod.f90',
    quantity_files          = '../../../../assimilation_code/modules/observations/atmosphere_quantities_mod.f90'
    obs_type_files          = '../../../../observations/forward_operators/obs_def_reanalysis_bufr_mod.f90',
-                              '../../../../observations/forward_operators/obs_def_SAT_NO2_TROPOMI_mod.f90'
+                              '../../../../observations/forward_operators/obs_def_SAT_NO2_TROPOMI_mod.f90',
+                              '../../../../observations/forward_operators/obs_def_SAT_SO2_TROPOMI_mod.f90',
+                              '../../../../observations/forward_operators/obs_def_TROPOMI_NO2_TOTAL_COL_mod.f90',
+                             '../../../../observations/forward_operators/obs_def_TROPOMI_NO2_TROP_COL_mod.f90',
    /
 
 &obs_kind_nml
@@ -58,16 +61,25 @@
    /
 
 &model_grid_nml
-   dom_west = 5.325,
-   dom_east = 19.20,
-   dom_south = 35.380,
-   dom_north = 47.81,
+   dom_west = -25.075 ! 5.325,
+   dom_east = 45.125  !  19.20,
+   dom_south = 29.95  !35.380,
+   dom_north = 72.05  !47.81,
    nz = 16,
    dlon = 0.15,
-   dlat = 0.104,
+   dlat = 0.1 !0.104,
    filter_on_model_grid = .true.,
    /
 &obs_def_SAT_NO2_TROPOMI_nml
    /
 
+&obs_def_SAT_SO2_TROPOMI_nml
+   /
+
+&file_info_nml
+   s5p_netcdf_file = 'S5p_OFFL_SO2_16531.nc',
+   s5p_out_file = 'obs_seq.out',
+   vertical_ref_height = 3535.0,
+   which_gas = 'SAT_SO2_TROPOMI'
+   /
 /

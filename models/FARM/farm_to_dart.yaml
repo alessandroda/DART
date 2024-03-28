@@ -1,0 +1,5 @@
+input_farm_file: "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/CAMEO/FARM/conc_g1_20201221_SO2.nc"
+input_meteo_file: "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/CAMEO/METEO/ifsecmwf_d0_g1_20201221_sel.nc"
+output_folder: "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/CAMEO/to_DART/"
+pol : SO2
+QA : False

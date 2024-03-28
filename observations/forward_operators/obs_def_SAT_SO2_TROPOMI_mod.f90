@@ -3,66 +3,66 @@
 ! http://www.image.ucar.edu/DAReS/DART/DART_download
 !
 
-! ! obs_def_SAT_NO2_TROPOMI_mod
+! ! obs_def_SAT_SO2_TROPOMI_mod
 ! ! author : Alessandro D'Ausilio
 ! ! email : a.dausilio@aria-net.it
 !****************************************************************************************************
-! This section defines the forward operator for assimilating S5P Tropomi NO2 in
+! This section defines the forward operator for assimilating S5P Tropomi SO2 in
 ! FARM. The 'preprocess' function utilizes this operator to incorporate appropriate
-! definitions of SAT_NO2_TROPOMI in the DEFAULT_obs_def_mod.f90 template. Subsequently, it generates
+! definitions of SAT_SO2_TROPOMI in the DEFAULT_obs_def_mod.f90 template. Subsequently, it generates
 ! the source files obs_def_mod.f90 and obs_kind_mod.f90, crucial for filter and other DART programs.
 ! The DART PREPROCESS TYPE DEFINITION excludes the keyword COMMON_CODE since the observation requires
 ! the forward operator.
 !
-! The subroutine 'get_expected_SAT_NO2_TROPOMI' is employed by the filter and performs the A*V operation.
+! The subroutine 'get_expected_SAT_SO2_TROPOMI' is employed by the filter and performs the A*V operation.
 ! As of 07.03.2024, the variable 'G' appears unnecessary.
 !
 ! The 'convert_s5p_tropomi_l3' subroutine creates obs_seq.out, generating a 3D observation and adding
-! kernel and pressure vectors via set_obs_def_no2_tropomi. It subsequently calls 'write_tropomi_no2'
+! kernel and pressure vectors via set_obs_def_so2_tropomi. It subsequently calls 'write_tropomi_so2'
 ! to write the observations into the observation sequence file.
 !
-! During filter execution, the code initially passes through 'read_tropomi_no2' to read previously set
-! and written Tropomi NO2 observations, performing interpolation.
+! During filter execution, the code initially passes through 'read_tropomi_so2' to read previously set
+! and written Tropomi SO2 observations, performing interpolation.
 !****************************************************************************************************
 
 
 ! BEGIN DART PREPROCESS TYPE DEFINITIONS
-! SAT_NO2_TROPOMI, QTY_NO2
+! SAT_SO2_TROPOMI, QTY_SO2
 ! END DART PREPROCESS TYPE DEFINITIONS
 
 ! BEGIN DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
-!   use obs_def_SAT_NO2_TROPOMI_mod, only : get_expected_SAT_NO2_TROPOMI, write_tropomi_no2, read_tropomi_no2, &
-!   set_obs_def_no2_tropomi
+!   use obs_def_SAT_SO2_TROPOMI_mod, only : get_expected_SAT_SO2_TROPOMI, write_tropomi_so2, read_tropomi_so2, &
+!   set_obs_def_so2_tropomi
 ! END DART PREPROCESS USE OF SPECIAL OBS_DEF MODULE
 
 
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
-!   case(SAT_NO2_TROPOMI)
-!       call get_expected_SAT_NO2_TROPOMI(state_handle, ens_size, location, obs_def%key, expected_obs, istatus)
+!   case(SAT_SO2_TROPOMI)
+!       call get_expected_SAT_SO2_TROPOMI(state_handle, ens_size, location, obs_def%key, expected_obs, istatus)
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 
 ! BEGIN DART PREPROCESS READ_OBS_DEF
-!         case(SAT_NO2_TROPOMI)
-!           call read_tropomi_no2(obs_def%key, ifile, fileformat)
+!         case(SAT_SO2_TROPOMI)
+!           call read_tropomi_so2(obs_def%key, ifile, fileformat)
 ! END DART PREPROCESS READ_OBS_DEF
 
 ! BEGIN DART PREPROCESS WRITE_OBS_DEF
-!         case(SAT_NO2_TROPOMI)
-!           call write_tropomi_no2(obs_def%key, ifile, fileformat)
+!         case(SAT_SO2_TROPOMI)
+!           call write_tropomi_so2(obs_def%key, ifile, fileformat)
 ! END DART PREPROCESS WRITE_OBS_DEF
 
-! BEGIN DART PREPROCESS set_obs_def_no2_tropomi
-!      case(SAT_NO2_TROPOMI)
-!         call set_obs_def_no2_tropomi(obs_def%key)
-! END DART PREPROCESS set_obs_def_no2_tropomi
+! BEGIN DART PREPROCESS set_obs_def_so2_tropomi
+!      case(SAT_SO2_TROPOMI)
+!         call set_obs_def_so2_tropomi(obs_def%key)
+! END DART PREPROCESS set_obs_def_so2_tropomi
 
 ! BEGIN DART PREPROCESS INTERACTIVE_OBS_DEF
-!      case(SAT_NO2_TROPOMI)
+!      case(SAT_SO2_TROPOMI)
 !         continue
 ! END DART PREPROCESS INTERACTIVE_OBS_DEF
 
 ! BEGIN DART PREPROCESS MODULE CODE
-module obs_def_SAT_NO2_TROPOMI_mod
+module obs_def_SAT_SO2_TROPOMI_mod
 
    use typeSizes
    use        types_mod, only : r8, MISSING_R8, r4, MISSING_R4
@@ -75,17 +75,17 @@ module obs_def_SAT_NO2_TROPOMI_mod
    use time_manager_mod, only : time_type, read_time, write_time, &
       set_time, set_time_missing
    use  assim_model_mod, only : interpolate
-   use     obs_kind_mod, only : QTY_NO2, QTY_PRESSURE, QTY_SURFACE_PRESSURE
+   use     obs_kind_mod, only : QTY_SO2, QTY_PRESSURE, QTY_SURFACE_PRESSURE
    use ensemble_manager_mod,  only : ensemble_type
    use obs_def_utilities_mod, only : track_status
 
    implicit none
    private
 
-   public ::  get_expected_SAT_NO2_TROPOMI, write_tropomi_no2,read_tropomi_no2, set_obs_def_no2_tropomi
+   public ::  get_expected_SAT_SO2_TROPOMI, write_tropomi_so2,read_tropomi_so2, set_obs_def_so2_tropomi
 
-   integer, parameter               :: max_model_levs = 16
-   integer, parameter               :: max_model_p_levs = 17
+   integer, parameter               :: max_model_levs = 17
+   integer, parameter               :: max_model_p_levs = 18
 
 ! version controlled file description for error handling, do not edit
    character(len=256), parameter :: source   = &
@@ -102,9 +102,9 @@ module obs_def_SAT_NO2_TROPOMI_mod
    real(r8), parameter :: density = 1000.0_r8   ! water density in kg/m^3
 
    integer :: max_pressure_intervals = 1000   ! increase as needed
-   real(r8)   :: farm_heights(16) =(/ &
-      20.,   65.,  125.,  210.,  325.,  480.,  690.,  975., 1360., &
-      1880., 2580., 3525., 4805., 6290., 7790., 9290./)
+   real(r8)   :: farm_heights(17) =(/ &
+      20., 65., 125., 210., 325., 480., 690., 975., 1360., 1880., 2580., 3525., 4805., &
+      6290., 8040., 9790., 11790./)
 ! default samples the atmosphere between the surface and 200 hPa
 ! at the model level numbers.  if model_levels is set false,
 ! then the default samples at 40 heights, evenly divided in
@@ -120,10 +120,11 @@ module obs_def_SAT_NO2_TROPOMI_mod
    integer,  dimension(max_obs)   :: tropomi_nlevels
    real(r8),dimension(tropomi_dim, max_obs) :: kernel_trop_px
    real(r8),dimension(tropomi_dim, max_obs) :: pressure_px
+   real(r8),dimension(max_obs) :: amf
    character(len=6), parameter :: S5Pstring = 'FO_params'
+   character(len=126) :: unit_conversion = 'ugm3'
 
-   namelist /obs_def_SAT_NO2_TROPOMI_nml/ model_levels, pressure_top,  &
-      separate_surface_level, num_pressure_intervals
+   namelist /obs_def_SAT_SO2_TROPOMI_nml/ unit_conversion
 
 contains
 
@@ -141,19 +142,19 @@ contains
       module_initialized = .true.
 
 ! Read the namelist entry
-      call find_namelist_in_file("input.nml", "obs_def_SAT_NO2_TROPOMI_nml", iunit)
-      read(iunit, nml = obs_def_SAT_NO2_TROPOMI_nml, iostat = rc)
-      call check_namelist_read(iunit, rc, "obs_def_SAT_NO2_TROPOMI_nml")
+      call find_namelist_in_file("input.nml", "obs_def_SAT_SO2_TROPOMI_nml", iunit)
+      read(iunit, nml = obs_def_SAT_SO2_TROPOMI_nml, iostat = rc)
+      call check_namelist_read(iunit, rc, "obs_def_SAT_SO2_TROPOMI_nml")
 
 ! Record the namelist values used for the run ...
-      if (do_nml_file()) write(nmlfileunit, nml=obs_def_SAT_NO2_TROPOMI_nml)
-      if (do_nml_term()) write(     *     , nml=obs_def_SAT_NO2_TROPOMI_nml)
+      if (do_nml_file()) write(nmlfileunit, nml=obs_def_SAT_SO2_TROPOMI_nml)
+      if (do_nml_term()) write(     *     , nml=obs_def_SAT_SO2_TROPOMI_nml)
 
    end subroutine initialize_module
 
 
 !------------------------------------------------------------------------------
-   subroutine get_expected_SAT_NO2_TROPOMI(state_handle, ens_size, location, key, val, istatus)
+   subroutine get_expected_SAT_SO2_TROPOMI(state_handle, ens_size, location, key, val, istatus)
 !------------------------------------------------------------------------------
 !------------------------------------------------------------------------------
 !  Author: Alessandro D'Ausilio ,  Version 0: 08/03/2024
@@ -178,6 +179,8 @@ contains
       real(r8)                         :: model_conc_vcd(ens_size)
       real(r8)                         :: tropomi_pres_local(ens_size,tropomi_dim +1)
       real(r8)                         :: tropomi_trop_kernel_local(ens_size,tropomi_dim)
+      real(r8)                         :: tropomi_amf_local
+      real(r8)                         :: amf_model(ens_size)
       integer                          :: p_col_istatus(ens_size), int_conc_status(ens_size)
       type(location_type)              :: locS
       real(r8)                         :: mloc(3)
@@ -201,7 +204,8 @@ contains
       ! Initialize arrays
       tropomi_pres_local = 0.0_r8
       tropomi_trop_kernel_local = 0.0_r8
-
+      tropomi_amf_local = 0.0_r8
+      tropomi_amf_local = amf(key)
       ! Populate tropomi_pres_local and tropomi_trop_kernel_local arrays
       do imem = 1, ens_size
          do level_ith = 1, tropomi_dim
@@ -238,17 +242,18 @@ contains
       nz = 1
       !     FARM species field at pixel position
       model_levels_conc: do
+         if(nz == max_model_levs) then
+            istatus = 0
+            num_levs = nz - 1
+            exit model_levels_conc
+         end if
          locS = set_location(mloc(1),mloc(2),farm_heights(nz),VERTISHEIGHT)
-         call interpolate(state_handle, ens_size, locS, QTY_NO2, model_conc(:, nz), int_conc_status)
+         call interpolate(state_handle, ens_size, locS, QTY_SO2, model_conc(:, nz), int_conc_status)
          ! call track_status(ens_size, int_conc_status, model_conc(:, nz), istatus, return_now)
          ! if(return_now) return
          if (any(int_conc_status /= 0)) then
             model_conc(:, nz) = MISSING_R8
-            num_levs = nz - 1
-            if(nz == 17) then
-               istatus = 0
-            end if
-            exit model_levels_conc
+
          endif
          nz = nz + 1
       enddo model_levels_conc
@@ -292,20 +297,29 @@ contains
       ! conversion ug/m3 * Pa to mol/m2
       do imem = 1, ens_size
          do level_ith = 1, tropomi_dim
-            model_conc_2d_kl(imem, level_ith) = UnitConversion_ugm3Pa_molm2(model_conc_2d_kl(imem, level_ith))
+            select case (unit_conversion)
+             case ('ppb')
+               model_conc_2d_kl(imem, level_ith) = UnitConversion_ppbPa_molm2(model_conc_2d_kl(imem, level_ith))
+             case ('ugm3')
+               model_conc_2d_kl(imem, level_ith) = UnitConversion_ugm3Pa_molm2(model_conc_2d_kl(imem, level_ith))
+            end select
+
          end do
       end do
       model_conc_vcd = 0.0_r8
       do imem = 1, ens_size
          call ApplyKernel(tropomi_dim, tropomi_trop_kernel_local(imem, :), model_conc_2d_kl(imem, :), model_conc_vcd(imem))
       end do
-
-      val = model_conc_vcd
+      amf_model = 0.0_r8
+      do imem = 1, ens_size
+         call AirMassFactorModel(tropomi_amf_local, tropomi_dim, model_conc_vcd(imem), model_conc_2d_kl(imem, :), amf_model(imem))
+      end do
+      val = model_conc_vcd*tropomi_amf_local/amf_model
       istatus = 0
 
-   end subroutine get_expected_SAT_NO2_TROPOMI
+   end subroutine get_expected_SAT_SO2_TROPOMI
 
-   subroutine read_tropomi_no2(key, ifile, fform)
+   subroutine read_tropomi_so2(key, ifile, fform)
       integer, intent(out) :: key
       integer :: i
       integer, intent(in)  :: ifile
@@ -313,6 +327,7 @@ contains
       character(len=32) 		:: fileformat
       real(r8), dimension(tropomi_dim)	:: avg_kernels_1
       real(r8), dimension(tropomi_dim)	:: obs_p_1
+      real(r8) :: amf_1
       integer 			:: keyin
 
       if ( .not. module_initialized ) call initialize_module
@@ -327,17 +342,18 @@ contains
        CASE DEFAULT
          avg_kernels_1(1:tropomi_dim)  = read_tropomi_avg_kernels(ifile, tropomi_dim, fileformat)
          obs_p_1(1:tropomi_dim) = read_tropomi_pressure(ifile, tropomi_dim, fileformat)
+         amf_1 = read_tropomi_amf(ifile,fileformat)
       END SELECT
       ! Dummy implementation, replace with actual code to read data from the file
 
       counts1 = counts1 + 1
       key = counts1
-      call set_obs_def_no2_tropomi(key, avg_kernels_1,obs_p_1)
+      call set_obs_def_so2_tropomi(key, avg_kernels_1,obs_p_1, amf_1)
 
-   end subroutine read_tropomi_no2
+   end subroutine read_tropomi_so2
 
 
-   subroutine write_tropomi_no2(key, ifile, fform)
+   subroutine write_tropomi_so2(key, ifile, fform)
       integer, intent(in) :: key
       integer, intent(in)  :: ifile
       character(len=*),  intent(in), optional :: fform
@@ -348,26 +364,29 @@ contains
          write(ifile,11) key
          write(ifile, *) pressure_px(:,key)
 11       format('pressure_px', i8)
+         call write_tropomi_amf(ifile, key, fform)
 
       else
          call write_tropomi_avg_kernels(ifile, kernel_trop_px, key, tropomi_dim, fform)
          write(ifile,11) key
          write(ifile, *) pressure_px(:,key)
       end if
-   end subroutine write_tropomi_no2
+   end subroutine write_tropomi_so2
 
-   subroutine set_obs_def_no2_tropomi(key, kernel_trop_px_1, pressure_px_1)
+   subroutine set_obs_def_so2_tropomi(key, kernel_trop_px_1, pressure_px_1, amf_1)
       integer, intent(in) :: key
       integer :: i
       character(len=32)    :: fform
       real(r8),dimension(tropomi_dim) :: kernel_trop_px_1, pressure_px_1
+      real(r8) :: amf_1
 
       do i = 1, tropomi_dim
          kernel_trop_px(i,key) = kernel_trop_px_1(i)
          pressure_px(i, key) = pressure_px_1(i)
+         amf(key) = amf_1
       end do
 
-   end subroutine set_obs_def_no2_tropomi
+   end subroutine set_obs_def_so2_tropomi
 
 
 !------------------------------
@@ -545,6 +564,34 @@ contains
       end if
    end subroutine FindIndexSurfacePressure
 
+   function read_tropomi_amf(ifile, fform)
+
+      integer,                    intent(in) :: ifile
+      real(r8)        :: read_tropomi_amf
+      character(len=*), intent(in), optional :: fform
+      integer :: keyin
+      character(len=14)   :: header
+      character(len=129) :: errstring
+      character(len=32)  :: fileformat
+
+      read_tropomi_amf = 0.0_r8
+
+      if ( .not. module_initialized ) call initialize_module
+
+      fileformat = "ascii"    ! supply default
+      if(present(fform)) fileformat = trim(adjustl(fform))
+
+
+      read(ifile, FMT='(a7, i8)') header, keyin    ! throw away keyin
+      if(header /= 'amf_tm5') then
+         call error_handler(E_ERR,'read tropomi amf', &
+            'Expected header "amf_tm5" in input file', source, revision, revdate)
+      endif
+      read(ifile, *) read_tropomi_amf
+
+   end function read_tropomi_amf
+
+
    function read_tropomi_avg_kernels(ifile, nlevels, fform)
 
       integer,                    intent(in) :: ifile, nlevels
@@ -603,7 +650,33 @@ contains
 
    end function read_tropomi_pressure
 
+   subroutine write_tropomi_amf(ifile, key, fform)
 
+      integer,                    intent(in) :: ifile
+      character(len=32),          intent(in) :: fform
+
+      character(len=5)   :: header
+      character(len=129) :: errstring
+      character(len=32)  :: fileformat
+      integer :: key
+
+      if ( .not. module_initialized ) call initialize_module
+
+      fileformat = trim(adjustl(fform))
+
+      if ( .not. module_initialized ) call initialize_module
+      if (ascii_file_format(fform)) then
+         write(ifile,11) key
+         write(ifile, *) amf(key)
+11       format('amf_tm5', i8)
+
+
+      else
+         write(ifile,11) key
+         write(ifile, *) amf(key)
+      end if
+
+   end subroutine write_tropomi_amf
 
    subroutine write_tropomi_avg_kernels(ifile, avg_kernels_temp, key, nlevels_temp, fform)
 
@@ -701,12 +774,12 @@ contains
       ! * (mole tr)/(mole * air)/ppb
       implicit none
       ! in/out --------------------------------
-      real     :: varin
+      real(r8)    :: varin
       ! local ----------------------------------
       ! gravity constant:
-      real, parameter     ::  grav   = 9.80665 ! m/s2
+      real(r8), parameter     ::  grav   = 9.80665 ! m/s2
       ! mole mass of air:
-      real, parameter     ::  xm_air = 28.964e-3     ! kg/mol : ~80% N2, ~20% O2
+      real(r8), parameter     ::  xm_air = 28.964e-3     ! kg/mol : ~80% N2, ~20% O2
       ! begin ----------------------------------
 
       ! unit conversion:
@@ -758,7 +831,27 @@ contains
    end subroutine ApplyKernel
 !---------------------------------------------------------
 
-end module obs_def_SAT_NO2_TROPOMI_mod
+!---------------------------------------------------------
+   subroutine AirMassFactorModel(amf_tm5, nlayer, y_data, x_data, amf_model)
+      implicit none
+      real(r8), intent(in)    :: amf_tm5
+      integer,intent(in)      :: nlayer
+      integer                 :: layeri
+      real(r8), intent(in)    :: y_data ! alredy calculated vcd based on tmf
+      real(r8), intent(in)    :: x_data(nlayer) ! model on tm5 layers
+      real(r8), intent(out)   :: amf_model
+      real(r8)                :: x_sum
+
+      ! --- begin ----------------------------------
+      x_sum = 0.0_r8
+      do layeri = 1, nlayer
+         x_sum = x_sum + x_data(layeri)
+      end do
+      amf_model = y_data/x_sum*amf_tm5
+   end subroutine AirMassFactorModel
+!---------------------------------------------------------
+
+end module obs_def_SAT_SO2_TROPOMI_mod
 
 ! END DART PREPROCESS MODULE CODE
 
