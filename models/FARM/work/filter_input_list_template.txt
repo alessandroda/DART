@@ -1,0 +1,16 @@
+/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/to_DART/model_$days_$seconds_00.nc
+/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/to_DART/model_$days_$seconds_01.nc
+/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/to_DART/model_$days_$seconds_02.nc
+/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/to_DART/model_$days_$seconds_03.nc
+/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/to_DART/model_$days_$seconds_04.nc
+/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/to_DART/model_$days_$seconds_05.nc
+/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/to_DART/model_$days_$seconds_06.nc
+/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/to_DART/model_$days_$seconds_07.nc
+/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/to_DART/model_$days_$seconds_08.nc
+/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/to_DART/model_$days_$seconds_09.nc
+/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/to_DART/model_$days_$seconds_10.nc
+/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/to_DART/model_$days_$seconds_11.nc
+/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/to_DART/model_$days_$seconds_12.nc
+/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/to_DART/model_$days_$seconds_13.nc
+/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/to_DART/model_$days_$seconds_14.nc
+/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/to_DART/model_$days_$seconds_15.nc
