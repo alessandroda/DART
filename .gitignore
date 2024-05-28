@@ -3,6 +3,9 @@
 *.nc.gz
 *.nc
 *.out
+*.nc.gz
+*.nc
+*.out
 *.swp
 *.png
 *.gif
