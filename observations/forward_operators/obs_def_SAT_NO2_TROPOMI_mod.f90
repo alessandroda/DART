@@ -120,8 +120,9 @@ module obs_def_SAT_NO2_TROPOMI_mod
    integer,  dimension(max_obs)   :: tropomi_nlevels
    real(r8),dimension(tropomi_dim, max_obs) :: kernel_trop_px
    real(r8),dimension(tropomi_dim, max_obs) :: pressure_px
+   real(r8),dimension(max_obs) :: amf
    character(len=6), parameter :: S5Pstring = 'FO_params'
-
+   logical :: amf_from_model = .true.
    namelist /obs_def_SAT_NO2_TROPOMI_nml/ model_levels, pressure_top,  &
       separate_surface_level, num_pressure_intervals
 
@@ -298,7 +299,9 @@ contains
       model_conc_vcd = 0.0_r8
       do imem = 1, ens_size
          call ApplyKernel(tropomi_dim, tropomi_trop_kernel_local(imem, :), model_conc_2d_kl(imem, :), model_conc_vcd(imem))
+
       end do
+      ! vcd using the standard air mass factor
 
       val = model_conc_vcd
       istatus = 0
@@ -313,6 +316,7 @@ contains
       character(len=32) 		:: fileformat
       real(r8), dimension(tropomi_dim)	:: avg_kernels_1
       real(r8), dimension(tropomi_dim)	:: obs_p_1
+      real(r8) :: amf_tm5
       integer 			:: keyin
 
       if ( .not. module_initialized ) call initialize_module
@@ -332,7 +336,7 @@ contains
 
       counts1 = counts1 + 1
       key = counts1
-      call set_obs_def_no2_tropomi(key, avg_kernels_1,obs_p_1)
+      call set_obs_def_no2_tropomi(key, avg_kernels_1,obs_p_1, amf_tm5)
 
    end subroutine read_tropomi_no2
 
@@ -348,23 +352,26 @@ contains
          write(ifile,11) key
          write(ifile, *) pressure_px(:,key)
 11       format('pressure_px', i8)
-
+         call write_tropomi_amf(ifile, key, fform)
       else
          call write_tropomi_avg_kernels(ifile, kernel_trop_px, key, tropomi_dim, fform)
          write(ifile,11) key
          write(ifile, *) pressure_px(:,key)
+         write(ifile, *) amf(key)
       end if
    end subroutine write_tropomi_no2
 
-   subroutine set_obs_def_no2_tropomi(key, kernel_trop_px_1, pressure_px_1)
+   subroutine set_obs_def_no2_tropomi(key, kernel_trop_px_1, pressure_px_1, amf_tm5)
       integer, intent(in) :: key
       integer :: i
       character(len=32)    :: fform
       real(r8),dimension(tropomi_dim) :: kernel_trop_px_1, pressure_px_1
+      real(r8) :: amf_tm5
 
       do i = 1, tropomi_dim
          kernel_trop_px(i,key) = kernel_trop_px_1(i)
          pressure_px(i, key) = pressure_px_1(i)
+         amf(key) = amf_tm5
       end do
 
    end subroutine set_obs_def_no2_tropomi
@@ -603,7 +610,32 @@ contains
 
    end function read_tropomi_pressure
 
+   function read_tropomi_amf(ifile, fform)
 
+      integer,                    intent(in) :: ifile
+      real(r8)        :: read_tropomi_amf
+      character(len=*), intent(in), optional :: fform
+      integer :: keyin
+      character(len=14)   :: header
+      character(len=129) :: errstring
+      character(len=32)  :: fileformat
+
+      read_tropomi_amf = 0.0_r8
+
+      if ( .not. module_initialized ) call initialize_module
+
+      fileformat = "ascii"    ! supply default
+      if(present(fform)) fileformat = trim(adjustl(fform))
+
+
+      read(ifile, FMT='(a7, i8)') header, keyin    ! throw away keyin
+      if(header /= 'amf_tm5') then
+         call error_handler(E_ERR,'read tropomi amf', &
+            'Expected header "amf_tm5" in input file', source, revision, revdate)
+      endif
+      read(ifile, *) read_tropomi_amf
+
+   end function read_tropomi_amf
 
    subroutine write_tropomi_avg_kernels(ifile, avg_kernels_temp, key, nlevels_temp, fform)
 
@@ -633,6 +665,35 @@ contains
       end if
 
    end subroutine write_tropomi_avg_kernels
+
+   subroutine write_tropomi_amf(ifile, key, fform)
+
+      integer,                    intent(in) :: ifile
+      character(len=32),          intent(in) :: fform
+
+      character(len=5)   :: header
+      character(len=129) :: errstring
+      character(len=32)  :: fileformat
+      integer :: key
+
+      if ( .not. module_initialized ) call initialize_module
+
+      fileformat = trim(adjustl(fform))
+
+      if ( .not. module_initialized ) call initialize_module
+      if (ascii_file_format(fform)) then
+         write(ifile,11) key
+         write(ifile, *) amf(key)
+11       format('amf_tm5', i8)
+
+
+      else
+         write(ifile,11) key
+         write(ifile, *) amf(key)
+      end if
+
+   end subroutine write_tropomi_amf
+
 
 !-----------------------------------------------------------------
    subroutine ApplyWeightedSum(nx,ny,nw,ii, jj, ww, dx, f, g )

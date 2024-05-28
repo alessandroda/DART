@@ -44,7 +44,7 @@ program convert_s5p_tropomi_L2
    type(obs_type)          :: obs, prev_obs
    type(T_SatObs)          :: tsat_obs
    type(time_type)         :: comp_day0, time_obs, prev_time, gregorian_sat_obs_time
-   character(len=*),parameter        :: pollutant='SO2'
+   character(len=*),parameter        :: pollutant='NO2'
    integer,  allocatable :: used(:), tused(:), sorted_used(:)
    real(r8) :: qc, obsv, vval
    real(r8), allocatable :: lat(:), lon(:), pres(:, :), qa_value(:), amf(:), tmp(:), vcd(:), vcd_errvar(:), time(:), tobs(:)
@@ -59,7 +59,7 @@ program convert_s5p_tropomi_L2
    ! Namelist with file info
    character(len=256) ::s5p_netcdf_file = 'sat_obs.nc'
    character(len=129):: s5p_out_file = 'obs_seq.out'
-   real                          :: vertical_ref_height = 3535.0
+   real                          :: vertical_ref_height = 975.0
    character(len=256)             :: which_gas = "SAT_NO2_TROPOMI"
    namelist /file_info_nml/ s5p_netcdf_file, s5p_out_file, vertical_ref_height, which_gas
 
@@ -186,7 +186,7 @@ program convert_s5p_tropomi_L2
          call create_3d_obs(REAL(tsat_obs%lat(n),8),REAL(tsat_obs%lon(n), 8), REAL(vertical_ref_height, 8), VERTISHEIGHT, REAL(tsat_obs%vcd(1, n), 8), &
             SAT_SO2_TROPOMI, obs_err, oday, osec, qc, obs, key = n)
        case ('SAT_NO2_TROPOMI')
-         call set_obs_def_no2_tropomi(n, avgk_obs_r8(:), REAL(tsat_obs%pressure(:,n), 8))
+         call set_obs_def_no2_tropomi(n, avgk_obs_r8(:), REAL(tsat_obs%pressure(:,n), 8), REAL(tsat_obs%amf_trop(1, n), 8))
          call create_3d_obs(REAL(tsat_obs%lat(n),8),REAL(tsat_obs%lon(n), 8), REAL(vertical_ref_height, 8), VERTISHEIGHT, REAL(tsat_obs%vcd(1, n), 8), &
             SAT_NO2_TROPOMI, obs_err, oday, osec, qc, obs, key = n)
        case default

@@ -10,7 +10,7 @@
 &obs_def_SAT_NO2_TROPOMI_nml
    tropomi_dim = 34,
    max_obs = 1000000,
-   Mw_SO2 = 40.005,
+   Mw_NO2 = 46.005,
    g = 9.8_r8,
    max_model_levs = 16,
    max_model_p_levs = 17,

@@ -9,17 +9,15 @@ main() {
 export DART=$(git rev-parse --show-toplevel)
 source "$DART"/build_templates/buildconvfunctions.sh
 
-CONVERTER=S5P_TROPOMI_L3
+CONVERTER=/TROPOMI_NO2
 LOCATION=threed_sphere
-EXTRA=obs_errors.path_names
 
 
 programs=(
-convert_s5p_tropomi_l3
-obs_seq_to_netcdf
+tropomi_no2_trop_col_ascii_to_obs
+tropomi_no2_trop_col_thinner
 obs_sequence_tool
 advance_time
-operators
 )
 
 # build arguments
