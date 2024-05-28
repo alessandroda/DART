@@ -176,9 +176,11 @@ contains
       real(r8)                         :: model_p(ens_size, max_model_p_levs)
       real(r8)                         :: model_conc(ens_size, max_model_levs)
       real(r8)                         :: model_conc_2d_kl(ens_size, tropomi_dim)
+      real(r8)                         :: Sx(ens_size, tropomi_dim)
       real(r8)                         :: model_conc_vcd(ens_size)
       real(r8)                         :: tropomi_pres_local(ens_size,tropomi_dim +1)
       real(r8)                         :: tropomi_trop_kernel_local(ens_size,tropomi_dim)
+      real(r8)                         :: amf_local(ens_size)
       integer                          :: p_col_istatus(ens_size), int_conc_status(ens_size)
       type(location_type)              :: locS
       real(r8)                         :: mloc(3)
@@ -210,6 +212,8 @@ contains
             tropomi_trop_kernel_local(imem, level_ith) = kernel_trop_px(level_ith, key)
          enddo
       enddo
+
+      amf_local = amf(key)
 
       ! Initialize istatus
       istatus = 0
@@ -299,9 +303,14 @@ contains
       model_conc_vcd = 0.0_r8
       do imem = 1, ens_size
          call ApplyKernel(tropomi_dim, tropomi_trop_kernel_local(imem, :), model_conc_2d_kl(imem, :), model_conc_vcd(imem))
-
       end do
       ! vcd using the standard air mass factor
+      do imem = 1, ens_size
+         ! compute partial column sx
+         call PartialColumn(1,tropomi_dim,tropomi_dim,model_conc_2d_kl(imem, :),Sx(imem,:))
+         ! compute alternative air mass factor correction M_m
+         call AltAirMassFactor(1,tropomi_dim,amf_local,tropomi_trop_kernel_local(imem, :),model_conc_2d_kl(imem, :),Sx(imem,:),model_conc_vcd(imem))
+      end do
 
       val = model_conc_vcd
       istatus = 0
@@ -331,6 +340,7 @@ contains
        CASE DEFAULT
          avg_kernels_1(1:tropomi_dim)  = read_tropomi_avg_kernels(ifile, tropomi_dim, fileformat)
          obs_p_1(1:tropomi_dim) = read_tropomi_pressure(ifile, tropomi_dim, fileformat)
+         amf_tm5 = read_tropomi_amf(ifile, fform=fform)
       END SELECT
       ! Dummy implementation, replace with actual code to read data from the file
 
