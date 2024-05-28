@@ -4,6 +4,7 @@
 *.nc
 *.out
 *.swp
+*.png
 *__pycache__*
 *obscount.txt
 *region?.ps
@@ -242,3 +243,7 @@ observations/obs_converters/S5P_TROPOMI_L3/data/satwnd_input.nc
 observations/obs_converters/S5P_TROPOMI_L3/work/S5p_NO2_16685.nc
 observations/obs_converters/S5P_TROPOMI_L3/work/convert_s5p_tropomi_l3
 models/ROMS/wc13/*
+models/FARM/data/*
+models/FARM/IRIDE_ens/*
+observations/obs_converters/TROPOMI_NO2/work/tropomi_no2_trop_col_thinner
+observations/obs_converters/TROPOMI_NO2/work/tropomi_no2_trop_col_ascii_to_obs

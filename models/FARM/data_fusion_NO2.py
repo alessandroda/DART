@@ -23,9 +23,9 @@ from FARM_to_DART import (
 
 # SETTINGS
 cwd = os.getcwd()
-start_time = "2021-01-06 00:00:00"
+start_time = "2021-01-05 00:00:00"
 start_time = pd.to_datetime(start_time)
-end_time = "2021-01-29 23:00:00"
+end_time = "2021-01-31 23:00:00"
 end_time = pd.to_datetime(end_time)
 dt = 180
 dt = pd.Timedelta(dt, unit="s")

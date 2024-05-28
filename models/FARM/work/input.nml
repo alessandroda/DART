@@ -2,7 +2,7 @@
    /
 
 &algorithm_info_nml
-   qceff_table_filename = ''
+   qceff_table_filename = '/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/qceff_table.csv'
    /
 
 &perfect_model_obs_nml
@@ -12,7 +12,7 @@
    input_state_files          = "template_farm.nc"
 
    write_output_state_to_file = .true.,
-   single_file_out            = .true.
+   single_file_out            = .false.
    output_state_files         = "perfect_output.nc"
    output_interval            = 1,
 
@@ -40,35 +40,35 @@
    input_state_files            = ''
    input_state_file_list        = 'filter_input_list.txt'
 
-   stages_to_write  =  'preassim', 'forecast', 'analysis', 'output'
+   stages_to_write  =  'preassim', 'analysis', 'output'
 
-   single_file_out              = .true.,
+   single_file_out              = .false.,
    output_state_files           = ''
    output_state_file_list       = 'filter_output_list.txt'
    output_interval              = 1,
    output_members               = .true.
-   num_output_state_members     = 1,
+   num_output_state_members     = 17,
    output_mean                  = .true.
    output_sd                    = .true.
    write_all_stages_at_end      = .false.
 
-   ens_size                     = 38,
+   ens_size                     = 17,
    num_groups                   = 1,
    ! AD'A we should try with this setting to not genereate 50 ensemble
-   perturb_from_single_instance = .true.,
+   perturb_from_single_instance = .false.,
    perturbation_amplitude       = 0.5,
    distributed_state            = .false.
 
    async                        = 0,
    adv_ens_command              = "",
 
-   obs_sequence_in_name         = "obs_seq.out",
-   obs_sequence_out_name        = "obs_seq.final",
-   num_output_obs_members       = 1,
-   init_time_days               = -1,
-   init_time_seconds            = -1,
-   first_obs_days               = -1,
-   first_obs_seconds            = -1,
+   obs_sequence_in_name         = "/mnt/mumbai_n4r5/dausilio/projects/DART/observations/obs_converters/S5P_TROPOMI_L3/work/obs_seq_45591_153429.out",
+   obs_sequence_out_name        = "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/posteriors/20210128_123900/obs_seq_20210128_123900.final",
+   num_output_obs_members       = 16,
+   init_time_days               = 153429,
+   init_time_seconds            = 46800,
+   first_obs_days               = 153429,
+   first_obs_seconds            = 45591,
    last_obs_days                = -1,
    last_obs_seconds             = -1,
 
@@ -79,12 +79,12 @@
    inf_initial                 = 1.0,                    1.0,
    inf_lower_bound             = 1.0,                     1.0,
    inf_upper_bound             = 100.0,                   1000000.0,
-   inf_damping                 = 1.0,                     1.0,
-   inf_sd_initial              = 0.0,                     0.0,
-   inf_sd_lower_bound          = 0.0,                     0.0,
+   inf_damping                 = 0.9,                     1.0,
+   inf_sd_initial              = 0.6,                     0.0,
+   inf_sd_lower_bound          = 0.6,                     0.0,
    inf_sd_max_change           = 1.05,                    1.05,
 
-   trace_execution              = .true.,
+   trace_execution              = .false.,
    output_timestamps            = .false.,
    output_forward_op_errors     = .false.,
    silence                      = .false.,
@@ -96,16 +96,16 @@
 
 
 &assim_tools_nml
-   cutoff                          = 0.01
+   cutoff                          = 0.0025
    sort_obs_inc                    = .false.,
    spread_restoration              = .false.,
    sampling_error_correction       = .false.,
    adaptive_localization_threshold = 50,
-   adaptive_cutoff_floor = 0.0005,
+   adaptive_cutoff_floor = 0.001,
    distribute_mean                 = .true.
    output_localization_diagnostics = .false.,
    localization_diagnostics_file   = 'localization_diagnostics',
-   print_every_nth_obs             = 1,
+   print_every_nth_obs             = 100,
    /
 
 &cov_cutoff_nml
@@ -124,27 +124,27 @@
    /
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'SAT_SO2_TROPOMI'
+   assimilate_these_obs_types = 'SAT_NO2_TROPOMI'
    evaluate_these_obs_types   = ''
    /
 
 &location_nml
-   horiz_dist_only             = .true.,
-   vert_normalization_height   = 5000000.0,
-   approximate_distance        = .true.,
+   horiz_dist_only             = .false.,
+   vert_normalization_height   = 720000.0,
+   approximate_distance        = .false.,
    nlon                        = 51,
    nlat                        = 51,
    output_box_info             = .true.,
    /
 
 &model_nml
-   farm_template_filename = '../CAMEO/to_DART/model_54000_153391.nc'
+   farm_template_filename = '../IRIDE_ens/to_DART/model_46800_153429_00.nc'
    state_variables  = 'P',     'QTY_PRESSURE','NA', 'NA', 'UPDATE'
                       'SP',     'QTY_SURFACE_PRESSURE','NA', 'NA', 'UPDATE'
-                      'c_SO2', 'QTY_SO2', 'NA', 'NA', 'UPDATE'
+                      'c_NO2', 'QTY_NO2', 'NA', 'NA', 'UPDATE'
    time_step_days      = 0,
 !A.D using DA_SATOFFLINE approach
-   time_step_seconds   = 3600
+   time_step_seconds   = 5000
    /
 
 &utilities_nml

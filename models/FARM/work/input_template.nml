@@ -47,12 +47,12 @@
    output_state_file_list       = 'filter_output_list.txt'
    output_interval              = 1,
    output_members               = .true.
-   num_output_state_members     = 16,
+   num_output_state_members     = 17,
    output_mean                  = .true.
    output_sd                    = .true.
    write_all_stages_at_end      = .false.
 
-   ens_size                     = 16,
+   ens_size                     = 17,
    num_groups                   = 1,
    ! AD'A we should try with this setting to not genereate 50 ensemble
    perturb_from_single_instance = .false.,
@@ -96,12 +96,12 @@
 
 
 &assim_tools_nml
-   cutoff                          = 0.1
+   cutoff                          = 0.0025
    sort_obs_inc                    = .false.,
    spread_restoration              = .false.,
    sampling_error_correction       = .false.,
-   adaptive_localization_threshold = 2000,
-   adaptive_cutoff_floor = 0,
+   adaptive_localization_threshold = 50,
+   adaptive_cutoff_floor = 0.001,
    distribute_mean                 = .true.
    output_localization_diagnostics = .false.,
    localization_diagnostics_file   = 'localization_diagnostics',
@@ -130,7 +130,7 @@
 
 &location_nml
    horiz_dist_only             = .false.,
-   vert_normalization_height   = 350000.0,
+   vert_normalization_height   = 720000.0,
    approximate_distance        = .false.,
    nlon                        = 51,
    nlat                        = 51,

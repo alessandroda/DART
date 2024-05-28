@@ -14,3 +14,4 @@ $folder_path/posterior_12.nc
 $folder_path/posterior_13.nc
 $folder_path/posterior_14.nc
 $folder_path/posterior_15.nc
+$folder_path/posterior_16.nc

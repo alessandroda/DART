@@ -1,7 +1,5 @@
-from pathlib import Path
 from matplotlib import animation, colors
 from matplotlib import pyplot as plt
-import pandas as pd
 import xarray as xr
 import numpy as np
 import cartopy.crs as ccrs
@@ -87,133 +85,43 @@ jet_colors_dict_with_alpha = [color for color in jet_colors_with_alpha]
 jet_colors_dict_with_alpha[0] = (1.0, 1.0, 1.0, 1.0)
 
 
-def find_grid_cell(dataset, x, y):
-    # Find the nearest grid cell
-    nearest_x = dataset["x"].sel(x=x, method="nearest").values
-    nearest_y = dataset["y"].sel(y=y, method="nearest").values
-
-    # Find the indices of the nearest grid cell
-    x_index = np.where(dataset["x"].values == nearest_x)[0][0]
-    y_index = np.where(dataset["y"].values == nearest_y)[0][0]
-
-    return x_index, y_index
-
-
-import numpy as np
-import matplotlib.pyplot as plt
-from sklearn.metrics import r2_score
-
-
-def r2(observed, predicted):
-    predicted = predicted[~np.isnan(observed)]
-    observed = observed[~np.isnan(observed)]
-    # observed = observed[~np.isnan(predicted)]
-    # predicted = predicted[~np.isnan(predicted)]
-    cov = np.cov(observed, predicted)
-    return (cov[0, 1] / np.sqrt((cov[0, 0] * cov[1, 1]))) ** 2
-
-
-def make_obs_vs_data(settings, dataset_variable, dataset, station_points, **kwargs):
-
-    name_process = kwargs.get("name", "")
-    # 1. Query cells where the station belongs to
-    import pandas as pd
-
-    # Filter out negative values, NaNs, and values higher than 200
-
-    values_model = pd.DataFrame(columns=["c_NO2"])
-    # Format output string date
-    formatted_str = str(dataset.time.values)
-    print("processing: " + formatted_str)
-    filtered_time_points = station_points[
-        station_points.index == np.datetime64(dataset.time.values[0])
-    ]
-    filtered_time_points["model"] = 0
-    for lon, lat in zip(filtered_time_points["lon"], filtered_time_points["lat"]):
-        x_index, y_index = find_grid_cell(dataset, lon, lat)
-        model_value = dataset_variable[0, y_index, x_index].data
-        filtered_time_points.loc[
-            (filtered_time_points["lat"] == lat) & (filtered_time_points["lon"] == lon),
-            "model",
-        ] = model_value
-        # Append model_value to values_model DataFrame
-        values_model = pd.concat(
-            [values_model, pd.DataFrame({"c_NO2": [model_value]})],
-            ignore_index=True,
-        )
-    # 2. Plot obs vs data
-    # Remove NaN values
-
-    values_obs = filtered_time_points["value"].values
-
-    values_obs_filtered = values_obs[~(values_obs == -9999.0)]
-    values_model_filtered = values_model[~(values_obs == -9999.0)]
-    plt.figure(figsize=(8, 6))
-    plt.scatter(values_obs, values_model, color="blue", label="Observed vs. Model Data")
-    plt.xlabel("Observed NO2")
-    plt.ylabel("Model NO2")
-    plt.xlim(right=50, left=0)
-    plt.ylim(bottom=0, top=50)
-    plt.title("Observed vs. Model NO2")
-    plt.legend()
-    plt.grid(True)
-    plt.savefig(
-        Path(settings.output_directory)
-        / f"{name_process}_{str(dataset.time.values[0])}.png"
-    )
-    # r2 coefficient without NaN
-    print(r2_score(values_obs_filtered, values_model_filtered))
-    print(
-        r2(
-            values_obs_filtered,
-            np.array(values_model_filtered["c_NO2"].values.tolist()),
-        )
-    )
-
-
 class Settings(BaseModel):
     # NETCDF
     # ds_year = ds.sortby('time').resample(time="Y").mean()
-    word = "preassim"
     path_netcdf: str = (
-        f"/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/{word}/"
+        "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/posteriors/20210108_121500/posterior_1.nc"
     )
-    file_name = f"diff_member_0001.nc"
-    output_directory: str = (
-        "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/3D_plots/"
-    )
+    # path_netcdf: str = "/mnt/mumbai_n3r6/ML/G100/SPOTT/workdir_1h/inference/inference_predictors_1.nc"
+    output_directory: str = "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/"
     type_statistics = ""  # options
-    model: str = f"{word}"
+    model: str = "posterior_0"
     engine: str = "netcdf4"
     # list 16 integers from 1 to 16
     layers = list(range(0, 1))
     conv_factor: int = 1
-    dest_crs: int = 4326
+    dest_crs: int = 32632
     source_crs: int = 4326
     name_variable: str = "c_NO2"
     obs_variable: str = "value"
-    start_time: str = "2021-01-06T12:00:00"
+    start_time: str = "2021-01-08T12:00:00"
     end_time: str = "2021-01-08T12:00:00"
     # Domain Italy
     lonmin: float = 5.4  # 5.325
     lonmax: float = 19
     latmin: float = 35.380
     latmax: float = 47.8
-    # # Domain North
-    # lonmin: float = 8  # 5.325
-    # lonmax: float = 14
-    # latmin: float = 43
-    # latmax: float = 47.8
+    # Domain boundary Spott UTM32
+
     # Map style
     label_size: int = 18
     title_font_size: int = 20
     size_figure: tuple = (15, 12)
-    min_scale: int = -20
-    max_scale: int = 20
-    title: str = "diff preassim/analysis"
+    min_scale: int = 0
+    max_scale: int = 50
+    title: str = ""
     var_units: str = "NO2 ugm3"  # "NO. exceed."
 
-    make_animation: bool = False
+    make_animation: bool = True
     clean_pngs: bool = False
     frame_per_second: int = 1
     type_colorbar: str = "YOB_transparent"  # YOB_transparent, Viridis_transparent
@@ -261,36 +169,14 @@ def get_my_cmap(type_colorbar: str):
         return plt.cm.jet
 
 
-def make_single_pngs(settings: Settings, **kwargs):
+def make_single_pngs(
+    settings: Settings, dataset: xr.Dataset, dataset_variable: xr.Dataset, **kwargs
+):
     station_points = kwargs.get("station_points", None)
     shape_feature = kwargs.get("state_feature", None)
     filenames = []
-    dirlist = []
-    for dir in os.listdir(settings.path_netcdf):
-        if dir.endswith("00"):
-            dirlist.append(dir)
-    for dirname in dirlist:
-        # check folder not empty
-        if not os.listdir(settings.path_netcdf + dirname):
-            continue
-        time = pd.to_datetime(dirname, format="%Y%m%d_%H%M%S")
-        # continue the loop if dataset empty
-        if not os.path.exists(
-            settings.path_netcdf + dirname + "/" + settings.file_name
-        ):
-            continue
-        dataset = open_dataset(
-            settings.path_netcdf + dirname + "/" + settings.file_name, settings
-        )
-        dataset_variable = dataset[settings.name_variable]
-        # make_obs_vs_data(
-        #     settings=settings,
-        #     dataset=dataset,
-        #     dataset_variable=dataset_variable,
-        #     station_points=station_points,
-        #     name=settings.word,
-        # )
-        dataset = dataset.sel(time=time, method="nearest")
+    for i, time_step in enumerate(dataset.time):
+        dataset = dataset.sel(time=settings.start_time)
         for layer_i in settings.layers:
             # if dataset.time[i].values >= np.datetime64(
             #     settings.start_time
@@ -336,7 +222,7 @@ def make_single_pngs(settings: Settings, **kwargs):
             # cmap = get_my_cmap(settings.type_colorbar)
             # cmap = plt.cm.YlOrBr
             plt.title(
-                f"{settings.word} {str(dict_layers[layer_i])} m {formatted_str}",
+                str(dict_layers[layer_i]) + "m",
                 fontdict={
                     "fontsize": settings.title_font_size,
                     "fontweight": "bold",
@@ -352,7 +238,7 @@ def make_single_pngs(settings: Settings, **kwargs):
                 vmax=settings.max_scale,
                 cmap=cmap,
                 shading="auto",
-                zorder=1,
+                zorder=6,
             )
             # img = plt.pcolormesh(
             #     dataset["x"],
@@ -379,13 +265,13 @@ def make_single_pngs(settings: Settings, **kwargs):
             # ax.imshow(logo, extent=(settings.latmax - logo_width,settings.latmax, settings.lonmax - logo_height,settings.lonmax), transform=ccrs.PlateCarree())
             if station_points is not None:
                 filtered_time_points = station_points[
-                    station_points.index == np.datetime64(dataset.time.data)
+                    station_points.index == np.datetime64(time_step.values)
                 ]
                 plt.scatter(
                     filtered_time_points["lon"],
                     filtered_time_points["lat"],
                     c=filtered_time_points[settings.obs_variable],
-                    s=150,
+                    s=200,
                     transform=ccrs.PlateCarree(),
                     cmap=cmap,
                     vmin=settings.min_scale,
@@ -393,20 +279,19 @@ def make_single_pngs(settings: Settings, **kwargs):
                     zorder=7,
                     edgecolors="black",
                 )
-
-                # for index, row in filtered_time_points.iterrows():
-                #     txt = int(row["value"])
-                #     offset = 0  # Adjust this value as needed
-                #     plt.text(
-                #         row["lon"] - offset,  # Adjust x position
-                #         row["lat"] - offset,  # Adjust y position
-                #         txt,
-                #         ha="center",  # Adjust horizontal alignment
-                #         va="center",  # Adjust vertical alignment
-                #         fontsize=12,
-                #         zorder=7,
-                #         color="black",
-                #     )
+                for index, row in filtered_time_points.iterrows():
+                    txt = int(row["value"])
+                    offset = 0  # Adjust this value as needed
+                    plt.text(
+                        row["lon"] - offset,  # Adjust x position
+                        row["lat"] - offset,  # Adjust y position
+                        txt,
+                        ha="center",  # Adjust horizontal alignment
+                        va="center",  # Adjust vertical alignment
+                        fontsize=12,
+                        zorder=7,
+                        color="black",
+                    )
             if shape_feature is not None:
                 ax.add_feature(
                     shape_feature, facecolor=(1, 1, 1, 0), linewidth=0.5, zorder=4
@@ -427,24 +312,24 @@ def make_single_pngs(settings: Settings, **kwargs):
             # Save the image
             image_filename = os.path.join(
                 settings.output_directory,
-                f"{settings.title}_{formatted_str}_{layer_i}_{settings.model}_north.png",
+                f"{settings.title}_{formatted_str}_{layer_i}_{settings.model}.png",
             )
             filenames.append(image_filename)
             # add cfeature roads
-            # ax.add_feature(cfeature.OCEAN.with_scale("10m"), zorder=2)
-            ax.add_feature(cfeature.LAKES.with_scale("10m"), zorder=2)
-            ax.add_feature(cfeature.BORDERS.with_scale("10m"), zorder=2)
-            ax.add_feature(cfeature.RIVERS.with_scale("10m"), zorder=2)
-            # ax.add_feature(cfeature.LAND.with_scale("10m"), zorder=2)
-            ax.add_feature(cfeature.COASTLINE.with_scale("10m"), zorder=2)
-
+            ax.add_feature(cfeature.OCEAN.with_scale("10m"), zorder=3)
+            ax.add_feature(cfeature.LAKES.with_scale("10m"), zorder=3)
+            ax.add_feature(cfeature.BORDERS.with_scale("10m"), zorder=3)
+            ax.add_feature(cfeature.RIVERS.with_scale("10m"), zorder=3)
+            # ax.add_feature(cfeature.LAND.with_scale("10m"), zorder=1)
+            ax.add_feature(cfeature.COASTLINE.with_scale("10m"), zorder=3)
             plt.savefig(image_filename)
             plt.close()
     return filenames
 
 
-def open_dataset(path_netcdf, settings):
-    dataset = xr.open_dataset(path_netcdf, engine=settings.engine)
+def main():
+    settings = Settings()
+    dataset = xr.open_dataset(settings.path_netcdf, engine=settings.engine)
     dataset = dataset.rio.write_crs(settings.source_crs)
     dataset = dataset.assign_coords(
         x=(dataset.x.values * 0.15) + 5.4,
@@ -454,32 +339,22 @@ def open_dataset(path_netcdf, settings):
     )
     if settings.dest_crs != settings.source_crs:
         dataset = dataset.rio.reproject(settings.dest_crs)
-    return dataset
-
-
-def main():
-    settings = Settings()
-    # subset_variable = dataset[settings.name_variable]
+    subset_variable = dataset[settings.name_variable]
     output_directory = settings.output_directory
     os.makedirs(output_directory, exist_ok=True)
     import pandas as pd
 
-    # station_points = pd.read_csv(
-    #     "/mnt/mumbai_n4r5/dausilio/projects/eea_app/csv_table/stations_eea_2021-01-01000000_2021-01-01000000_IT_HR_CH_SI_AT_SK_NO2.csv"
-    # )
-    # station_points["datetime"] = pd.to_datetime(station_points["datetime"])
-    # station_points = station_points[
-    #     (station_points["type"] == "background")
-    #     & (
-    #         (station_points["type_area"] == "rural")
-    #         | (station_points["type_area"] == "suburban")
-    #     )
-    # ]
-    # station_points.set_index("datetime", inplace=True)
-
+    station_points = pd.read_csv(
+        "/mnt/mumbai_n4r5/dausilio/projects/eea_app/csv_table/stations_eea_2021-01-01000000_2021-01-01000000_IT_HR_CH_SI_NO2.csv"
+    )
+    station_points["datetime"] = pd.to_datetime(station_points["datetime"])
+    station_points = station_points[station_points["type"] == "background"]
+    station_points.set_index("datetime", inplace=True)
     filenames = make_single_pngs(
         settings=settings,
-        # station_points=station_points,
+        dataset=dataset,
+        dataset_variable=subset_variable,
+        station_points=station_points,
     )
 
     if settings.make_animation:

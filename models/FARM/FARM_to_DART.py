@@ -33,7 +33,7 @@ def submit_slurm_job(case, option):
     output_file = f"out_{case}_{option}.log"
     match option:
         case "filter":
-            command_execute = f"mpirun -np 16 ./filter"
+            command_execute = f"mpirun -np 17 ./filter"
 
     slurm_script = f"""#!/bin/sh
 
@@ -41,7 +41,7 @@ def submit_slurm_job(case, option):
 #SBATCH --job-name={job_name}
 #SBATCH --nodes=1
 #SBATCH --nodelist=node3
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=17
 #SBATCH --error=/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/errs/{error_file}
 #SBATCH --output=/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/outs/{output_file}
 
@@ -109,7 +109,7 @@ def set_date_gregorian(year, month, day, hours=0, minutes=0, seconds=0):
         days_per_month[m - 1] + (1 if leap and m == 2 else 0) for m in range(1, month)
     )
 
-    totseconds = seconds + 60 * (minutes + 60 * (hours + 24 * ndays))
+    totseconds = seconds + 60 * (minutes + 60 * (hours))
     totdays = day - 1 + ndays + 365 * (year - base_year - nleapyr) + 366 * nleapyr
 
     return totseconds, totdays
