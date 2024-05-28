@@ -5,6 +5,8 @@
 *.out
 *.swp
 *.png
+*.gif
+*.log
 *__pycache__*
 *obscount.txt
 *region?.ps
@@ -247,3 +249,11 @@ models/FARM/data/*
 models/FARM/IRIDE_ens/*
 observations/obs_converters/TROPOMI_NO2/work/tropomi_no2_trop_col_thinner
 observations/obs_converters/TROPOMI_NO2/work/tropomi_no2_trop_col_ascii_to_obs
+models/FARM/submit_data_fusion.sh
+models/FARM/submit_job_15.sh
+models/FARM/submit_job_16.sh
+models/FARM/CAMEO/12/listing_SO2.csv
+models/FARM/CAMEO/FARM/select_only.sh
+models/FARM/work/obs_seq_no2.final
+models/FARM/work/obs_seq.final
+observations/obs_converters/S5P_TROPOMI_L3/work/core
