@@ -1,0 +1,108 @@
+{
+    "version" : "0.2.0",
+    "configurations": [
+      {"name":"Python Debugger: Current File","type":"debugpy","request":"launch","program":"${file}","console":"integratedTerminal"},
+    
+        {
+            "name" : "Run convert tropomi",
+            "type" : "cppdbg",
+            "request": "launch",
+            "program": "/mnt/mumbai_n4r5/dausilio/projects/DART/observations/obs_converters/S5P_TROPOMI_L3/work/preprocess",
+            "args": [],
+            "stopAtEntry": true,
+            "cwd" : "/mnt/mumbai_n4r5/dausilio/projects/DART/observations/obs_converters/S5P_TROPOMI_L3/work/",
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "preLaunchTask": "",
+            "setupCommands": [
+                {
+                  "description": "Enable pretty-printing for gdb",
+                  "text": "-enable-pretty-printing",
+                  "ignoreFailures": true
+                },
+                {
+                  "description": "Fix pretty-printing for gdb",
+                  "text": "set charset UTF-8"
+                }
+            ],
+        },
+        {
+            "name" : "Run filter",
+            "type" : "cppdbg",
+            "request": "launch",
+            "program": "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/filter",
+            "args": [],
+            "stopAtEntry": true,
+            "cwd" : "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/",
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "preLaunchTask": "",
+            "setupCommands": [
+                {
+                  "description": "Enable pretty-printing for gdb",
+                  "text": "-enable-pretty-printing",
+                  "ignoreFailures": true
+                },
+                {
+                  "description": "Fix pretty-printing for gdb",
+                  "text": "set charset UTF-8"
+                }
+            ],
+        },
+        {
+          "name" : "Run Lorenz case",
+          "type" : "cppdbg",
+          "request": "launch",
+          "program": "/mnt/mumbai_n4r5/dausilio/projects/DART/models/lorenz_63/work/filter",
+          "args": [],
+          "stopAtEntry": true,
+          "cwd" : "/mnt/mumbai_n4r5/dausilio/projects/DART/models/lorenz_63/work/",
+          "externalConsole": false,
+          "MIMode": "gdb",
+          "preLaunchTask": "",
+          "setupCommands": [
+              {
+                "description": "Enable pretty-printing for gdb",
+                "text": "-enable-pretty-printing",
+                "ignoreFailures": true
+              },
+              {
+                "description": "Fix pretty-printing for gdb",
+                "text": "set charset UTF-8"
+              }
+          ],
+      },
+        {
+            "name": "Intel Debug Attach",
+            "type": "cppvsdbg",
+            "request": "attach",
+            "processId": "${command:pickProcess}"
+        },
+        // {
+        //     "name": "Python: ml_scaling",
+        //     "type": "python",
+        //     "request": "launch",
+        //     "program": "${file}",
+        //     "console": "integratedTerminal",
+        //     "cwd": "${workspaceFolder}",
+        //     "justMyCode": true,
+        //     "args": ["-cf", "etc/ml_scaling_spott.yaml", "-ppt"]
+        //     //"args": ["-cf", "etc/ml_scaling_epimed.yaml", "-pt"]
+        // },
+        // {
+        //     "name": "Python: lurf_umberto",
+        //     "type": "python",
+        //     "request": "launch",
+        //     "program": "${file}",
+        //     //"args": ["-cf", "etc/ml_scaling_epimed.yaml", "-pp", "-fe"],
+        //     //"args": ["-cf", "etc/ml_scaling_epimed.yaml", "-ppt"],
+        //     //"args": ["-cf", "etc/ml_scaling_epimed.yaml", "-fe", "-ppi", "-tr", "0000", "-pr", "0000"],
+        //     //"args": ["-cf", "etc/ml_scaling_epimed.yaml", "-fe", "-tr", "0000", "-pr", "0000"],
+        //     //"args": ["-cf", "etc/ml_scaling_epimed.yaml", "-fe", "-tr", "0020", "-pr", "0020"],
+        //     //"args": ["-cf", "etc/ml_scaling_epimed.yaml","-fe", "-tr", "0020", "-pr", "0020"],
+        //     "console": "integratedTerminal",
+        //     "justMyCode": true
+        // }
+
+    ]
+}

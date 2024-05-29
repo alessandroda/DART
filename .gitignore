@@ -1,6 +1,15 @@
 *.mod
 *.o
+*.nc.gz
+*.nc
+*.out
+*.nc.gz
+*.nc
+*.out
 *.swp
+*.png
+*.gif
+*.log
 *__pycache__*
 *obscount.txt
 *region?.ps
@@ -90,6 +99,8 @@ gitm_to_netcdf
 netcdf_to_gitm_blocks
 streamflow_obs_diag
 cam_dart_obs_preprocessor
+aether_to_dart
+dart_to_aether
 
 # Observation converter exectutables
 convert_aviso
@@ -229,4 +240,23 @@ test_ran_unif
 !restart_file_tool/
 !system_simulation/
 !wakeup_filter/
-
+models/lorenz_63/
+models/lorenz_63/work/
+observations/obs_converters/MADIS/data/satwnd_input.nc
+observations/obs_converters/S5P_TROPOMI_L3/data/S5p_NO2_16685.nc
+observations/obs_converters/S5P_TROPOMI_L3/data/satwnd_input.nc
+observations/obs_converters/S5P_TROPOMI_L3/work/S5p_NO2_16685.nc
+observations/obs_converters/S5P_TROPOMI_L3/work/convert_s5p_tropomi_l3
+models/ROMS/wc13/*
+models/FARM/data/*
+models/FARM/IRIDE_ens/*
+observations/obs_converters/TROPOMI_NO2/work/tropomi_no2_trop_col_thinner
+observations/obs_converters/TROPOMI_NO2/work/tropomi_no2_trop_col_ascii_to_obs
+models/FARM/submit_data_fusion.sh
+models/FARM/submit_job_15.sh
+models/FARM/submit_job_16.sh
+models/FARM/CAMEO/12/listing_SO2.csv
+models/FARM/CAMEO/FARM/select_only.sh
+models/FARM/work/obs_seq_no2.final
+models/FARM/work/obs_seq.final
+observations/obs_converters/S5P_TROPOMI_L3/work/core
