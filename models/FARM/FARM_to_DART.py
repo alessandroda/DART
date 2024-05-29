@@ -28,7 +28,7 @@ def check_job_status(job_id):
 
 
 def submit_slurm_job(case, option):
-    job_name = f"DART_{case}"
+    job_name = f"DART{case}"
     error_file = f"err_{case}_{option}.log"
     output_file = f"out_{case}_{option}.log"
     match option:
@@ -42,8 +42,8 @@ def submit_slurm_job(case, option):
 #SBATCH --nodes=1
 #SBATCH --nodelist=node3
 #SBATCH --cpus-per-task=17
-#SBATCH --error=/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/errs/{error_file}
-#SBATCH --output=/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/outs/{output_file}
+#SBATCH --error=/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/{error_file}
+#SBATCH --output=/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/{output_file}
 
 
 conda activate /home/dausilio/miniconda3/envs/dartenv

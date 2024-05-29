@@ -77,8 +77,8 @@
    /
 
 &file_info_nml
-   s5p_netcdf_file = '/mnt/mumbai_n4r5/sat_data_assim/IRIDE/SAT_CSO_QA/CSO-data/QUALEARIA/S5p/NO2/C03/2021/01/S5p_NO2_17069.nc',
-   s5p_out_file = 'obs_seq_45591_153429.out',
+   s5p_netcdf_file = '/mnt/mumbai_n4r5/sat_data_assim/IRIDE/SAT_CSO_QA/CSO-data/QUALEARIA/S5p/NO2/C03/2021/01/S5p_NO2_16827.nc',
+   s5p_out_file = 'obs_seq_40681_153412.out',
    vertical_ref_height = 975.0,
    which_gas = 'SAT_NO2_TROPOMI'
    /

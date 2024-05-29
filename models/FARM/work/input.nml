@@ -62,13 +62,13 @@
    async                        = 0,
    adv_ens_command              = "",
 
-   obs_sequence_in_name         = "/mnt/mumbai_n4r5/dausilio/projects/DART/observations/obs_converters/S5P_TROPOMI_L3/work/obs_seq_45591_153429.out",
-   obs_sequence_out_name        = "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/posteriors/20210128_123900/obs_seq_20210128_123900.final",
+   obs_sequence_in_name         = "/mnt/mumbai_n4r5/dausilio/projects/DART/observations/obs_converters/S5P_TROPOMI_L3/work/obs_seq_40681_153412.out",
+   obs_sequence_out_name        = "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/posteriors/20210111_111800/obs_seq_20210111_111800.final",
    num_output_obs_members       = 16,
-   init_time_days               = 153429,
-   init_time_seconds            = 46800,
-   first_obs_days               = 153429,
-   first_obs_seconds            = 45591,
+   init_time_days               = 153412,
+   init_time_seconds            = 39600,
+   first_obs_days               = 153412,
+   first_obs_seconds            = 40681,
    last_obs_days                = -1,
    last_obs_seconds             = -1,
 
@@ -138,7 +138,7 @@
    /
 
 &model_nml
-   farm_template_filename = '../IRIDE_ens/to_DART/model_46800_153429_00.nc'
+   farm_template_filename = '../IRIDE_ens/to_DART/model_39600_153412_00.nc'
    state_variables  = 'P',     'QTY_PRESSURE','NA', 'NA', 'UPDATE'
                       'SP',     'QTY_SURFACE_PRESSURE','NA', 'NA', 'UPDATE'
                       'c_NO2', 'QTY_NO2', 'NA', 'NA', 'UPDATE'

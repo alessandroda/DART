@@ -19,7 +19,6 @@ convert_s5p_tropomi_l3
 obs_seq_to_netcdf
 obs_sequence_tool
 advance_time
-operators
 )
 
 # build arguments
