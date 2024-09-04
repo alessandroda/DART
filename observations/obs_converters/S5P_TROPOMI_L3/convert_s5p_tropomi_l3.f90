@@ -44,7 +44,6 @@ program convert_s5p_tropomi_L2
    type(obs_type)          :: obs, prev_obs
    type(T_SatObs)          :: tsat_obs
    type(time_type)         :: comp_day0, time_obs, prev_time, gregorian_sat_obs_time
-   character(len=*),parameter        :: pollutant='NO2'
    integer,  allocatable :: used(:), tused(:), sorted_used(:)
    real(r8) :: qc, obsv, vval
    real(r8), allocatable :: lat(:), lon(:), pres(:, :), qa_value(:), amf(:), tmp(:), vcd(:), vcd_errvar(:), time(:), tobs(:)
@@ -57,11 +56,13 @@ program convert_s5p_tropomi_L2
 
 
    ! Namelist with file info
-   character(len=256) ::s5p_netcdf_file = 'sat_obs.nc'
-   character(len=129):: s5p_out_file = 'obs_seq.out'
+   character(len=256)            ::s5p_netcdf_file = 'sat_obs.nc'
+   character(len=129)            :: s5p_out_file = 'obs_seq.out'
    real                          :: vertical_ref_height = 975.0
-   character(len=256)             :: which_gas = "SAT_NO2_TROPOMI"
-   namelist /file_info_nml/ s5p_netcdf_file, s5p_out_file, vertical_ref_height, which_gas
+   character(len=256)            :: which_gas = "SAT_SO2_TROPOMI"
+   real                          :: qa_thres = 0.75
+   character(len=256)            :: pollutant='SO2'
+   namelist /file_info_nml/ s5p_netcdf_file, s5p_out_file, vertical_ref_height, which_gas, qa_thres, pollutant
 
 !-----------------------------------------------------------------------
 ! Namelist with default values
@@ -140,19 +141,41 @@ program convert_s5p_tropomi_L2
    obsloop1: do n = 1, nobs
 
       ! check the lat/lon values to see if they are ok
-      if ( tsat_obs%lat(n) >  90.0_r8 .or. tsat_obs%lat(n) <  -90.0_r8 ) cycle obsloop1
-      if ( tsat_obs%lon(n) > 180.0_r8 .or. tsat_obs%lon(n) < -180.0_r8 ) cycle obsloop1
+      if ( tsat_obs%lat(n) >  90.0_r8 .or. tsat_obs%lat(n) <  -90.0_r8 ) then
+         print *, "Observation ", n, " excluded: latitude out of range"
+         cycle obsloop1
+      endif
+      if ( tsat_obs%lon(n) > 180.0_r8 .or. tsat_obs%lon(n) < -180.0_r8 ) then
+         print *, "Observation ", n, " excluded: longitude out of range"
+         cycle obsloop1
+      endif
       if (filter_on_model_grid) then
          ! Check if lat/lon values are within the specified domain
-         if ( tsat_obs%lat(n) > dom_north .or. tsat_obs%lat(n) < dom_south ) cycle obsloop1
-         if ( tsat_obs%lon(n) > dom_east .or. tsat_obs%lon(n) < dom_west ) cycle obsloop1
+         if ( tsat_obs%lat(n) > dom_north .or. tsat_obs%lat(n) < dom_south ) then
+            print *, "Observation ", n, " excluded: latitude out of range"
+            cycle obsloop1
+         endif
+         if ( tsat_obs%lon(n) > dom_east .or. tsat_obs%lon(n) < dom_west ) then
+            print *, "Observation ", n, " excluded: latitude out of range"
+            cycle obsloop1
+         endif
       endif
       ! change lon from -180 to 180 into 0-360
       if ( tsat_obs%lon(n) < 0.0_r8 )  tsat_obs%lon(n) = tsat_obs%lon(n) + 360.0_r8
       ! filter obs with qa lower than 0.75
-      if (tsat_obs%qa_flag(n) < 0.75) cycle obsloop1
+      if (tsat_obs%qa_flag(n) < qa_thres) then
+         print *, "Observation ", n, " excluded: qa flag <", qa_thres, tsat_obs%qa_flag(n), tsat_obs%lat(n), tsat_obs%lon(n)
+         cycle obsloop1
+      endif
       ! filter sat observations negative
-      if (tsat_obs%vcd(1, n) < 0) cycle obsloop1
+      if (tsat_obs%vcd(1, n) < 0) then
+         print *, "Observation ", n, " excluded: vcd negative", tsat_obs%vcd(1, n), tsat_obs%lat(n), tsat_obs%lon(n)
+         cycle obsloop1
+      endif
+      if (tsat_obs%vcd(1,n)*tsat_obs%vcd_multiplication_factor < 0.5e15) then
+         print *, "Observation ", n, "excluded: below approx unc TROPOMI (Qin et al. 2023)", tsat_obs%vcd(1,n)*tsat_obs%vcd_multiplication_factor
+         cycle obsloop1
+      endif
       ! the 'used' array are the index numbers of used obs
       ! the 'tused' array are the times of those obs so we can
       ! sort them later by time.

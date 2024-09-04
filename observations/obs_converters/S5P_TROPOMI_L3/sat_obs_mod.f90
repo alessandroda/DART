@@ -32,6 +32,7 @@ module sat_obs_mod
       real,allocatable :: mdlspace_vcd(:,:,:)      !(nlon,nlat,1)
       real,allocatable :: mdlspace_vr(:,:,:)       !(nlon,nlat,1)
       real,allocatable :: time(:)       !(nlon,nlat,1)
+      real(kind=kind(0.0)) :: vcd_multiplication_factor
       type(DateTime), allocatable   :: date_time(:)
       integer,allocatable :: tobs(:) ! time in seconds
       character(len=256) :: time_units
@@ -46,7 +47,7 @@ contains
 
       use nc_interface_mod , only : Nc_open,Nc_GetDim,  &
          Nc_GetVar,Nc_close, &
-         Nc_GetUnits
+         Nc_GetUnits, Nc_Getattr
       use DateTimeModule
 
       implicit none
@@ -82,7 +83,7 @@ contains
          ! because data acquired within an hour belong to the same timestep.
          call extractDateTime(self%time_units, self%date_time(i))
          write(*, '(A, I4, A, I2, A, I2, A, I2, A, I2, A, I2, A, I2, A, I6)') &
-            "Datetime: ", dt%year, "-", dt%month, "-", dt%day, " ", dt%hour, ":", dt%minute, ":", dt%second, ".", dt%millisecond
+            "Datetime: ", self%date_time(i)%year, "-", self%date_time(i)%month, "-", self%date_time(i)%day, " ", self%date_time(i)%hour, ":", self%date_time(i)%minute, ":", self%date_time(i)%second, ".", self%date_time(i)%millisecond
       end do
       call Nc_GetVar(ncid,'longitude_bounds',var2d=self%clon)
       call Nc_GetVar(ncid,'latitude_bounds',var2d=self%clat)
@@ -94,11 +95,13 @@ contains
          call Nc_GetVar(ncid,'kernel_trop',var3d=self%kernel_trop)
          call Nc_GetVar(ncid,'amf_trop',var2d=self%amf_trop)
          call Nc_GetVar(ncid,'nla',ivar2d=self%nla)
+         call Nc_Getattr(ncid, 'vcd', 'vcd_errvar:multiplication_factor_to_convert_to_molecules_percm2', self%vcd_multiplication_factor)
       elseif ( ( pollutant == 'SO2' ) .or. ( pollutant == 'HCHO' ) ) then
          ! Kernel is defined up to the stratosphere
          ! Consistently with kernel and vcd amf is chosen for polluted scenario
          call Nc_GetVar(ncid,'kernel',var3d=self%kernel_trop)
          call Nc_GetVar(ncid,'amf',var2d=self%amf_trop)
+         call Nc_Getattr(ncid, 'vcd', 'vcd_errvar:multiplication_factor_to_convert_to_molecules_percm2', self%vcd_multiplication_factor)
          if ( .not. allocated(self%nla)) allocate(self%nla(self%nretr,self%npix))
          self%nla(:,:)=self%nlayer
       else

@@ -2,6 +2,31 @@ module nc_interface_mod
 
 contains
    !---------------------------------------------
+   subroutine Nc_Getattr(ncid,varname,attrname,multiplication_factor)
+      use NetCDF , only :  NF90_inq_varid, NF90_Inquire_Variable,       &
+         NF90_inquire_dimension,NF90_get_var,         &
+         NF90_get_att
+      IMPLICIT NONE
+      real(kind=kind(0.0)) :: multiplication_factor
+      character(len=*),intent(in) :: varname
+      character(len=*),intent(in) :: attrname
+      integer                     :: ierr
+      integer,intent(in)          :: ncid
+      integer                     :: varid
+      integer                     :: ndims,status
+      integer,allocatable,dimension(:) :: dimlen
+      integer,allocatable,dimension(:) :: dimids
+      integer                     :: nc_status
+      integer                             :: i
+
+      ! Retrieve variable ID
+      status = NF90_inq_varid(ncid, varname, varid)
+      call handle_err(status)
+
+      ierr = NF90_get_att(ncid, varid, 'multiplication_factor_to_convert_to_molecules_percm2', multiplication_factor)
+
+   end subroutine Nc_Getattr
+   !---------------------------------------------
    subroutine Nc_GetDim(ncid,dimname,length)
 
       use NetCDF , only :  NF90_Inq_DimID, NF90_Inquire_Dimension, NF90_get_att
