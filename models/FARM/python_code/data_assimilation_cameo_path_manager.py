@@ -9,7 +9,7 @@ import numpy as np
 import yaml
 from datetime import datetime, timedelta
 
-from FARM_to_DART import (
+from orchestrator_utils import (
     check_job_status_cresco,
     convert_time_to_hours,
     modify_nc_file,
@@ -100,7 +100,7 @@ dt = pd.Timedelta(dt, unit="s")
 
 # PATH SETTINGS
 listing = pd.read_csv(
-    path_manager.path_listing_cso,
+    path_manager.listing_file,
     sep=";",
 )
 listing["start_time"] = pd.to_datetime(listing["start_time"])
@@ -145,7 +145,7 @@ while t <= end_time:
         '''
 
         command_farm_run = 'run_submit' + string_to_replace_template 
-        path_run = path_manager.path_submit_bsh / 'run_submit' + string_to_replace_template
+        path_run = path_manager.path_submit_bsh / f'run_submit{string_to_replace_template}'
 
         replace_nml_template(
              input_nml_path=path_manager.run_submit_farm_template,
@@ -193,18 +193,18 @@ while t <= end_time:
     obs_seq_name = f"obs_seq_{seconds}_{days}.out"
     # OBS CONVERTER INPUT.NML
     replace_nml_template(
-        path_manager.base_path / "observations/obs_converters/S5P_TROPOMI_L3/work/input_template.nml",
+        path_manager.base_path / "DART/observations/obs_converters/S5P_TROPOMI_L3/work/input_template.nml",
         entries_tbr_dict={
             "$file_path_s5p":
-            path_manager.base_path / f'observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/{orbit_filename['filename'].values[0]}',
+            path_manager.base_path / f'DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/{orbit_filename["filename"].values[0]}',
             "$file_out":
-            path_manager.base_path / f'observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/{obs_seq_name}',
+            path_manager.base_path / f'DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/{obs_seq_name}',
         },
-        output_nml_path=path_manager.base_path / "observations/obs_converters/S5P_TROPOMI_L3/work/input.nml",
+        output_nml_path=path_manager.base_path / "DART/observations/obs_converters/S5P_TROPOMI_L3/work/input.nml",
     )
     import pdb; pdb.set_trace()
 
-    run_command_in_directory(obs_converter_command, dir_obs_converter)
+    run_command_in_directory(obs_converter_command, path_manager.base_path / dir_obs_converter)
     time_model = rounded_timestamp
     seconds_model, days_model = set_date_gregorian(
         time_model.year,
@@ -251,7 +251,6 @@ while t <= end_time:
 
     # # Step 1: Select P, SP, T from the input file
     # subprocess.run(["cdo", "selname,SP,P,T", meteo_file, output_meteo_1hr])
-
     # # Step 2: Select timestep 10 from the result
     # subprocess.run(["cdo", "seltimestep,10", output_meteo_1hr, output_meteo_1hr])
 
@@ -294,6 +293,8 @@ while t <= end_time:
         output_nml_path= path_manager.base_path / "models/FARM/work/filter_output_list.txt",
     )
 
+    prepare_farm_to_dart_nc(timestamp_farm, rounded_timetamp, seconds_model,days_model)
+
     with open(
         path_manager.base_path / "models/FARM/python_code/farm_to_dart_cameo.yaml",
         "r",
@@ -301,34 +302,7 @@ while t <= end_time:
         settings = yaml.safe_load(yaml_file)
 
     for ens_member in settings["ens_members"]:
-        # replace {value_member} in settings["input_farm_file"] with ens_member
-        input_farm_file = (
-            settings["input_farm_file"]
-            .format(date=timestamp_farm.strftime("%Y%m%d%H"))
-            # .format(value_member=ens_member)
-        )
-        # input_meteo_file = settings["input_meteo_file"]
-        output_folder = settings["output_folder"]
-        pol = settings["pol"]
-
-        # Convert FARM file to DART readable format
-        # ds = add_meteo_to_farm(input_farm_file, input_meteo_file)
-
-        # Modify FARM file
-        # 23.09.2024 Needs to be repalced by a call to the cdo
-        #cdo -setreftime,1900-01-01,00:00:00,days file_in file_out
-        #cdo -setcalendar,gregorian file_in file_out
-        # open the modified netcdf with cso
-        ds = open_dataset(input_farm_file)
-        if ds is None:
-            # it should exit or print a warning
-            continue
-        # Convert time to hours and days since a specific date
-        # Bad naming. This routine deletes the add_offset, scale_factor and
-        # _FillValue which otherwise break the DART filter
-        convert_time_to_hours(
-            ds, output_folder, seconds_model, days_model, ens_member=str(ens_member)
-        )
+        break
 
     replace_nml_template(
         path_manager.path_submit_bsh / "templates/submit_filter.template.bsh",

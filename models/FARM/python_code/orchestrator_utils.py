@@ -1,4 +1,4 @@
-WQimport netCDF4
+import netCDF4
 import xarray as xr
 import math
 import numpy as np
@@ -152,11 +152,11 @@ def run_command_in_directory(command, directory):
     try:
         # Change to the specified directory
         os.chdir(directory)
-        command = directory + "/" + command
+        command = directory / command
         # Execute the command
 
-        subprocess.call(command, shell=True)
-        # output = subprocess.run(command, capture_output=True, text=True)
+        subprocess.call(str(command), shell=True)
+        #subprocess.run(command, capture_output=True, text=True)
         # jobid = output.stdout.strip().split()[-1]
         # print(f"Job submitted for {case} with job ID : {jobid}")
     finally:
@@ -164,6 +164,19 @@ def run_command_in_directory(command, directory):
         os.chdir(original_directory)
     # return jobid
 
+def run_command_in_directory_bsub(command, directory):
+    original_directory = os.getcwd()
+    try:
+        breakpoint()
+        os.chdir(directory)
+        command = directory / command
+        #subprocess.call(command,shell=True)
+        output = subprocess.run(command, capture_output=True, text=True)
+        jobid = output.stdout.strip().split()[-1]
+        print(f"Job submitted for {command} with job ID : {jobid}")
+    finally:
+        os.chdir(original_directory)
+    return jobid
 
 def searchFile(t1, t2, listing):
     orbit_filename = listing[["filename", "start_time"]][
@@ -193,7 +206,7 @@ def replace_nml_template(
 
     # Replace entries
     for key, value in entries_tbr_dict.items():
-        input_nml = input_nml.replace(key, value)
+        input_nml = input_nml.replace(key, str(value))
 
     # Write to output file
     try:
@@ -248,23 +261,43 @@ def modify_nc_file(ds, pol, time_list):
     return ds
 
 
-# Convert time to hours and days since a specific date and save as new files
-def convert_time_to_hours(ds, output_folder, seconds, days, **kwargs):
-    ens_member = kwargs.get("ens_member", None)
-    for i, value in enumerate(ds.time.values):
+def prepare_farm_to_dart_nc(timestamp_farm, rounded_timestamp, seconds_model,days_model):
+    breakpoint()
+    meteo_file = f'/gporq3/minni/CAMEO/RUN/data/INPUT/METEO/ifsecmwf_d0_g1_{timestamp_farm.strftime("%Y%m%d")}' 
+    
+    output_meteo_1hr = path.manager.base_path / 'RUN/data/temp/met_1hr.nc'
+    output_meteo_1hr.parent.mkdir(parents = True, exist_ok = True)
+    
+    output_meteo_1hr_plus1 = path_manager.base_path /'RUN/data/temp/met_1hr+1.nc'
+    
+    arconv_input = path_manager.base_path / f'RUN/data/OUTPUT/OUT/ic_g1_{rounded_timestamp.strftime(%Y%m%d")}'
+    
+    arconv_output = path_manager.base_path / f'RUN/data/temp/ic_arconved.nc'
 
-        output_file_path = f"{output_folder}/model_{seconds}_{days}_{ens_member}.nc"
-        ds.isel(time=i).to_netcdf(output_file_path)
-        command_add_offset = f"ncatted -a add_offset,,d,, {output_file_path}"
-        command_scale_factor = f"ncatted -a scale_factor,,d,, {output_file_path}"
-        command_fill_value = f"ncatted -a _FillValue,,d,, {output_file_path}"
-        # Execute the command
-        # add print info
-        print(f"Changing offset, scale_factor, fille_value attrs {output_file_path}")
-        subprocess.run(command_fill_value, shell=True)
-        # print(f"Deleting add_offset attrs in {output_file_path}")
-        subprocess.run(command_add_offset, shell=True)
-        # print(f"Deleting scale_factor attrs in {output_file_path}")
-        subprocess.run(command_scale_factor, shell=True)
-    ds.close()
+    conc_file = path_manager.base_path / f'RUN/data/to_DART/ic_g1_{seconds}_{days}_00.nc'
+    conc_file.parent.mkdir(parents = True, exist_ok = True)
+
+    # step 1: Select P, SP, T from the input file
+    subprocess.run(["cdo", "selname,SP,P,T", meteo_file, output_meteo_1hr])
+    # step 2: Select timestep from the rounded_timestamp
+    subproces.run(["cdo", f"seltimestep,rounded_timesamp.hour",output_meteo_1hr, output_meteo_1hr])
+    # step 3: Shift time by 1 hour
+    subprocess.run(["cdo", "shifttime,1hour", output_meteo_1hr,output_meteo_1hr_plus1])
+    # step 4: Convert FARM concentrations using arconv
+    subprocess.run(["/gporq3/minni/FARM-DART/arconv-2.5.10", arconv_input,arconv_output, "1"])
+    # step 5: Use ncks to append P, SP, and T variables to the FARM
+    # concentration file
+    subprocess.run(["ncks", "-A", "-v", "P,SP,T",output_meteo_1hr_plus1,arconv_ouput])
+
+    # step 6
+    subprocess.run(["cdo", "-setreftime,1900-01-01,00:00:00,days", arconv_output, arconv_output])
+
+    # step 7 final file
+    subprocess.run(["cdo", "-setcalendar,gregorian", arconv_ouput, conc_file])
+
+
+
+
+
+
 
