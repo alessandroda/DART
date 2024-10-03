@@ -261,39 +261,56 @@ def modify_nc_file(ds, pol, time_list):
     return ds
 
 
-def prepare_farm_to_dart_nc(timestamp_farm, rounded_timestamp, seconds_model,days_model):
+def prepare_farm_to_dart_nc(path_manager, timestamp_farm, rounded_timestamp, seconds_model,days_model):
     breakpoint()
-    meteo_file = f'/gporq3/minni/CAMEO/RUN/data/INPUT/METEO/ifsecmwf_d0_g1_{timestamp_farm.strftime("%Y%m%d")}' 
+    meteo_file = f'/gporq3/minni/CAMEO/RUN/data/INPUT/METEO/ifsecmwf_d0_g1_{timestamp_farm.strftime("%Y%m%d")}.nc' 
     
-    output_meteo_1hr = path.manager.base_path / 'RUN/data/temp/met_1hr.nc'
+    output_meteo_1hr = path_manager.base_path / 'RUN/data/temp/tmp.nc'
     output_meteo_1hr.parent.mkdir(parents = True, exist_ok = True)
     
-    output_meteo_1hr_plus1 = path_manager.base_path /'RUN/data/temp/met_1hr+1.nc'
-    
-    arconv_input = path_manager.base_path / f'RUN/data/OUTPUT/OUT/ic_g1_{rounded_timestamp.strftime(%Y%m%d")}'
-    
-    arconv_output = path_manager.base_path / f'RUN/data/temp/ic_arconved.nc'
+    output_meteo_1hr_plus1 = path_manager.base_path /'RUN/data/temp/tmp2.nc'
+    output_meteo_1hr_temp = path_manager.base_path /'RUN/data/temp/tmp1.nc' 
+    arconv_input = path_manager.base_path / f'RUN/data/OUTPUT/OUT/ic_g1_{rounded_timestamp.strftime("%Y%m%d%H")}.nc'
+    print(arconv_input)
+    #arconv_input_so2 = path_manager.base_path /f'RUN/data/temp/tmp.nc'
+    arconv_output = path_manager.base_path / f'RUN/data/temp/tmp3.nc'
 
-    conc_file = path_manager.base_path / f'RUN/data/to_DART/ic_g1_{seconds}_{days}_00.nc'
+    conc_file = path_manager.base_path / f'RUN/data/to_DART/ic_g1_{seconds_model}_{days_model}_00.nc'
+    tmp_conc_file = path_manager.base_path / f'RUN/data/to_DART/tmp.nc'
+    tmp1_conc_file = path_manager.base_path / f'RUN/data/to_DART/tmp1.nc'
+
     conc_file.parent.mkdir(parents = True, exist_ok = True)
 
     # step 1: Select P, SP, T from the input file
     subprocess.run(["cdo", "selname,SP,P,T", meteo_file, output_meteo_1hr])
     # step 2: Select timestep from the rounded_timestamp
-    subproces.run(["cdo", f"seltimestep,rounded_timesamp.hour",output_meteo_1hr, output_meteo_1hr])
+    subprocess.run(["cdo",
+        f"seltimestep,{rounded_timestamp.hour}",output_meteo_1hr,output_meteo_1hr_temp])
     # step 3: Shift time by 1 hour
-    subprocess.run(["cdo", "shifttime,1hour", output_meteo_1hr,output_meteo_1hr_plus1])
+    subprocess.run(["cdo", "shifttime,1hour", output_meteo_1hr_temp,output_meteo_1hr_plus1])
     # step 4: Convert FARM concentrations using arconv
+    #subprocess.run(["ncks", "-v", "c_SO2", arconv_input, arconv_input_so2])
     subprocess.run(["/gporq3/minni/FARM-DART/arconv-2.5.10", arconv_input,arconv_output, "1"])
     # step 5: Use ncks to append P, SP, and T variables to the FARM
     # concentration file
-    subprocess.run(["ncks", "-A", "-v", "P,SP,T",output_meteo_1hr_plus1,arconv_ouput])
+    subprocess.run(["ncks", "-A", "-v", "P,SP,T",output_meteo_1hr_plus1,arconv_output])
 
+    subprocess.run(["cp", arconv_output, conc_file])
+    
     # step 6
-    subprocess.run(["cdo", "-setreftime,1900-01-01,00:00:00,days", arconv_output, arconv_output])
+    subprocess.run(["cdo", "-setreftime,1900-01-01,00:00:00,days", conc_file, tmp_conc_file])
 
     # step 7 final file
-    subprocess.run(["cdo", "-setcalendar,gregorian", arconv_ouput, conc_file])
+    subprocess.run(["cdo", "-setcalendar,gregorian", tmp_conc_file, tmp1_conc_file])
+
+    subprocess.run(["ncatted", "-a", "add_offset,,d,,", tmp1_conc_file])
+    subprocess.run(["ncatted", "-a", "scale_factor,,d,,", tmp1_conc_file])
+    subprocess.run(["ncatted", "-a", "_FillValue,,d,,", tmp1_conc_file])
+    subprocess.run(["ncatted", "-a", "missing_value,,d,,", tmp1_conc_file])
+
+    subprocess.run(["cp", tmp1_conc_file, conc_file])
+
+
 
 
 
