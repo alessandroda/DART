@@ -8,6 +8,8 @@ from pathlib import Path
 import numpy as np
 import yaml
 from datetime import datetime, timedelta
+import logging
+#import pdb; pdb.set_trace()
 
 from orchestrator_utils import (
     check_job_status_cresco,
@@ -20,64 +22,18 @@ from orchestrator_utils import (
     searchFile,
     set_date_gregorian,
     submit_slurm_job,
-    prepare_farm_to_dart_nc
+    prepare_farm_to_dart_nc,
+    PathManager,
+    submit_and_wait
 )
 
+
+#logging.basicConfig(filename='farm_to_dart.log', format='%(asctime)s %(message)s', level=logging.INFO)
+logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
+
+logger = logging.getLogger(__name__)
+
 #filter_job = [path_manager.env_dir, "submit.py"]
-
-class PathManager:
-    """
-    Class to handle the paths and prevent errors along the execution.
-
-    Attributes:
-        base_path: The base path used for constructing all other paths.
-        env_path: Path to the environment executable.
-        listing_path: Path to the CSO listing file.
-        run_submit_farm_template: Path to the submit farm template.
-        path_submit_bsh: Path to the farm and dart submission directory.
-        path_filter: Path to the filter executable.
-    """
-
-    def __init__(self, base_path, env_python, listing_file, run_submit_farm_template, path_submit_bsh, path_filter, log_paths=True):
-        """
-        Initializes the PathManager with a base path and relative paths, and checks if they exist.
-
-        """
-        self.base_path = Path(base_path).resolve()
-        self.env_dir = self.base_path / env_python
-        self.listing_file = self.base_path / listing_file
-        self.run_submit_farm_template = self.base_path / run_submit_farm_template
-        self.path_submit_bsh = self.base_path / path_submit_bsh
-        self.path_filter = self.base_path / path_filter
-        self.log_paths = log_paths
-
-        self.check_paths_exist()
-
-    def check_paths_exist(self):
-        """Checks if the base, environment, and listing paths exist."""
-        paths_to_check = {
-            "Base path": self.base_path,
-            "Environment directory": self.env_dir,
-            "Listing file": self.listing_file,
-            'Submit farm template': self.run_submit_farm_template,
-            'Farm submission path': self.path_submit_bsh,
-            'Submit filter path': self.path_filter
-        }
-
-        for path_name, path_value in paths_to_check.items():
-            if not path_value.exists():
-                raise FileNotFoundError(f"{path_name} does not exist: {path_value}")
-            if self.log_paths:
-                print(f"{path_name} exists: {path_value}")
-
-    def get_paths(self):
-        """Returns all paths as a tuple."""
-        return (self.base_path, self.env_dir, self.listing_file, self.run_submit_farm_template, self.path_submit_farm, self.path_submit_filter)
-
-
-
-
-
 
 dir_obs_converter =  "DART/observations/obs_converters/S5P_TROPOMI_L3/work/"
 obs_converter_command = "convert_s5p_tropomi_l3"
@@ -108,10 +64,7 @@ listing["start_time"] = pd.to_datetime(listing["start_time"])
 # ENSEMBLE SETTINGS
 ens_members = list(np.arange(0,20,1))
 
-
-print("------------------")
-print("TIME LOOP BEGINS")
-print("------------------")
+logging.info("TIME LOOP BEGINS")
 t = start_time
 simulated_time = None
 while t <= end_time:
@@ -124,10 +77,10 @@ while t <= end_time:
         rounded_timestamp -> the one appearing in the farm output file and named with timestamp_farm (+1)
     '''
     
-    print(f"time: {t}")
+    logger.info(f"Time loop iter: {t}")
     timestamp_farm = round_to_closest_hour(t)
+    logger.info(f"1.----------Running FARM for hour {t}")
     if timestamp_farm != simulated_time:
-        import pdb; pdb.set_trace()
         string_to_replace_template =  f'{timestamp_farm.strftime("%Y%m%d%H")}.bsh'
         '''
             TODO MEMBERS LOOP
@@ -143,7 +96,6 @@ while t <= end_time:
                 run_submit.sh will use submit_mem_number.sh to run the specific farm
                  member
         '''
-
         command_farm_run = 'run_submit' + string_to_replace_template 
         path_run = path_manager.path_submit_bsh / f'run_submit{string_to_replace_template}'
 
@@ -155,32 +107,38 @@ while t <= end_time:
              },
              output_nml_path= path_run 
          )
-        
-        
-        #job_id = run_command_in_directory_bsub(command_farm_run, path_manager.path_submit_bsh)
-        # Check if the job_id is valid
+        #commands_with_directories = [(command_farm_run, path_manager.path_submit_bsh)]
+        #submit_and_wait(commands_with_directories)
+        # MOVED INSIDE UTILS
+        #try:
+        #    job_id = run_command_in_directory_bsub(command_farm_run, path_manager.path_submit_bsh)
+        #    if not job_id:
+        #        raise RuntimeError("No job ID returned, somethinw went wrong with submission.")
+        #except:
+        #    logger.error(f"Failed to submit job: {e}")
+        #    
+        ## Check if the job_id is valid
         #if job_id:
-        #    print(f"Submitted job with ID: {job_id}")
+        #    logging.info(f"Submitted job with ID: {job_id}")
         #    # Wait for the job to complete
         #    while not check_job_status_cresco(job_id):
-        #        print(f"Waiting for job {job_id} to complete...")
+        #        logger.info(f"Waiting for job {job_id} to complete...")
         #        time.sleep(30)  # Sleep for 30 seconds before checking again
-        #    print(f"Job {job_id} is complete. Continuing...")
+        #    logger.info(f"Job {job_id} is complete. Continuing...")
         #else:
-        #     print("No job ID returned, something went wrong with submission.")
-        #     break 
-        # NO NEED ANYMORE FOR THIS CHECK
+        #    logger.info("No job ID returned, something went wrong with submission.")
+        #    break 
         simulated_time = timestamp_farm
- 
-    # increment dt to search for the hours to assimilate
+    logger.info(f'2. Increment time and search for orbit')
     t += dt
-    formatted_t_str = str(t).replace(" ", "_").replace(":", "").replace("-", "")
+    formatted_t_str = t.strftime("%Y%m%d_%H%M%S")
+    logger.info(formatted_t_str)
     rounded_timestamp = round_to_closest_hour(t)
     time_list = [rounded_timestamp, rounded_timestamp + timedelta(hours=-1)]
     orbit_filename = searchFile(t - 0.5 * dt, t + 0.5 * dt, listing)
     if orbit_filename.empty:
         continue
-    print(f"Orbit file found: {orbit_filename['filename'].values[0]}")
+    logging.info(f"Orbit file found: {orbit_filename['filename'].values[0]}  corresponding to time: {orbit_filename['start_time']}")
     t_sat_obs = pd.to_datetime(orbit_filename["start_time"].values[0])
     seconds, days = set_date_gregorian(
         t_sat_obs.year,
@@ -202,8 +160,7 @@ while t <= end_time:
         },
         output_nml_path=path_manager.base_path / "DART/observations/obs_converters/S5P_TROPOMI_L3/work/input.nml",
     )
-    import pdb; pdb.set_trace()
-
+     
     run_command_in_directory(obs_converter_command, path_manager.base_path / dir_obs_converter)
     time_model = rounded_timestamp
     seconds_model, days_model = set_date_gregorian(
@@ -265,7 +222,7 @@ while t <= end_time:
         output_nml_path= path_manager.base_path / "DART/models/FARM/work/filter_output_list.txt",
     )
 
-    prepare_farm_to_dart_nc(path_manager, timestamp_farm, rounded_timestamp, seconds_model,days_model)
+    #prepare_farm_to_dart_nc(path_manager, timestamp_farm, rounded_timestamp, seconds_model,days_model)
 
     with open(
         path_manager.base_path /"DART/models/FARM/python_code/orchestrator_info.yaml",
@@ -275,28 +232,29 @@ while t <= end_time:
 
     for ens_member in settings["ens_members"]:
         break
-    breakpoint()
     replace_nml_template(
         path_manager.base_path / "RUN/script/templates/submit_filter.template.bsh",
         entries_tbr_dict={
             "CURRENT_DATE": rounded_timestamp.strftime("%Y%m%d%H"),
-            "NO_PROC": str(20)
+            "CORES": str(5)
         },
         output_nml_path=path_manager.path_submit_bsh / "submit_filter.bsh",
     )
     replace_nml_template(
         path_manager.base_path / "RUN/script/templates/run_filter.template.bsh",
         entries_tbr_dict={
-            "NO_PROC": str(20)
+            "CORES": str(5)
         },
         output_nml_path=path_manager.path_submit_bsh / "run_filter.bsh",
     )
     # RUN THE FILTER
-    job_id = run_command_in_directory_bsub("./submit_filter.bsh", path_manager.path_submit_bsh)
-    import pdb; pdb.set_trace()
-    
+    breakpoint()
+    job_id = run_command_in_directory_bsub("./submit_filter.bsh",
+            path_manager.path_submit_bsh, farm = False)
+    # A.D'A 04/10/2024 should pass to orchestrator_utils
+    job_id = job_id.strip()[1:-1] 
     while True:
-        if not check_job_status_cresco(job_id):
+        if check_job_status_cresco(job_id):
             print("Job completed successfully.")
             # Move files if job completed successfully
             for filename in os.listdir(f"{path_manager.path_filter}"):
@@ -331,6 +289,11 @@ while t <= end_time:
         else:
             print("Job is still running. Waiting...")
             time.sleep(10)
+
+    # Handle the posterior
+    # create a method that picks the SO2 from the posterior files and place the
+    # SO2 in the core of FARM in the next run. 
+
 
     print("------------------")
 
