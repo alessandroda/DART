@@ -24,12 +24,13 @@ from orchestrator_utils import (
     submit_slurm_job,
     prepare_farm_to_dart_nc,
     PathManager,
+    CleanupContext,
     submit_and_wait
 )
 
 
-#logging.basicConfig(filename='farm_to_dart.log', format='%(asctime)s %(message)s', level=logging.INFO)
-logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
+logging.basicConfig(filename='farm_to_dart.log', format='%(asctime)s %(message)s', level=logging.INFO)
+#logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ obs_converter_command = "convert_s5p_tropomi_l3"
 path_manager = PathManager(base_path="/gporq3/minni/FARM-DART/",
                             env_python= "miniconda3/bin/python3.10",
                             listing_file="DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03__listing.csv",
-                            run_submit_farm_template="RUN/script/templates/run_submit.template.bsh",
+                            run_submit_farm_template="RUN/script/templates/new_run_submit.template.bsh",
                             path_submit_bsh="RUN/script/auto_runs/",
                             path_filter= "DART/models/FARM/work/",
                             log_paths=True)
@@ -51,7 +52,7 @@ start_time = "2023-03-01 09:00:00"
 start_time = pd.to_datetime(start_time)
 end_time = "2023-03-01 11:00:00"
 end_time = pd.to_datetime(end_time)
-dt = 3600
+dt = 180
 dt = pd.Timedelta(dt, unit="s")
 
 # PATH SETTINGS
@@ -68,6 +69,8 @@ logging.info("TIME LOOP BEGINS")
 t = start_time
 simulated_time = None
 while t <= end_time:
+    # if not path_manager.check_existing_farm:
+    #    run_farm()
     '''
         Run FARM in Hourly Mode:
         The timestamp_farm provided for the simulation will produce a file with a timestamp that is one hour ahead of the timestamp_farm.
@@ -83,19 +86,26 @@ while t <= end_time:
     if timestamp_farm != simulated_time:
         string_to_replace_template =  f'{timestamp_farm.strftime("%Y%m%d%H")}.bsh'
         '''
-            TODO MEMBERS LOOP
-            strings_to_replace_template =[f'{timestamp_farm.strftime("%Y%m%d%H")}_{mem}.bsh' for mem in ens_members]
-                the members run differ in the EMISSION and BCS path to be specified in
-                the submit.sh. Therefore, submit_$mem_value.sh needs to be created. In
-                other words we need more placeholders to palce in the submit.sh
-            commands_farm_run = [ 'run_submit' + string_to_replace_template for string_to_replace_template in strings_to_replace_template()]
-            path_runs = [path_submit_farm + 'run_submit' + string_to_replace_template for string_to_replace_template in strings_to_replace_template()]
-                For each string_to_replace in strings_to_replace we neeed to replace
-                two templates, one for submit.sh and another for run_submit.sh
-                because submit.sh will contain the members placeholders and
-                run_submit.sh will use submit_mem_number.sh to run the specific farm
-                 member
+            The run_submit_farm_template should be still the same but to be
+            replaced with the members value and use replace_nml_template to set
+            the right EMISSION, BC, and core which should end with two digits
+            xx.nc that are the memeber's value
         '''
+        #strings_to_replace_template =[f'{timestamp_farm.strftime("%Y%m%d%H")}_{mem}.bsh' for mem in ens_members]
+        #commands_farm_run = [ 'run_submit' + string_to_replace_template for string_to_replace_template in strings_to_replace_template()]
+        #path_runs = [path_submit_farm + 'run_submit' + string_to_replace_template for string_to_replace_template in strings_to_replace_template()]
+        #for path_run in path_runs:
+        #    replace_nml_template(
+        #        input_nml_path=path_manager.run_submit_farm_template,
+        #        entries_tbr_dict={
+        #         "da_date_start": timestamp_farm.strftime("%Y%m%d%H"),
+        #         "da_date_end": timestamp_farm.strftime("%Y%m%d%H"),
+        #     },
+        #     output_nml_path= path_run 
+        #    )
+        #commands_with_directories = [(command_farm_run, path_manager.path_submit.bsh) for command_farm_run in commands_farm_run]
+        #submit_and_wait(commands_with_directories)
+        
         command_farm_run = 'run_submit' + string_to_replace_template 
         path_run = path_manager.path_submit_bsh / f'run_submit{string_to_replace_template}'
 
@@ -107,28 +117,14 @@ while t <= end_time:
              },
              output_nml_path= path_run 
          )
-        #commands_with_directories = [(command_farm_run, path_manager.path_submit_bsh)]
-        #submit_and_wait(commands_with_directories)
-        # MOVED INSIDE UTILS
-        #try:
-        #    job_id = run_command_in_directory_bsub(command_farm_run, path_manager.path_submit_bsh)
-        #    if not job_id:
-        #        raise RuntimeError("No job ID returned, somethinw went wrong with submission.")
-        #except:
-        #    logger.error(f"Failed to submit job: {e}")
-        #    
-        ## Check if the job_id is valid
-        #if job_id:
-        #    logging.info(f"Submitted job with ID: {job_id}")
-        #    # Wait for the job to complete
-        #    while not check_job_status_cresco(job_id):
-        #        logger.info(f"Waiting for job {job_id} to complete...")
-        #        time.sleep(30)  # Sleep for 30 seconds before checking again
-        #    logger.info(f"Job {job_id} is complete. Continuing...")
-        #else:
-        #    logger.info("No job ID returned, something went wrong with submission.")
-        #    break 
+        
+        commands_with_directories = [(command_farm_run, path_manager.path_submit_bsh)]
+        
+        submit_and_wait(commands_with_directories)
+        
         simulated_time = timestamp_farm
+    # if not path_manager.check_exisiting_obs_sat:
+    #    run_obs_converter
     logger.info(f'2. Increment time and search for orbit')
     t += dt
     formatted_t_str = t.strftime("%Y%m%d_%H%M%S")
@@ -162,6 +158,7 @@ while t <= end_time:
     )
      
     run_command_in_directory(obs_converter_command, path_manager.base_path / dir_obs_converter)
+    # preprocessing model farm nc move before converter
     time_model = rounded_timestamp
     seconds_model, days_model = set_date_gregorian(
         time_model.year,
@@ -183,8 +180,8 @@ while t <= end_time:
         path_manager.base_path / f'RUN/data/preassim/{formatted_t_str}'
     )
     Path(preassim_sim_folder).mkdir(parents=True, exist_ok=True)
-
-    # FILTER INPUT NML
+    
+    #RUN FILTER: FILTER INPUT NML
     replace_nml_template(
         path_manager.base_path / "DART/models/FARM/work/input_template.nml",
         entries_tbr_dict={
@@ -221,8 +218,8 @@ while t <= end_time:
         },
         output_nml_path= path_manager.base_path / "DART/models/FARM/work/filter_output_list.txt",
     )
-
-    #prepare_farm_to_dart_nc(path_manager, timestamp_farm, rounded_timestamp, seconds_model,days_model)
+    #with CleanupContext(path_manager.base_path / 'RUN/data/temp/'):
+    prepare_farm_to_dart_nc(path_manager, timestamp_farm, rounded_timestamp, seconds_model,days_model)
 
     with open(
         path_manager.base_path /"DART/models/FARM/python_code/orchestrator_info.yaml",
@@ -248,9 +245,7 @@ while t <= end_time:
         output_nml_path=path_manager.path_submit_bsh / "run_filter.bsh",
     )
     # RUN THE FILTER
-    breakpoint()
-    job_id = run_command_in_directory_bsub("./submit_filter.bsh",
-            path_manager.path_submit_bsh, farm = False)
+    job_id = run_command_in_directory_bsub("./submit_filter.bsh",path_manager.path_submit_bsh, farm = False)
     # A.D'A 04/10/2024 should pass to orchestrator_utils
     job_id = job_id.strip()[1:-1] 
     while True:

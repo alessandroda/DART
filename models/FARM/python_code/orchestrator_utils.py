@@ -12,6 +12,22 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+class CleanupContext:
+    def __init__(self, temp_preproc_farm_folder: Path):
+        self.temp_folder = temp_preproc_farm_folder
+
+    def __enter__(self):
+        os.makedirs(self.temp_folder, exist_ok = True)
+        return self
+
+    def __exit__(self):
+        breakpoint()
+        if os.path.exists(self.temp_folder):
+            for filename in os.listdir(self.temp_folder):
+                file_path = self.temp_folder / filename
+                logger.info('I WILL DELETE IF NEEEEEDED')
+                #file_path.unlink(missing_ok=True)
+
 class PathManager:
     """
     Class to handle the paths and prevent errors along the execution.
@@ -226,10 +242,14 @@ def run_command_in_directory_bsub(command, directory, farm = True):
         os.chdir(directory)
         command = directory / command
         #subprocess.call(command,shell=True)
-
+        subprocess.run(["chmod", "+x", command])
+        # 08.10.2024
+        # subprocess.run should return a list of ids when running on the
+        # members
         output = subprocess.run(command, capture_output=True, text=True)
         #breakpoint()
         if farm:
+            # job_ids
             jobid = output.stdout.strip().split()[-1]
         else:
             jobid = output.stdout.strip().split()[1]
@@ -320,6 +340,18 @@ def modify_nc_file(ds, pol, time_list):
     ds["time"].attrs["calendar"] = "gregorian"
     return ds
 
+def prepare_dart_to_farm_nc():
+    try:
+    except:
+    finally:
+    # path posteriors
+    # loop on members 
+    # replace c_SO2 or var_assimilated inside the FARM core
+    #subprocess.run(["cdo", "-setreftime,1900-01-01,00:00:00,hours", to_name1,
+    #    to_name2])
+    #subprocess.run(["cdo", "-setcalendar,proleptic_gregorian",
+    #    to_name3, to_name4])
+    pass
 
 def prepare_farm_to_dart_nc(path_manager, timestamp_farm, rounded_timestamp, seconds_model,days_model): 
     
@@ -340,12 +372,12 @@ def prepare_farm_to_dart_nc(path_manager, timestamp_farm, rounded_timestamp, sec
         
         final_concentration_file.parent.mkdir(parents=True, exist_ok=True)
         with open('subprocess_output.log', 'w') as log_file:
-            logger.debug('1: Select SP, P, and T from the input meteo file')
+            logger.info('1: Select SP, P, and T from the input meteo file')
             subprocess.run(["cdo", "selname,SP,P,T", meteo_file,
                 temp_output_meteo], stdout=log_file, stderr=log_file,
                 check=True)
             
-            # Step 2: Select the timestep from the rounded timestamp
+            logger.info('2: Select the timestep from the rounded timestamp')
             subprocess.run(["cdo", f"seltimestep,{rounded_timestamp.hour}",
                 temp_output_meteo, temp_output_meteo_selected],
                 stdout=log_file, stderr=log_file, check= True)
