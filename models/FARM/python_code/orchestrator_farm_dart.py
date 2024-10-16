@@ -25,6 +25,7 @@ from orchestrator_utils import (
     submit_slurm_job,
     prepare_farm_to_dart_nc,
     PathManager,
+    TimeManager,
     CleanupContext,
     submit_and_wait,
     prepare_dart_to_farm_nc,
@@ -56,11 +57,10 @@ path_manager = PathManager(
 
 # TIME SETTINGS
 start_time = "2023-03-01 09:00:00"
-start_time = pd.to_datetime(start_time)
 end_time = "2023-03-01 11:00:00"
-end_time = pd.to_datetime(end_time)
 dt = 180
-dt = pd.Timedelta(dt, unit="s")
+
+time_manager = TimeManager(start_time=start_time, end_time=end_time, dt_seconds=dt)
 
 # PATH SETTINGS
 listing = pd.read_csv(
@@ -73,9 +73,7 @@ listing["start_time"] = pd.to_datetime(listing["start_time"])
 ens_members = list(np.arange(0, 20, 1))
 
 logging.info("TIME LOOP BEGINS")
-t = start_time
-simulated_time = None
-while t <= end_time:
+while time_manager.current_time <= end_time:
     # if not path_manager.check_existing_farm:
     #    run_farm()
     """
@@ -88,10 +86,14 @@ while t <= end_time:
     """
 
     logger.info(f"Time loop iter: {t}")
-    timestamp_farm = round_to_closest_hour(t)
-    logger.info(f"1.----------Running FARM for hour {t}")
-    if timestamp_farm != simulated_time:
-        string_to_replace_template = f'{timestamp_farm.strftime("%Y%m%d%H")}.bsh'
+    time_manager.timestamp_farm_run = TimeManager.round_to_closest_hour(
+        time_manager.current_time
+    )
+    logger.info(f"1.----------Running FARM for hour {time_manager.current_time}")
+    if time_manager.timestamp_farm != time_manager.simulated_time:
+        string_to_replace_template = (
+            f'{time_manager.timestamp_farm_run.strftime("%Y%m%d%H")}.bsh'
+        )
         """
             The run_submit_farm_template should be still the same but to be
             replaced with the members value and use replace_nml_template to set
@@ -121,8 +123,8 @@ while t <= end_time:
         replace_nml_template(
             input_nml_path=path_manager.run_submit_farm_template,
             entries_tbr_dict={
-                "da_date_start": timestamp_farm.strftime("%Y%m%d%H"),
-                "da_date_end": timestamp_farm.strftime("%Y%m%d%H"),
+                "da_date_start": time_manager.timestamp_farm_run.strftime("%Y%m%d%H"),
+                "da_date_end": time_manager.timestamp_farm_run.strftime("%Y%m%d%H"),
             },
             output_nml_path=path_run,
         )
@@ -130,32 +132,37 @@ while t <= end_time:
         commands_with_directories = [(command_farm_run, path_manager.path_submit_bsh)]
 
         # submit_and_wait(commands_with_directories)
+        time_manager.simulated_time = time_manager.timestamp_farm_run + timedelta(
+            hours=1
+        )
 
-        simulated_time = timestamp_farm
     # if not path_manager.check_exisiting_obs_sat:
     #    run_obs_converter
     logger.info(f"2. Increment time and search for orbit")
-    t += dt
-    formatted_t_str = t.strftime("%Y%m%d_%H%M%S")
-    logger.info(formatted_t_str)
-    rounded_timestamp = round_to_closest_hour(t)
-    time_list = [rounded_timestamp, rounded_timestamp + timedelta(hours=-1)]
-    orbit_filename = searchFile(t - 0.5 * dt, t + 0.5 * dt, listing)
+    time_manager.increment_time()
+    logger.info(time_manager.current_time.strftime("%Y%m%d_%H%M%S"))
+
+    orbit_filename = searchFile(
+        time_manager.current_time - 0.5 * time_manager.dt,
+        time_manager.current_time + 0.5 * time_manager.dt,
+        listing,
+    )
     if orbit_filename.empty:
         continue
     logging.info(
         f"Orbit file found: {orbit_filename['filename'].values[0]}  corresponding to time: {orbit_filename['start_time']}"
     )
-    t_sat_obs = pd.to_datetime(orbit_filename["start_time"].values[0])
-    seconds, days = set_date_gregorian(
-        t_sat_obs.year,
-        t_sat_obs.month,
-        t_sat_obs.day,
-        t_sat_obs.hour,
-        t_sat_obs.minute,
-        t_sat_obs.second,
+    time_manager.sat_obs = pd.to_datetime(orbit_filename["start_time"].values[0])
+    # seconds, days for observations
+    seconds_obs, days_obs = set_date_gregorian(
+        time_manager.sat_obs.year,
+        time_manager.sat_obs.month,
+        time_manager.sat_obs.day,
+        time_manager.sat_obs.hour,
+        time_manager.sat_obs.minute,
+        time_manager.sat_obs.second,
     )
-    obs_seq_name = f"obs_seq_{seconds}_{days}.out"
+    obs_seq_name = f"obs_seq_{seconds_obs}_{days_obs}.out"
     # OBS CONVERTER INPUT.NML
     replace_nml_template(
         path_manager.base_path
@@ -172,20 +179,29 @@ while t <= end_time:
 
     # run_command_in_directory(obs_converter_command, path_manager.base_path / dir_obs_converter)
     # preprocessing model farm nc move before converter
-    time_model = rounded_timestamp
     seconds_model, days_model = set_date_gregorian(
-        time_model.year,
-        time_model.month,
-        time_model.day,
-        time_model.hour,
-        time_model.minute,
-        time_model.second,
+        time_manager.simulated_time.year,
+        time_manager.simulated_time.month,
+        time_manager.simulated_time.day,
+        time_manager.simulated_time.hour,
+        time_manager.simulated_time.minute,
+        time_manager.simulated_time.second,
     )
-    output_sim_folder = path_manager.path_data / f"/posteriors/{formatted_t_str}"
+
+    output_sim_folder = (
+        path_manager.path_data
+        / f"/posteriors/{time_manager.simulated_time.strftime("%Y%m%d%H")}"
+    )
     Path(output_sim_folder).mkdir(parents=True, exist_ok=True)
-    analysis_sim_folder = path_manager.path_data / f"/analysis/{formatted_t_str}"
+    analysis_sim_folder = (
+        path_manager.path_data
+        / f"/analysis/{time_manager.simulated_time.strftime("%Y%m%d%H")}"
+    )
     Path(analysis_sim_folder).mkdir(parents=True, exist_ok=True)
-    preassim_sim_folder = path_manager.path_data / f"/preassim/{formatted_t_str}"
+    preassim_sim_folder = (
+        path_manager.path_data
+        / f"/preassim/{time_manager.simulated_time.strftime("%Y%m%d%H")}"
+    )
     Path(preassim_sim_folder).mkdir(parents=True, exist_ok=True)
 
     # RUN FILTER: FILTER INPUT NML
@@ -194,13 +210,13 @@ while t <= end_time:
         entries_tbr_dict={
             "$obs_sequence_name": obs_seq_name,
             "$folder_path": output_sim_folder,
-            "$date_assim": formatted_t_str,
+            "$date_assim": time_manager.current_time.strftime("%Y%m%d_%H%M%S"),
             "$template_farm": path_manager.base_path
             / f"RUN/data/to_DART/ic_g1_{seconds_model}_{days_model}_00.nc",
             "$init_time_days": str(days_model),
             "$init_time_seconds": str(seconds_model),
-            "$first_obs_days": str(days),
-            "$first_obs_seconds": str(seconds),
+            "$first_obs_days": str(days_obs),
+            "$first_obs_seconds": str(seconds_obs),
         },
         output_nml_path=path_manager.base_path / "DART/models/FARM/work/input.nml",
     )
@@ -209,8 +225,7 @@ while t <= end_time:
     replace_nml_template(
         path_manager.base_path / "DART/models/FARM/work/filter_input_list_template.txt",
         entries_tbr_dict={
-            "$fme -d x,lon -d y,lat tmp1.ncncrename -d x,lon -d y,lat tmp1.ncolder_path": path_manager.base_path
-            / f"RUN/data/to_DART/",
+            "$folder_path": path_manager.base_path / f"RUN/data/to_DART/",
             "$days": str(seconds_model),
             "$seconds": str(days_model),
         },
@@ -222,7 +237,10 @@ while t <= end_time:
     replace_nml_template(
         path_manager.base_path
         / "DART/models/FARM/work/filter_output_list_template.txt",
-        entries_tbr_dict={"$folder_path": output_sim_folder, "$date": formatted_t_str},
+        entries_tbr_dict={
+            "$folder_path": output_sim_folder,
+            "$date": time_manager.simulated_time.strftime("%Y%m%d%H"),
+        },
         output_nml_path=path_manager.base_path
         / "DART/models/FARM/work/filter_output_list.txt",
     )
@@ -240,7 +258,7 @@ while t <= end_time:
     replace_nml_template(
         path_manager.base_path / "RUN/script/templates/submit_filter.template.bsh",
         entries_tbr_dict={
-            "CURRENT_DATE": rounded_timestamp.strftime("%Y%m%d%H"),
+            "CURRENT_DATE": time_manager.simulated_time.strftime("%Y%m%d%H"),
             "CORES": str(5),
         },
         output_nml_path=path_manager.path_submit_bsh / "submit_filter.bsh",
@@ -297,6 +315,6 @@ while t <= end_time:
     # SO2 in the core of FARM in the next run.
     breakpoint()
     prepare_dart_to_farm_nc(
-        path_manager, output_sim_folder, formatted_t_str, time_model, ass_var="c_SO2"
+        path_manager, output_sim_folder, time_manager.simulated_time.strftime("%Y%m%d%H"), ass_var="c_SO2"
     )
     print("------------------")
