@@ -2,7 +2,7 @@
    /
 
 &algorithm_info_nml
-   qceff_table_filename = '/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/qceff_table.csv'
+   qceff_table_filename = '../projects/CAMEO/qceff_table.csv'
    /
 
 &perfect_model_obs_nml
@@ -52,17 +52,17 @@
    output_sd                    = .true.
    write_all_stages_at_end      = .false.
 
-   ens_size                     = 17,
+   ens_size                     = 5,
    num_groups                   = 1,
    ! AD'A we should try with this setting to not genereate 50 ensemble
-   perturb_from_single_instance = .false.,
+   perturb_from_single_instance = .true.,
    perturbation_amplitude       = 0.5,
    distributed_state            = .false.
 
    async                        = 0,
    adv_ens_command              = "",
 
-   obs_sequence_in_name         = "/mnt/mumbai_n4r5/dausilio/projects/DART/observations/obs_converters/S5P_TROPOMI_L3/work/$obs_sequence_name",
+   obs_sequence_in_name         = "$folder_obs_path/$obs_sequence_name",
    obs_sequence_out_name        = "$folder_path/obs_seq_$date_assim.final",
    num_output_obs_members       = 16,
    init_time_days               = $init_time_days,
@@ -124,7 +124,7 @@
    /
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'SAT_NO2_TROPOMI'
+   assimilate_these_obs_types = 'SAT_SO2_TROPOMI'
    evaluate_these_obs_types   = ''
    /
 
@@ -138,10 +138,10 @@
    /
 
 &model_nml
-   farm_template_filename = '../IRIDE_ens/to_DART/$template_farm'
+   farm_template_filename = '$template_farm'
    state_variables  = 'P',     'QTY_PRESSURE','NA', 'NA', 'UPDATE'
                       'SP',     'QTY_SURFACE_PRESSURE','NA', 'NA', 'UPDATE'
-                      'c_NO2', 'QTY_NO2', 'NA', 'NA', 'UPDATE'
+                      'c_SO2', 'QTY_SO2', 'NA', 'NA', 'UPDATE'
    time_step_days      = 0,
 !A.D using DA_SATOFFLINE approach
    time_step_seconds   = 5000
