@@ -79,6 +79,7 @@ class PathManager:
             "Submit farm template": self.run_submit_farm_template,
             "Farm submission path": self.path_submit_bsh,
             "Submit filter path": self.path_filter,
+            "Path data": self.path_data,
         }
 
         for path_name, path_value in paths_to_check.items():
