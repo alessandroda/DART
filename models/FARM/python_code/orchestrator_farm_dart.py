@@ -25,7 +25,8 @@ from orchestrator_utils import (
     prepare_farm_to_dart_nc,
     PathManager,
     CleanupContext,
-    submit_and_wait
+    submit_and_wait,
+    prepare_dart_to_farm_nc
 )
 
 
@@ -120,7 +121,7 @@ while t <= end_time:
         
         commands_with_directories = [(command_farm_run, path_manager.path_submit_bsh)]
         
-        submit_and_wait(commands_with_directories)
+        #submit_and_wait(commands_with_directories)
         
         simulated_time = timestamp_farm
     # if not path_manager.check_exisiting_obs_sat:
@@ -157,7 +158,7 @@ while t <= end_time:
         output_nml_path=path_manager.base_path / "DART/observations/obs_converters/S5P_TROPOMI_L3/work/input.nml",
     )
      
-    run_command_in_directory(obs_converter_command, path_manager.base_path / dir_obs_converter)
+    #run_command_in_directory(obs_converter_command, path_manager.base_path / dir_obs_converter)
     # preprocessing model farm nc move before converter
     time_model = rounded_timestamp
     seconds_model, days_model = set_date_gregorian(
@@ -202,7 +203,7 @@ while t <= end_time:
     replace_nml_template(
         path_manager.base_path / "DART/models/FARM/work/filter_input_list_template.txt",
         entries_tbr_dict={
-            "$folder_path": path_manager.base_path / f"RUN/data/to_DART/",
+            "$fme -d x,lon -d y,lat tmp1.ncncrename -d x,lon -d y,lat tmp1.ncolder_path": path_manager.base_path / f"RUN/data/to_DART/",
             "$days": str(seconds_model),
             "$seconds": str(days_model),
         },
@@ -219,7 +220,7 @@ while t <= end_time:
         output_nml_path= path_manager.base_path / "DART/models/FARM/work/filter_output_list.txt",
     )
     #with CleanupContext(path_manager.base_path / 'RUN/data/temp/'):
-    prepare_farm_to_dart_nc(path_manager, timestamp_farm, rounded_timestamp, seconds_model,days_model)
+    #prepare_farm_to_dart_nc(path_manager, timestamp_farm, rounded_timestamp, seconds_model,days_model)
 
     with open(
         path_manager.base_path /"DART/models/FARM/python_code/orchestrator_info.yaml",
@@ -244,6 +245,7 @@ while t <= end_time:
         },
         output_nml_path=path_manager.path_submit_bsh / "run_filter.bsh",
     )
+    '''
     # RUN THE FILTER
     job_id = run_command_in_directory_bsub("./submit_filter.bsh",path_manager.path_submit_bsh, farm = False)
     # A.D'A 04/10/2024 should pass to orchestrator_utils
@@ -284,12 +286,12 @@ while t <= end_time:
         else:
             print("Job is still running. Waiting...")
             time.sleep(10)
-
+    '''
     # Handle the posterior
     # create a method that picks the SO2 from the posterior files and place the
     # SO2 in the core of FARM in the next run. 
-
-
+    breakpoint()    
+    prepare_dart_to_farm_nc(path_manager, output_sim_folder, formatted_t_str, time_model)
     print("------------------")
 
 
