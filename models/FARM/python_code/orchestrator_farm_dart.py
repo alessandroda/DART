@@ -17,7 +17,7 @@ from orchestrator_utils import (
     modify_nc_file,
     open_dataset,
     replace_nml_template,
-    round_to_closest_hour,
+    #round_to_closest_hour,
     run_command_in_directory,
     run_command_in_directory_bsub,
     searchFile,
@@ -47,7 +47,7 @@ obs_converter_command = "convert_s5p_tropomi_l3"
 path_manager = PathManager(
     base_path="/gporq3/minni/FARM-DART/",
     env_python="miniconda3/bin/python3.10",
-    listing_file="DART/observations/obs_converters/S5P_TROPOMI_L3/data/l-COBRA/C03__listing.csv",
+    listing_file="DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03__listing.csv",
     run_submit_farm_template="RUN/script/templates/new_run_submit.template.bsh",
     path_submit_bsh="RUN/script/auto_runs/",
     path_filter="DART/models/FARM/work/",
@@ -57,8 +57,8 @@ path_manager = PathManager(
 
 # TIME SETTINGS
 start_time = "2023-03-01 09:00:00"
-end_time = "2023-03-01 11:00:00"
-dt = 180
+end_time = "2023-03-01 18:00:00"
+dt = 3600
 
 time_manager = TimeManager(start_time=start_time, end_time=end_time, dt_seconds=dt)
 
@@ -73,7 +73,7 @@ listing["start_time"] = pd.to_datetime(listing["start_time"])
 ens_members = list(np.arange(0, 20, 1))
 
 logging.info("TIME LOOP BEGINS")
-while time_manager.current_time <= end_time:
+while time_manager.current_time <= time_manager.end_time:
     # if not path_manager.check_existing_farm:
     #    run_farm()
     """
@@ -85,12 +85,12 @@ while time_manager.current_time <= end_time:
     rounded_timestamp -> the one appearing in the farm output file and named with timestamp_farm (+1)
     """
 
-    logger.info(f"Time loop iter: {t}")
+    logger.info(f"Time loop iter: {time_manager.current_time}")
     time_manager.timestamp_farm_run = TimeManager.round_to_closest_hour(
         time_manager.current_time
     )
     logger.info(f"1.----------Running FARM for hour {time_manager.current_time}")
-    if time_manager.timestamp_farm != time_manager.simulated_time:
+    if time_manager.timestamp_farm_run != time_manager.simulated_time:
         string_to_replace_template = (
             f'{time_manager.timestamp_farm_run.strftime("%Y%m%d%H")}.bsh'
         )
@@ -131,7 +131,7 @@ while time_manager.current_time <= end_time:
 
         commands_with_directories = [(command_farm_run, path_manager.path_submit_bsh)]
 
-        # submit_and_wait(commands_with_directories)
+        submit_and_wait(commands_with_directories)
         time_manager.simulated_time = time_manager.timestamp_farm_run + timedelta(
             hours=1
         )
@@ -177,7 +177,7 @@ while time_manager.current_time <= end_time:
         / "DART/observations/obs_converters/S5P_TROPOMI_L3/work/input.nml",
     )
 
-    # run_command_in_directory(obs_converter_command, path_manager.base_path / dir_obs_converter)
+    run_command_in_directory(obs_converter_command, path_manager.base_path / dir_obs_converter)
     # preprocessing model farm nc move before converter
     seconds_model, days_model = set_date_gregorian(
         time_manager.simulated_time.year,
@@ -190,17 +190,17 @@ while time_manager.current_time <= end_time:
 
     output_sim_folder = (
         path_manager.path_data
-        / f"/posteriors/{time_manager.simulated_time.strftime("%Y%m%d%H")}"
+        / f"posteriors/{time_manager.simulated_time.strftime('%Y%m%d%H')}"
     )
     Path(output_sim_folder).mkdir(parents=True, exist_ok=True)
     analysis_sim_folder = (
         path_manager.path_data
-        / f"/analysis/{time_manager.simulated_time.strftime("%Y%m%d%H")}"
+        / f"analysis/{time_manager.simulated_time.strftime('%Y%m%d%H')}"
     )
     Path(analysis_sim_folder).mkdir(parents=True, exist_ok=True)
     preassim_sim_folder = (
         path_manager.path_data
-        / f"/preassim/{time_manager.simulated_time.strftime("%Y%m%d%H")}"
+        / f"preassim/{time_manager.simulated_time.strftime('%Y%m%d%H')}"
     )
     Path(preassim_sim_folder).mkdir(parents=True, exist_ok=True)
 
@@ -210,9 +210,9 @@ while time_manager.current_time <= end_time:
         entries_tbr_dict={
             "$obs_sequence_name": obs_seq_name,
             "$folder_path": output_sim_folder,
+            "$folder_obs_path": path_manager.base_path / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/",
             "$date_assim": time_manager.current_time.strftime("%Y%m%d_%H%M%S"),
-            "$template_farm": path_manager.base_path
-            / f"RUN/data/to_DART/ic_g1_{seconds_model}_{days_model}_00.nc",
+            "$template_farm": path_manager.base_path / f"RUN/data/to_DART/ic_g1_{seconds_model}_{days_model}_00.nc",
             "$init_time_days": str(days_model),
             "$init_time_seconds": str(seconds_model),
             "$first_obs_days": str(days_obs),
@@ -268,8 +268,9 @@ while time_manager.current_time <= end_time:
         entries_tbr_dict={"CORES": str(5)},
         output_nml_path=path_manager.path_submit_bsh / "run_filter.bsh",
     )
-    """
+    
     # RUN THE FILTER
+    
     job_id = run_command_in_directory_bsub("./submit_filter.bsh",path_manager.path_submit_bsh, farm = False)
     # A.D'A 04/10/2024 should pass to orchestrator_utils
     job_id = job_id.strip()[1:-1] 
@@ -309,11 +310,8 @@ while time_manager.current_time <= end_time:
         else:
             print("Job is still running. Waiting...")
             time.sleep(10)
-    """
+    
     # Handle the posterior
-    # create a method that picks the SO2 from the posterior files and place the
-    # SO2 in the core of FARM in the next run.
-    breakpoint()
     prepare_dart_to_farm_nc(
         path_manager, output_sim_folder, time_manager.simulated_time.strftime("%Y%m%d%H"), ass_var="c_SO2"
     )

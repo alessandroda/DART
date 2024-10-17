@@ -10,7 +10,7 @@ from pathlib import Path
 import time
 import logging
 import pandas as pd
-
+from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 
@@ -297,8 +297,19 @@ def run_command_in_directory(command, directory):
     try:
         os.chdir(directory)
         command = directory / command
+        logging.info(f"running command: {command}")
         with open(output_file, "a") as log_file:
-            subprocess.call(str(command), shell=True, stdout=log_file, stderr=log_file)
+            process = subprocess.call(str(command), shell=True, stdout=log_file, stderr=log_file)
+            with tqdm(total=100, bar_format='{l_bar}{bar}| {elapsed}',
+                    leave=False) as pbar:
+                while process.poll() is None:
+                    time.sleep(0.1)
+                    pbar.update(1)
+                    if pbar.n >=100:
+                        pbar.n = 0
+        pbar.n = 100
+        pbar.refresh()
+        process.wait()
     finally:
         os.chdir(original_directory)
 
@@ -428,21 +439,21 @@ def prepare_dart_to_farm_nc(path_manager, output_sim_folder, time_model, ass_var
         Path(tmp0_posterior).parent.mkdir(parents=True, exist_ok=True)
 
         # prior in FARM format
-        prior_farm_folder = Path(f"{path_manager.path_data}/output/out/prior")
+        prior_farm_folder = Path(f"{path_manager.path_data}/OUTPUT/OUT/prior")
         prior_farm_folder.parent.mkdir(parents=True, exist_ok=True)
-
+        #breakpoint()
         prior_from_farm_file = (
-            prior_farm_folder / f'ic_g1_{time_model.strftime("%Y%m%d%H")}.nc'
+            prior_farm_folder / f'ic_g1_{time_model}.nc'
         )
 
         # first to delete variable c_SO2
         result = Path(
-            f'{path_manager.path_data}/output/out/ic_g1_{time_model.strftime("%Y%m%d%H")}.nc'
+            f'{path_manager.path_data}/OUTPUT/OUT/ic_g1_{time_model}.nc'
         )
 
         with open("subprocess_output.log", "w") as log_file:
             logger.info("0: Storing prior elsewhere")
-            breakpoint()
+            #breakpoint()
 
             subprocess.run(
                 ["mv", result, prior_from_farm_file],
@@ -463,7 +474,7 @@ def prepare_dart_to_farm_nc(path_manager, output_sim_folder, time_model, ass_var
                 stderr=log_file,
                 check=True,
             )
-
+            #breakpoint() 
             logger.info("2: setcalendar of posterior to FARM standard")
             subprocess.run(
                 [
@@ -484,41 +495,47 @@ def prepare_dart_to_farm_nc(path_manager, output_sim_folder, time_model, ass_var
                 stderr=log_file,
                 check=True,
             )
+            logger.info(f"4-5: delete {ass_var} and append the assimilated one")
+            ds = xr.open_dataset(str(prior_from_farm_file))
+            ds_result = ds.drop_vars(ass_var)
+            ds_tmp1_posterior = xr.open_dataset(str(tmp1_posterior))
+            ds_result[ass_var] = ds_tmp1_posterior[ass_var]
+            ds_result.to_netcdf(str(result))
+            #logger.info("4: delete var from FARM prior")
+            #subprocess.run(
+            #    ["cdo", f"delname,{ass_var}",str(prior_from_farm_file), str(result)],
+            #    stdout=log_file,
+            #    stderr=log_file,
+            #    check=True,
+            #)
 
-            logger.info("4: delete var from FARM prior")
-            subprocess.run(
-                ["cdo", "delname", ass_var, str(prior_from_farm_file), str(result)],
-                stdout=log_file,
-                stderr=log_file,
-                check=True,
-            )
-
-            logger.info("5: append assimilated c_SO2 from posterior DART")
-            subprocess.run(
-                ["ncks", "-A", "-v", ass_var, str(tmp1_posterior), str(result)],
-                stdout=log_file,
-                stderr=log_file,
-                check=True,
-            )
+            #logger.info("5: append assimilated c_SO2 from posterior DART")
+            #subprocess.run(
+            #    ["ncks", "-A","-v", str(ass_var), str(tmp1_posterior), str(result)],
+            #    stdout=log_file,
+            #    stderr=log_file,
+            #    check=True,
+            #)
     except subprocess.CalledProcessError as e:
         logging.error(f"Command failed: {e.cmd}")
         logging.error(f"Error output: {e.output}")
-        raise
-    finally:
-        # Cleanup: Remove temporary files
-        temp_files = [tmp0_posterior, tmp1_posterior, prior_from_farm_file]
-        for temp_file in temp_files:
-            temp_file.unlink(missing_ok=True)
         logging.info(
             f"something went wrong restore at least the original core in {result} to continue farm run"
         )
-        subprocess.run(
-            ["mv", prior_from_farm_file, result],
-            stdout=log_file,
-            stderr=log_file,
-            check=True,
-        )
-
+        with open("subprocess_output.log","a") as log_file:
+            subprocess.run(
+                ["mv", prior_from_farm_file, result],
+                stdout=log_file,
+                stderr=log_file,
+                check=True,
+            )
+        raise
+    finally:
+        # Cleanup: Remove temporary files
+        temp_files = [tmp0_posterior, tmp1_posterior]
+        for temp_file in temp_files:
+            temp_file.unlink(missing_ok=True)
+        
 
 def prepare_farm_to_dart_nc(
     path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model
