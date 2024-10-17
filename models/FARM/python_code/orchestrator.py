@@ -19,10 +19,8 @@ from orchestrator_utils import (
     submit_and_wait,
     prepare_dart_to_farm_nc,
 )
-
-logging.basicConfig(
-    filename="farm_to_dart.log", format="%(asctime)s %(message)s", level=logging.INFO
-)
+ 
+logging.basicConfig(filename=f'farm_to_dart_{time.strftime("%Y%m%d_%H%M%S")}.log', format="%(asctime)s %(message)s", level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
@@ -83,8 +81,7 @@ class FarmToDartPipeline:
             (command_farm_run, self.path_manager.path_submit_bsh)
         ]
         submit_and_wait(commands_with_directories)
-        self.time_manager.simulated_time = timestamp_farm + timedelta(hours=1)
-
+        
     def process_satellite_data(self):
         logger.info(f"2. Increment time and search for orbit")
         self.time_manager.increment_time()
@@ -101,7 +98,7 @@ class FarmToDartPipeline:
         self.time_manager.sat_obs = pd.to_datetime(
             orbit_filename["start_time"].values[0]
         )
-        return orbit_filename
+        return orbit_filename['filename'].values[0]
 
     def run_obs_converter(self, orbit_filename):
         self.seconds_obs, self.days_obs = set_date_gregorian(
@@ -119,7 +116,7 @@ class FarmToDartPipeline:
             / "DART/observations/obs_converters/S5P_TROPOMI_L3/work/input_template.nml",
             entries_tbr_dict={
                 "$file_path_s5p": self.path_manager.base_path
-                / f'DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/{orbit_filename["filename"].values[0]}',
+                / f'DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/{orbit_filename}',
                 "$file_out": self.path_manager.base_path
                 / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/{obs_seq_name}",
             },
@@ -148,17 +145,17 @@ class FarmToDartPipeline:
             self.time_manager.simulated_time.second,
         )
 
-        output_sim_folder = (
+        self.output_sim_folder = (
             self.path_manager.path_data
             / f"posteriors/{self.time_manager.simulated_time.strftime('%Y%m%d%H')}"
         )
-        Path(output_sim_folder).mkdir(parents=True, exist_ok=True)
+        Path(self.output_sim_folder).mkdir(parents=True, exist_ok=True)
 
         replace_nml_template(
             self.path_manager.base_path / "DART/models/FARM/work/input_template.nml",
             entries_tbr_dict={
                 "$obs_sequence_name": obs_seq_name,
-                "$folder_path": output_sim_folder,
+                "$folder_path": self.output_sim_folder,
                 "$folder_obs_path": self.path_manager.base_path
                 / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/",
                 "$date_assim": self.time_manager.current_time.strftime("%Y%m%d_%H%M%S"),
@@ -184,11 +181,12 @@ class FarmToDartPipeline:
         )
 
         job_id = run_command_in_directory_bsub(
-            "./submit_filter.bsh", self.path_manager.path_submit_bsh
+            "./submit_filter.bsh", self.path_manager.path_submit_bsh, farm =
+            False
         )
-        self.monitor_job(job_id, output_sim_folder)
+        self.monitor_job(job_id)
 
-    def monitor_job(self, job_id, output_sim_folder):
+    def monitor_job(self, job_id):
         logger.info(f"Monitoring job {job_id}")
         job_id = job_id.strip()[1:-1]
 
@@ -196,42 +194,59 @@ class FarmToDartPipeline:
             if check_job_status_cresco(job_id):
                 print("Job completed successfully.")
                 # Handle successful job completion: move files
-                self.move_analysis_files(output_sim_folder)
+                self.move_analysis_files()
                 break
             else:
                 print("Job is still running. Waiting...")
                 time.sleep(10)
 
-    def move_analysis_files(self, output_sim_folder):
+    def move_analysis_files(self):
         analysis_sim_folder = (
             self.path_manager.path_data
             / f"analysis/{self.time_manager.simulated_time.strftime('%Y%m%d%H')}"
         )
+        Path(analysis_sim_folder).mkdir(parent =True,exist_ok=True)
         preassim_sim_folder = (
             self.path_manager.path_data
             / f"preassim/{self.time_manager.simulated_time.strftime('%Y%m%d%H')}"
         )
+        Path(preassim_sim_folder).mkdir(parents=True, exist_ok=True)
+        for filename in os.listdir(f"{self.path_manager.path_filter}"):
+                if filename.startswith("analysis_"):
+                    try:
+                        shutil.move(
+                            os.path.join(
+                                self.path_manager.path_filter,
+                                filename,
+                            ),
+                            analysis_sim_folder,
+                        )
+                    except shutil.Error:
+                        print(
+                            f"Failed to move '{filename}' to '{analysis_sim_folder}' because it already exists."
+                        )
+                elif filename.startswith("preassim_"):
+                    try:
+                        shutil.move(
+                            os.path.join(
+                                self.path_manager.path_filter,
+                                filename,
+                            ),
+                            os.path.join(preassim_sim_folder, filename),
+                        )
+                    except shutil.Error:
+                        print(
+                            f"Failed to move '{filename}' to '{preassim_sim_folder}' because it already exists."
+                        )
 
-        for filename in os.listdir(self.path_manager.path_filter):
-            if filename.startswith("analysis_"):
-                shutil.move(
-                    os.path.join(self.path_manager.path_filter, filename),
-                    analysis_sim_folder,
-                )
-            elif filename.startswith("preassim_"):
-                shutil.move(
-                    os.path.join(self.path_manager.path_filter, filename),
-                    preassim_sim_folder,
-                )
 
     def run_pipeline(self):
         logger.info("TIME LOOP BEGINS")
         while self.time_manager.current_time <= self.time_manager.end_time:
             self.run_farm()  # Run FARM executable
-
+            self.time_manager.simulated_time = self.time_manager.current_time + timedelta(hours=1)
             orbit_filename = self.process_satellite_data()  # Process satellite data
             if orbit_filename:  # Only proceed if satellite data is found
-
                 obs_seq_name = self.run_obs_converter(orbit_filename)
 
                 prepare_farm_to_dart_nc(

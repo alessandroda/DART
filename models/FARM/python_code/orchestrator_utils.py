@@ -299,17 +299,7 @@ def run_command_in_directory(command, directory):
         command = directory / command
         logging.info(f"running command: {command}")
         with open(output_file, "a") as log_file:
-            process = subprocess.call(str(command), shell=True, stdout=log_file, stderr=log_file)
-            with tqdm(total=100, bar_format='{l_bar}{bar}| {elapsed}',
-                    leave=False) as pbar:
-                while process.poll() is None:
-                    time.sleep(0.1)
-                    pbar.update(1)
-                    if pbar.n >=100:
-                        pbar.n = 0
-        pbar.n = 100
-        pbar.refresh()
-        process.wait()
+            subprocess.call(str(command), shell=True, stdout=log_file, stderr=log_file)
     finally:
         os.chdir(original_directory)
 
@@ -540,7 +530,6 @@ def prepare_dart_to_farm_nc(path_manager, output_sim_folder, time_model, ass_var
 def prepare_farm_to_dart_nc(
     path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model
 ):
-
     try:
         logging.info
         meteo_file = f'/gporq3/minni/CAMEO/RUN/data/INPUT/METEO/ifsecmwf_d0_g1_{timestamp_farm.strftime("%Y%m%d")}.nc'
@@ -704,173 +693,6 @@ def wait_for_jobs_to_finish(job_ids):
             )
             time.sleep(30)
 
-
-def prepare_farm_to_dart_nc(
-    path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model
-):
-
-    try:
-        logging.info
-        meteo_file = f'/gporq3/minni/CAMEO/RUN/data/INPUT/METEO/ifsecmwf_d0_g1_{timestamp_farm.strftime("%Y%m%d")}.nc'
-
-        temp_output_meteo = path_manager.base_path / "RUN/data/temp/output_meteo.nc"
-        temp_output_meteo_plus1 = (
-            path_manager.base_path / "RUN/data/temp/output_meteo_plus1.nc"
-        )
-        temp_output_meteo_selected = (
-            path_manager.base_path / "RUN/data/temp/output_meteo_selected.nc"
-        )
-
-        arconv_input_file = (
-            path_manager.base_path
-            / f'RUN/data/OUTPUT/OUT/ic_g1_{rounded_timestamp.strftime("%Y%m%d%H")}.nc'
-        )
-        arconv_output_file = path_manager.base_path / "RUN/data/temp/arconv_output.nc"
-
-        final_concentration_file = (
-            path_manager.base_path
-            / f"RUN/data/to_DART/ic_g1_{seconds_model}_{days_model}_00.nc"
-        )
-        temp_concentration_file = (
-            path_manager.base_path / "RUN/data/to_DART/temp_conc.nc"
-        )
-        temp1_concentration_file = (
-            path_manager.base_path / "RUN/data/to_DART/temp1_conc.nc"
-        )
-
-        final_concentration_file.parent.mkdir(parents=True, exist_ok=True)
-        with open("subprocess_output.log", "w") as log_file:
-            logger.info("1: Select SP, P, and T from the input meteo file")
-            subprocess.run(
-                ["cdo", "selname,SP,P,T", meteo_file, temp_output_meteo],
-                stdout=log_file,
-                stderr=log_file,
-                check=True,
-            )
-
-            logger.info("2: Select the timestep from the rounded timestamp")
-            subprocess.run(
-                [
-                    "cdo",
-                    f"seltimestep,{rounded_timestamp.hour}",
-                    temp_output_meteo,
-                    temp_output_meteo_selected,
-                ],
-                stdout=log_file,
-                stderr=log_file,
-                check=True,
-            )
-
-            # Step 3: Shift time by 1 hour
-            subprocess.run(
-                [
-                    "cdo",
-                    "shifttime,1hour",
-                    temp_output_meteo_selected,
-                    temp_output_meteo_plus1,
-                ],
-                stdout=log_file,
-                stderr=log_file,
-                check=True,
-            )
-
-            # Step 4: Convert FARM concentrations using arconv
-            subprocess.run(
-                [
-                    "/gporq3/minni/FARM-DART/arconv-2.5.10",
-                    arconv_input_file,
-                    arconv_output_file,
-                    "1",
-                ],
-                stdout=log_file,
-                stderr=log_file,
-            )
-
-            # Step 5: Use ncks to append SP, P, and T variables to the FARM concentration file
-            subprocess.run(
-                [
-                    "ncks",
-                    "-A",
-                    "-v",
-                    "P,SP,T",
-                    temp_output_meteo_plus1,
-                    arconv_output_file,
-                ]
-            )
-
-            # Step 6: Copy the result to the final concentration file
-            subprocess.run(["cp", arconv_output_file, final_concentration_file])
-
-            # Step 7: Set reference time in the concentration file
-            subprocess.run(
-                [
-                    "cdo",
-                    "-setreftime,1900-01-01,00:00:00,days",
-                    final_concentration_file,
-                    temp_concentration_file,
-                ]
-            )
-
-            # Step 8: Set calendar to Gregorian
-            subprocess.run(
-                [
-                    "cdo",
-                    "-setcalendar,gregorian",
-                    temp_concentration_file,
-                    temp1_concentration_file,
-                ]
-            )
-
-            # Step 9: Remove unnecessary attributes from the concentration file
-            subprocess.run(
-                ["ncatted", "-a", "add_offset,,d,,", temp1_concentration_file]
-            )
-            subprocess.run(
-                ["ncatted", "-a", "scale_factor,,d,,", temp1_concentration_file]
-            )
-            subprocess.run(
-                ["ncatted", "-a", "_FillValue,,d,,", temp1_concentration_file]
-            )
-            subprocess.run(
-                ["ncatted", "-a", "missing_value,,d,,", temp1_concentration_file]
-            )
-
-            # Step 10: Copy the cleaned file to the final concentration file location
-            subprocess.run(["cp", temp1_concentration_file, final_concentration_file])
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Command failed: {e.cmd}")
-        logging.error(f"Error output: {e.output}")
-        raise
-    finally:
-        # Cleanup: Remove temporary files
-        temp_files = [
-            temp_output_meteo,
-            temp_output_meteo_plus1,
-            temp_output_meteo_selected,
-            arconv_output_file,
-            temp_concentration_file,
-            temp1_concentration_file,
-        ]
-        for temp_file in temp_files:
-            temp_file.unlink(missing_ok=True)
-
-
-def wait_for_jobs_to_finish(job_ids):
-    # breakpoint()
-    while True:
-        running_jobs = []
-        for jobid in job_ids:
-            if not check_job_status_cresco(jobid):
-                running_jobs.append(jobid)
-
-        if not running_jobs:
-            logger.info(f"{job_ids} have finished")
-            break
-        else:
-            logger.info(
-                f"Jobs still running: {running_jobs}. Waiting for them to finish..."
-            )
-            time.sleep(30)
 
 
 def submit_and_wait(commands_with_directories: list):

@@ -89,52 +89,52 @@ while time_manager.current_time <= time_manager.end_time:
     time_manager.timestamp_farm_run = TimeManager.round_to_closest_hour(
         time_manager.current_time
     )
+    #if time_manager.timestamp_farm_run != time_manager.simulated_time:
     logger.info(f"1.----------Running FARM for hour {time_manager.current_time}")
-    if time_manager.timestamp_farm_run != time_manager.simulated_time:
-        string_to_replace_template = (
-            f'{time_manager.timestamp_farm_run.strftime("%Y%m%d%H")}.bsh'
-        )
-        """
-            The run_submit_farm_template should be still the same but to be
-            replaced with the members value and use replace_nml_template to set
-            the right EMISSION, BC, and core which should end with two digits
-            xx.nc that are the memeber's value
-        """
-        # strings_to_replace_template =[f'{timestamp_farm.strftime("%Y%m%d%H")}_{mem}.bsh' for mem in ens_members]
-        # commands_farm_run = [ 'run_submit' + string_to_replace_template for string_to_replace_template in strings_to_replace_template()]
-        # path_runs = [path_submit_farm + 'run_submit' + string_to_replace_template for string_to_replace_template in strings_to_replace_template()]
-        # for path_run in path_runs:
-        #    replace_nml_template(
-        #        input_nml_path=path_manager.run_submit_farm_template,
-        #        entries_tbr_dict={
-        #         "da_date_start": timestamp_farm.strftime("%Y%m%d%H"),
-        #         "da_date_end": timestamp_farm.strftime("%Y%m%d%H"),
-        #     },
-        #     output_nml_path= path_run
-        #    )
-        # commands_with_directories = [(command_farm_run, path_manager.path_submit.bsh) for command_farm_run in commands_farm_run]
-        # submit_and_wait(commands_with_directories)
+    string_to_replace_template = (
+        f'{time_manager.timestamp_farm_run.strftime("%Y%m%d%H")}.bsh'
+    )
+    """
+        The run_submit_farm_template should be still the same but to be
+        replaced with the members value and use replace_nml_template to set
+        the right EMISSION, BC, and core which should end with two digits
+        xx.nc that are the memeber's value
+    """
+    # strings_to_replace_template =[f'{timestamp_farm.strftime("%Y%m%d%H")}_{mem}.bsh' for mem in ens_members]
+    # commands_farm_run = [ 'run_submit' + string_to_replace_template for string_to_replace_template in strings_to_replace_template()]
+    # path_runs = [path_submit_farm + 'run_submit' + string_to_replace_template for string_to_replace_template in strings_to_replace_template()]
+    # for path_run in path_runs:
+    #    replace_nml_template(
+    #        input_nml_path=path_manager.run_submit_farm_template,
+    #        entries_tbr_dict={
+    #         "da_date_start": timestamp_farm.strftime("%Y%m%d%H"),
+    #         "da_date_end": timestamp_farm.strftime("%Y%m%d%H"),
+    #     },
+    #     output_nml_path= path_run
+    #    )
+    # commands_with_directories = [(command_farm_run, path_manager.path_submit.bsh) for command_farm_run in commands_farm_run]
+    # submit_and_wait(commands_with_directories)
 
-        command_farm_run = "run_submit" + string_to_replace_template
-        path_run = (
-            path_manager.path_submit_bsh / f"run_submit{string_to_replace_template}"
-        )
+    command_farm_run = "run_submit" + string_to_replace_template
+    path_run = (
+        path_manager.path_submit_bsh / f"run_submit{string_to_replace_template}"
+    )
 
-        replace_nml_template(
-            input_nml_path=path_manager.run_submit_farm_template,
-            entries_tbr_dict={
-                "da_date_start": time_manager.timestamp_farm_run.strftime("%Y%m%d%H"),
-                "da_date_end": time_manager.timestamp_farm_run.strftime("%Y%m%d%H"),
-            },
-            output_nml_path=path_run,
-        )
+    replace_nml_template(
+        input_nml_path=path_manager.run_submit_farm_template,
+        entries_tbr_dict={
+            "da_date_start": time_manager.timestamp_farm_run.strftime("%Y%m%d%H"),
+            "da_date_end": time_manager.timestamp_farm_run.strftime("%Y%m%d%H"),
+        },
+        output_nml_path=path_run,
+    )
 
-        commands_with_directories = [(command_farm_run, path_manager.path_submit_bsh)]
+    commands_with_directories = [(command_farm_run, path_manager.path_submit_bsh)]
 
-        submit_and_wait(commands_with_directories)
-        time_manager.simulated_time = time_manager.timestamp_farm_run + timedelta(
-            hours=1
-        )
+    submit_and_wait(commands_with_directories)
+    time_manager.simulated_time = time_manager.timestamp_farm_run + timedelta(
+        hours=1
+    )
 
     # if not path_manager.check_exisiting_obs_sat:
     #    run_obs_converter
@@ -245,7 +245,8 @@ while time_manager.current_time <= time_manager.end_time:
         / "DART/models/FARM/work/filter_output_list.txt",
     )
     # with CleanupContext(path_manager.base_path / 'RUN/data/temp/'):
-    # prepare_farm_to_dart_nc(path_manager, timestamp_farm, rounded_timestamp, seconds_model,days_model)
+    prepare_farm_to_dart_nc(path_manager, time_manager.simulated_time,
+            time_manager.simulated_time, seconds_model,days_model)
 
     with open(
         path_manager.base_path / "DART/models/FARM/python_code/orchestrator_info.yaml",
