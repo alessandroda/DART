@@ -437,9 +437,15 @@ def prepare_dart_to_farm_nc(path_manager, output_sim_folder, time_model, ass_var
         )
 
         # first to delete variable c_SO2
+        result_tmp = Path(
+            f'{path_manager.path_data}/OUTPUT/OUT/ic_g1_{time_model}_tmp.nc'
+        )
+
         result = Path(
             f'{path_manager.path_data}/OUTPUT/OUT/ic_g1_{time_model}.nc'
         )
+
+
 
         with open("subprocess_output.log", "w") as log_file:
             logger.info("0: Storing prior elsewhere")
@@ -487,10 +493,23 @@ def prepare_dart_to_farm_nc(path_manager, output_sim_folder, time_model, ass_var
             )
             logger.info(f"4-5: delete {ass_var} and append the assimilated one")
             ds = xr.open_dataset(str(prior_from_farm_file))
-            ds_result = ds.drop_vars(ass_var)
+            #ds_result = ds.drop_vars(ass_var)
             ds_tmp1_posterior = xr.open_dataset(str(tmp1_posterior))
-            ds_result[ass_var] = ds_tmp1_posterior[ass_var]
-            ds_result.to_netcdf(str(result))
+            ds['c_SO2'].values = ds_tmp1_posterior[ass_var].values 
+            ds.to_netcdf(str(result_tmp))
+            # Step 4: Convert FARM concentrations using arconv
+            logger.info("6: convert FARM with arconv")
+            subprocess.run(
+                [
+                    "/gporq3/minni/FARM-DART/arconv-2.5.10",
+                    result_tmp,
+                    result,
+                    "1",
+                ],
+                stdout=log_file,
+                stderr=log_file,
+            )
+
             #logger.info("4: delete var from FARM prior")
             #subprocess.run(
             #    ["cdo", f"delname,{ass_var}",str(prior_from_farm_file), str(result)],
@@ -583,6 +602,7 @@ def prepare_farm_to_dart_nc(
             )
 
             # Step 3: Shift time by 1 hour
+            logger.info("3: shift time by 1 hour")
             subprocess.run(
                 [
                     "cdo",
@@ -596,6 +616,7 @@ def prepare_farm_to_dart_nc(
             )
 
             # Step 4: Convert FARM concentrations using arconv
+            logger.info("4: convert FARM with arconv")
             subprocess.run(
                 [
                     "/gporq3/minni/FARM-DART/arconv-2.5.10",
@@ -608,6 +629,7 @@ def prepare_farm_to_dart_nc(
             )
 
             # Step 5: Use ncks to append SP, P, and T variables to the FARM concentration file
+            logger.info("5: use ncks to append SP, P and T variables to the FARM concentration file")
             subprocess.run(
                 [
                     "ncks",
@@ -657,6 +679,7 @@ def prepare_farm_to_dart_nc(
             )
 
             # Step 10: Copy the cleaned file to the final concentration file location
+            logger.info("10: copy the cleaned file to the final concentration")
             subprocess.run(["cp", temp1_concentration_file, final_concentration_file])
     except subprocess.CalledProcessError as e:
         logging.error(f"Command failed: {e.cmd}")
