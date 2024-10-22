@@ -134,9 +134,9 @@ class FarmToDartPipeline:
             return False
         return obs_seq_name
 
-    def run_dart(self, obs_seq_name):
-        logger.info("Running DART")
-        self.seconds_model, self.days_model = set_date_gregorian(
+
+    def set_days_seconds_model(self):
+            self.seconds_model, self.days_model = set_date_gregorian(
             self.time_manager.simulated_time.year,
             self.time_manager.simulated_time.month,
             self.time_manager.simulated_time.day,
@@ -145,6 +145,10 @@ class FarmToDartPipeline:
             self.time_manager.simulated_time.second,
         )
 
+
+    def run_dart(self, obs_seq_name):
+        logger.info("Running DART")
+        
         self.output_sim_folder = (
             self.path_manager.path_data
             / f"posteriors/{self.time_manager.simulated_time.strftime('%Y%m%d%H')}"
@@ -168,6 +172,27 @@ class FarmToDartPipeline:
             },
             output_nml_path=self.path_manager.base_path
             / "DART/models/FARM/work/input.nml",
+        )
+        # FILTER_INPUT_LIST.TXT
+        replace_nml_template(
+            self.path_manager.base_path / "DART/models/FARM/work/filter_input_list_template.txt",
+            entries_tbr_dict={
+                "$folder_path": self.path_manager.base_path / f"RUN/data/to_DART/",
+                "$days": str(self.seconds_model),
+                "$seconds": str(self.days_model),
+            },
+            output_nml_path=self.path_manager.base_path / "DART/models/FARM/work/filter_input_list.txt",
+        )
+
+        # FILTER_OUTPUT_LIST.TXT
+        replace_nml_template(
+            self.path_manager.base_path
+            / "DART/models/FARM/work/filter_output_list_template.txt",
+            entries_tbr_dict={
+                "$folder_path": self.output_sim_folder,
+                "$date": self.time_manager.simulated_time.strftime("%Y%m%d%H"),
+            },
+            output_nml_path=self.path_manager.base_path / "DART/models/FARM/work/filter_output_list.txt",
         )
 
         replace_nml_template(
@@ -205,7 +230,7 @@ class FarmToDartPipeline:
             self.path_manager.path_data
             / f"analysis/{self.time_manager.simulated_time.strftime('%Y%m%d%H')}"
         )
-        Path(analysis_sim_folder).mkdir(parent =True,exist_ok=True)
+        Path(analysis_sim_folder).mkdir(parents =True,exist_ok=True)
         preassim_sim_folder = (
             self.path_manager.path_data
             / f"preassim/{self.time_manager.simulated_time.strftime('%Y%m%d%H')}"
@@ -245,10 +270,11 @@ class FarmToDartPipeline:
         while self.time_manager.current_time <= self.time_manager.end_time:
             self.run_farm()  # Run FARM executable
             self.time_manager.simulated_time = self.time_manager.current_time + timedelta(hours=1)
+            self.set_days_seconds_model() 
             orbit_filename = self.process_satellite_data()  # Process satellite data
             if orbit_filename:  # Only proceed if satellite data is found
                 obs_seq_name = self.run_obs_converter(orbit_filename)
-
+                
                 prepare_farm_to_dart_nc(
                     self.path_manager,
                     self.time_manager.simulated_time,
@@ -256,9 +282,7 @@ class FarmToDartPipeline:
                     self.seconds_model,
                     self.days_model,
                 )
-
                 self.run_dart(obs_seq_name)  # Run DART assimilation
-
                 prepare_dart_to_farm_nc(
                     self.path_manager,
                     self.output_sim_folder,
