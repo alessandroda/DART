@@ -20,7 +20,7 @@ from orchestrator_utils import (
     prepare_dart_to_farm_nc,
 )
  
-logging.basicConfig(filename=f'farm_to_dart_{time.strftime("%Y%m%d_%H%M%S")}.log', format="%(asctime)s %(message)s", level=logging.INFO)
+logging.basicConfig(filename=f'logs_orchestrator/farm_to_dart_{time.strftime("%Y%m%d_%H%M%S")}.log', format="%(asctime)s %(message)s", level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,8 @@ class FarmToDartPipeline:
             base_path="/gporq3/minni/FARM-DART/",
             env_python="miniconda3/bin/python3.10",
             listing_file="DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03__listing.csv",
-            run_submit_farm_template="RUN/script/templates/new_run_submit.template.bsh",
+            #run_submit_farm_template="RUN/script/templates/new_run_submit.template.bsh",
+            run_submit_farm_template="RUN/script/templates/run_submit_ens.template.bsh",
             path_submit_bsh="RUN/script/auto_runs/",
             path_filter="DART/models/FARM/work/",
             path_data="RUN/data/",
@@ -52,6 +53,7 @@ class FarmToDartPipeline:
         self.seconds_model = 0
         self.output_sim_folder = None
         self.ass_var = "c_SO2"
+        self.no_mems = 5
 
     def run_farm(self):
         logger.info(
@@ -62,10 +64,10 @@ class FarmToDartPipeline:
         )
         string_to_replace_template = f'{timestamp_farm.strftime("%Y%m%d%H")}.bsh'
 
-        command_farm_run = "run_submit" + string_to_replace_template
+        command_farm_run = "run_submit_ens" + string_to_replace_template
         path_run = (
             self.path_manager.path_submit_bsh
-            / f"run_submit{string_to_replace_template}"
+            / f"run_submit_ens{string_to_replace_template}"
         )
 
         replace_nml_template(
@@ -281,6 +283,7 @@ class FarmToDartPipeline:
                     self.time_manager.simulated_time,
                     self.seconds_model,
                     self.days_model,
+                    self.no_mems
                 )
                 self.run_dart(obs_seq_name)  # Run DART assimilation
                 prepare_dart_to_farm_nc(
@@ -288,6 +291,7 @@ class FarmToDartPipeline:
                     self.output_sim_folder,
                     self.time_manager.simulated_time.strftime("%Y%m%d%H"),
                     self.ass_var,
+                    self.no_mems
                 )
             logger.info(
                 f"Completed processing for {self.time_manager.current_time.strftime('%Y-%m-%d %H:%M')}"

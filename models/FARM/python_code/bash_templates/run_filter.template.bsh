@@ -1,0 +1,11 @@
+#!/bin/bash
+# Load conda environment
+
+export LD_LIBRARY_PATH=/gporq2/scratch_0/usr/forecast/LIB6_INTEL/lib64:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=/gporq2/scratch_0/usr/forecast/LIB6_INTEL/lib:$LD_LIBRARY_PATH
+export PATH=/gporq2/scratch_0/usr/forecast/LIB6_INTEL/bin:$PATH
+source /gporq3/minni/FARM-DART/miniconda3/etc/profile.d/conda.sh
+
+cd /gporq3/minni/FARM-DART/DART/models/FARM/work
+cores='CORES'
+mpirun -np ${cores} ./filter
