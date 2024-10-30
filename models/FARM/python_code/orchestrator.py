@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from datetime import timedelta
 import logging
-
+import yaml
 from orchestrator_utils import (
     check_job_status_cresco,
     replace_nml_template,
@@ -25,35 +25,47 @@ logging.basicConfig(filename=f'logs_orchestrator/farm_to_dart_{time.strftime("%Y
 logger = logging.getLogger(__name__)
 
 
+CONFIG_PATH = "config_orchestrator.yaml"
+
+
+def load_config(file_path):
+    with open(file_path, 'r') as file:
+        return yaml.safe_load(file)
+
+
+
 class FarmToDartPipeline:
     def __init__(self):
+        # Load configuration from YAML file
+        self.config = load_config(CONFIG_PATH)
+        
+        # Setup path manager and time manager with loaded configurations
         self.path_manager = PathManager(
-            base_path="/gporq3/minni/FARM-DART/",
-            env_python="miniconda3/bin/python3.10",
-            listing_file="DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03__listing.csv",
-            #run_submit_farm_template="RUN/script/templates/new_run_submit.template.bsh",
-            run_submit_farm_template="RUN/script/templates/run_submit_ens.template.bsh",
-            path_submit_bsh="RUN/script/auto_runs/",
-            path_filter="DART/models/FARM/work/",
-            path_data="RUN/data/",
+            base_path=self.config['paths']['base_path'],
+            env_python=self.config['paths']['env_python'],
+            listing_file=self.config['paths']['listing_file'],
+            run_submit_farm_template=self.config['paths']['run_submit_farm_template'],
+            path_submit_bsh=self.config['paths']['path_submit_bsh'],
+            path_filter=self.config['paths']['path_filter'],
+            path_data=self.config['paths']['path_data'],
             log_paths=True,
         )
 
         self.time_manager = TimeManager(
-            start_time="2023-03-01 09:00:00",
-            end_time="2023-03-01 18:00:00",
-            dt_seconds=3600,
+            start_time=self.config['time']['start_time'],
+            end_time=self.config['time']['end_time'],
+            dt_seconds=self.config['time']['dt_seconds'],
         )
 
         self.listing = pd.read_csv(self.path_manager.listing_file, sep=";")
-        self.listing["start_time"] = pd.to_datetime(self.listing["start_time"])
         self.days_obs = 0
         self.seconds_obs = 0
         self.days_model = 0
         self.seconds_model = 0
         self.output_sim_folder = None
-        self.ass_var = "c_SO2"
-        self.no_mems = 5
+        self.ass_var = self.config['assimilation']['ass_var']
+        self.no_mems = self.config['assimilation']['no_mems']
+        
 
     def run_farm(self):
         logger.info(
