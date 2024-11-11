@@ -47,12 +47,12 @@
    output_state_file_list       = 'filter_output_list.txt'
    output_interval              = 1,
    output_members               = .true.
-   num_output_state_members     = 5,
+   num_output_state_members     = 20,
    output_mean                  = .true.
    output_sd                    = .true.
    write_all_stages_at_end      = .false.
 
-   ens_size                     = 5,
+   ens_size                     = 20,
    num_groups                   = 1,
    ! AD'A we should try with this setting to not genereate 50 ensemble
    perturb_from_single_instance = .false.,
@@ -64,7 +64,7 @@
 
    obs_sequence_in_name         = "$folder_obs_path/$obs_sequence_name",
    obs_sequence_out_name        = "$folder_path/obs_seq_$date_assim.final",
-   num_output_obs_members       = 5,
+   num_output_obs_members       = 20,
    init_time_days               = $init_time_days,
    init_time_seconds            = $init_time_seconds,
    first_obs_days               = $first_obs_days,

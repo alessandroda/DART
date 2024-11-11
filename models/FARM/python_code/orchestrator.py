@@ -14,6 +14,7 @@ from orchestrator_utils import (
     searchFile,
     set_date_gregorian,
     prepare_farm_to_dart_nc,
+    prepare_farm_to_dart_nc_par,
     PathManager,
     TimeManager,
     submit_and_wait,
@@ -58,6 +59,7 @@ class FarmToDartPipeline:
         )
 
         self.listing = pd.read_csv(self.path_manager.listing_file, sep=";")
+        self.listing['start_time'] = pd.to_datetime(self.listing['start_time'])
         self.days_obs = 0
         self.seconds_obs = 0
         self.days_model = 0
@@ -178,7 +180,7 @@ class FarmToDartPipeline:
                 / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/",
                 "$date_assim": self.time_manager.current_time.strftime("%Y%m%d_%H%M%S"),
                 "$template_farm": self.path_manager.base_path
-                / f"RUN/data/to_DART/ic_g1_{self.seconds_model}_{self.days_model}_00.nc",
+                / f"RUN/data/to_DART/ic_g1_{self.seconds_model}_{self.days_model}_0.nc",
                 "$init_time_days": str(self.days_model),
                 "$init_time_seconds": str(self.seconds_model),
                 "$first_obs_days": str(self.days_obs),

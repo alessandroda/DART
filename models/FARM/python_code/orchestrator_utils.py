@@ -11,7 +11,120 @@ import time
 import logging
 import pandas as pd
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 logger = logging.getLogger(__name__)
+
+def process_member(mem, path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model):
+    try:
+        meteo_file = f'/gporq3/minni/CAMEO/RUN/data/INPUT/METEO/ifsecmwf_d0_g1_{timestamp_farm.strftime("%Y%m%d")}.nc'
+        temp_output_meteo = path_manager.base_path / f'RUN/data/temp/output_meteo_{mem}.nc'
+        temp_output_meteo_plus1 = path_manager.base_path / f'RUN/data/temp/output_meteo_plus1_{mem}.nc'
+        temp_output_meteo_selected = path_manager.base_path / f'RUN/data/temp/output_meteo_selected_{mem}.nc'
+        
+        arconv_input_file = path_manager.base_path / f'RUN/data/OUTPUT_{mem}/OUT/ic_g1_{rounded_timestamp.strftime("%Y%m%d%H")}.nc'
+        arconv_output_file = path_manager.base_path / f'RUN/data/temp/arconv_output_{mem}.nc'
+        
+        final_concentration_file = path_manager.base_path / f'RUN/data/to_DART/ic_g1_{seconds_model}_{days_model}_{mem}.nc'
+        temp_concentration_file = path_manager.base_path / f'RUN/data/to_DART/temp_conc_{mem}.nc'
+        temp1_concentration_file = path_manager.base_path / f'RUN/data/to_DART/temp1_conc_{mem}.nc'
+
+        # Ensure the output directory exists
+        final_concentration_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(f"logs_orchestrator/subprocess_out_{mem}.log", "a") as log_file:  # Append log file
+            logging.info(f"Processing member {mem}")
+
+            # Step 1: Select SP, P, and T from the input meteo file
+            subprocess.run(
+                ["cdo", "selname,SP,P,T", meteo_file, temp_output_meteo],
+                stdout=log_file, stderr=log_file, check=True
+            )
+
+            # Step 2: Select the timestep from the rounded timestamp
+            subprocess.run(
+                ["cdo", f"seltimestep,{rounded_timestamp.hour}", temp_output_meteo, temp_output_meteo_selected],
+                stdout=log_file, stderr=log_file, check=True
+            )
+
+            # Step 3: Shift time by 1 hour
+            subprocess.run(
+                ["cdo", "shifttime,1hour", temp_output_meteo_selected, temp_output_meteo_plus1],
+                stdout=log_file, stderr=log_file, check=True
+            )
+
+            # Step 4: Convert FARM concentrations using arconv
+            subprocess.run(
+                ["/gporq3/minni/FARM-DART/arconv-2.5.10", arconv_input_file, arconv_output_file, "1"],
+                stdout=log_file, stderr=log_file, check=True
+            )
+
+            # Step 5: Use ncks to append SP, P, and T variables to the FARM concentration file
+            subprocess.run(
+                ["ncks", "-A", "-v", "P,SP,T", temp_output_meteo_plus1, arconv_output_file],
+                stdout=log_file, stderr=log_file, check=True
+            )
+
+            # Step 6: Copy the result to the final concentration file
+            subprocess.run(["cp", arconv_output_file, final_concentration_file], check=True)
+
+            # Step 7: Set reference time in the concentration file
+            subprocess.run(
+                ["cdo", "-setreftime,1900-01-01,00:00:00,days", final_concentration_file, temp_concentration_file],
+                check=True
+            )
+
+            # Step 8: Set calendar to Gregorian
+            subprocess.run(
+                ["cdo", "-setcalendar,gregorian", temp_concentration_file, temp1_concentration_file],
+                check=True
+            )
+
+            # Step 9: Remove unnecessary attributes from the concentration file
+            subprocess.run(
+                ["ncatted", "-a", "add_offset,,d,,", temp1_concentration_file], check=True
+            )
+            subprocess.run(
+                ["ncatted", "-a", "scale_factor,,d,,", temp1_concentration_file], check=True
+            )
+            subprocess.run(
+                ["ncatted", "-a", "_FillValue,,d,,", temp1_concentration_file], check=True
+            )
+            subprocess.run(
+                ["ncatted", "-a", "missing_value,,d,,", temp1_concentration_file], check=True
+            )
+
+            # Step 10: Copy the cleaned file to the final concentration file location
+            subprocess.run(["cp", temp1_concentration_file, final_concentration_file], check=True)
+
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Command failed for member {mem}: {e.cmd}")
+        logging.error(f"Error output: {e.output}")
+        raise
+    finally:
+        # Cleanup: Remove temporary files
+        temp_files = [
+            temp_output_meteo,
+            temp_output_meteo_plus1,
+            temp_output_meteo_selected,
+            arconv_output_file,
+            temp_concentration_file,
+            temp1_concentration_file,
+        ]
+        for temp_file in temp_files:
+            if temp_file.exists():
+                temp_file.unlink(missing_ok=True)
+
+def prepare_farm_to_dart_nc_par(path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model, no_mems):
+    # Get number of workers from LSF or default to 1
+    max_workers = 10
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(process_member, mem, path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model): mem for mem in range(no_mems)}
+        for future in as_completed(futures):
+            try:
+                future.result()  # Check if there were exceptions
+            except Exception as e:
+                logging.error(f"An error occurred during processing of member {futures[future]}: {e}")
+
 
 
 class CleanupContext:
@@ -703,7 +816,7 @@ def prepare_farm_to_dart_nc(
                 temp_file.unlink(missing_ok=True)
 
 
-def wait_for_jobs_to_finish(job_ids):
+def are_jobs_terminated_correctly(job_ids):
     # breakpoint()
     while True:
         running_jobs = []
@@ -713,7 +826,7 @@ def wait_for_jobs_to_finish(job_ids):
 
         if not running_jobs:
             logger.info(f"{job_ids} have finished")
-            break
+            return ic_g1_exist()
         else:
             logger.info(
                 f"Jobs still running: {running_jobs}. Waiting for them to finish..."
@@ -726,4 +839,17 @@ def submit_and_wait(commands_with_directories: list):
     # breakpoint()
     for command, directory in commands_with_directories:
         job_ids = run_command_in_directory_bsub(command, directory)
-    wait_for_jobs_to_finish(job_ids)
+    if not are_jobs_terminated_correctly(job_ids):
+        job_ids = run_command_in_directory_bsub(command,directory)
+
+def ic_g1_exist(no_mems, output_dir, date):
+    file_name = f'ic_g1_{date}.nc'
+    for mem in range(no_mems):
+        file_path  = Path((output_dir / file_name)
+        if os.path.exists(file_path):
+            print(f"The core {file_name} for mem {mem} exists in the directory")
+            return True
+        else:
+            print(f"The core {file_name} for mem {mem} does not exist in the directory")
+            return False
+

@@ -10,14 +10,14 @@ paths:
   log_directory: "logs_orchestrator/"
 
 time:
-  start_time: "2023-03-01 09:00:00"
-  end_time: "2023-03-01 18:00:00"
+  start_time: "2023-03-01 23:00:00"
+  end_time: "2023-03-03 09:00:00"
   dt_seconds: 3600  # Time step in seconds
 
 # Assimilation settings
 assimilation:
   ass_var: "c_SO2"
-  no_mems: 5
+  no_mems: 20
 
 # DART processing configuration
 dart:
@@ -30,7 +30,7 @@ dart:
 # Job monitoring settings
 monitoring:
   job_check_interval: 10  # Check every 10 seconds
-  cores: 5  # Number of cores to use
+  cores: 20  # Number of cores to use
 
 # Satellite data processing
 satellite_data:
