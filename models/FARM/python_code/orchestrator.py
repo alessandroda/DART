@@ -75,8 +75,8 @@ class FarmToDartPipeline:
         )
         timestamp_farm = TimeManager.round_to_closest_hour(
             self.time_manager.current_time
-        )
-        string_to_replace_template = f'{timestamp_farm.strftime("%Y%m%d%H")}.bsh'
+        ).strftime("%Y%m%d%H")
+        string_to_replace_template = f'{timestamp_farm}.bsh'
 
         command_farm_run = "run_submit_ens" + string_to_replace_template
         path_run = (
@@ -87,8 +87,8 @@ class FarmToDartPipeline:
         replace_nml_template(
             input_nml_path=self.path_manager.run_submit_farm_template,
             entries_tbr_dict={
-                "da_date_start": timestamp_farm.strftime("%Y%m%d%H"),
-                "da_date_end": timestamp_farm.strftime("%Y%m%d%H"),
+                "da_date_start": timestamp_farm,
+                "da_date_end": timestamp_farm,
             },
             output_nml_path=path_run,
         )
@@ -96,7 +96,7 @@ class FarmToDartPipeline:
         commands_with_directories = [
             (command_farm_run, self.path_manager.path_submit_bsh)
         ]
-        submit_and_wait(commands_with_directories)
+        submit_and_wait(self.path_manager, commands_with_directories, timestamp_farm, self.no_mems)
         
     def process_satellite_data(self):
         logger.info(f"2. Increment time and search for orbit")

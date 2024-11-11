@@ -816,7 +816,7 @@ def prepare_farm_to_dart_nc(
                 temp_file.unlink(missing_ok=True)
 
 
-def are_jobs_terminated_correctly(job_ids):
+def are_terminated_correctly(job_ids : list, path_manager : PathManager, timestamp_farm : str, no_mems : int) -> bool:
     # breakpoint()
     while True:
         running_jobs = []
@@ -826,30 +826,29 @@ def are_jobs_terminated_correctly(job_ids):
 
         if not running_jobs:
             logger.info(f"{job_ids} have finished")
-            return ic_g1_exist()
+            return ic_g1_exist(path_manager, timestamp_farm, no_mems)
         else:
             logger.info(
                 f"Jobs still running: {running_jobs}. Waiting for them to finish..."
             )
             time.sleep(30)
 
-
-
-def submit_and_wait(commands_with_directories: list):
+def submit_and_wait(path_manager : PathManager, commands_with_directories: list, timestamp_farm : str, no_mems : int) -> bool:
     # breakpoint()
     for command, directory in commands_with_directories:
         job_ids = run_command_in_directory_bsub(command, directory)
-    if not are_jobs_terminated_correctly(job_ids):
+    if not are_terminated_correctly(job_ids, path_manager, timestamp_farm, no_mems):
         job_ids = run_command_in_directory_bsub(command,directory)
 
-def ic_g1_exist(no_mems, output_dir, date):
-    file_name = f'ic_g1_{date}.nc'
+def ic_g1_exist(path_manager : PathManager, timestamp_farm : str, no_mems : int):
+    file_name = f'ic_g1_{timestamp_farm}.nc'
+    all_exist = True
     for mem in range(no_mems):
-        file_path  = Path((output_dir / file_name)
+        file_path  = Path(path_manager.base_path / f'RUN/data/OUTPUT_{mem}/OUT/{file_name}')
         if os.path.exists(file_path):
             print(f"The core {file_name} for mem {mem} exists in the directory")
-            return True
         else:
             print(f"The core {file_name} for mem {mem} does not exist in the directory")
-            return False
-
+            all_exist = False
+            break
+    return all_exist
