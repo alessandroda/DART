@@ -22,7 +22,7 @@ from orchestrator_utils import (
     modify_yaml_date
 )
  
-logging.basicConfig(filename=f'logs_orchestrator/farm_to_dart_{time.strftime("%Y%m%d_%H%M%S")}.log', format="%(asctime)s %(message)s", level=logging.INFO)
+logging.basicConfig(filename=f'logs_orchestrator/farm_to_dart_{time.strftime("%Y%m%d_%H%M%S")}.log', format="%(asctime)s [%(processName)s/%(threadName)s] %(levelname)s: %(message)s", level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
@@ -294,7 +294,7 @@ class FarmToDartPipeline:
             if orbit_filename:  # Only proceed if satellite data is found
                 obs_seq_name = self.run_obs_converter(orbit_filename)
                 
-                prepare_farm_to_dart_nc(
+                prepare_farm_to_dart_nc_par(
                     self.path_manager,
                     self.time_manager.simulated_time,
                     self.time_manager.simulated_time,

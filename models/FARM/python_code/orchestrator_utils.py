@@ -32,7 +32,7 @@ def process_member(mem, path_manager, timestamp_farm, rounded_timestamp, seconds
 
         # Ensure the output directory exists
         final_concentration_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(f"logs_orchestrator/subprocess_out_{mem}.log", "a") as log_file:  # Append log file
+        with open(f"logs_orchestrator/subprocess_out_{mem}_{rounded_timestamp.strftime("%Y%m%d%H")}.log", "a") as log_file:  # Append log file
             logging.info(f"Processing member {mem}")
 
             # Step 1: Select SP, P, and T from the input meteo file
@@ -116,15 +116,17 @@ def process_member(mem, path_manager, timestamp_farm, rounded_timestamp, seconds
                 temp_file.unlink(missing_ok=True)
 
 def prepare_farm_to_dart_nc_par(path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model, no_mems):
-    # Get number of workers from LSF or default to 1
-    max_workers = 10
+    max_workers = 48
+    logger.info("Starting the orchestration of FARM to DART NetCDF conversion")
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(process_member, mem, path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model): mem for mem in range(no_mems)}
         for future in as_completed(futures):
+            mem = futures[future]
             try:
                 future.result()  # Check if there were exceptions
+                logger.info(f"Member {mem} processed successfully.")
             except Exception as e:
-                logging.error(f"An error occurred during processing of member {futures[future]}: {e}")
+                logging.error(f"An error occurred during processing of member {mem}: {e}")
 
 
 
