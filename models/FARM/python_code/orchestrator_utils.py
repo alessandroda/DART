@@ -31,70 +31,64 @@ def process_member(mem, path_manager, timestamp_farm, rounded_timestamp, seconds
 
         # Ensure the output directory exists
         final_concentration_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(f"logs_orchestrator/subprocess_out_{mem}.log", "a") as log_file:  # Append log file
-            logging.info(f"Processing member {mem}")
+        logging.info(f"Processing member {mem}")
 
-            # Step 1: Select SP, P, and T from the input meteo file
-            subprocess.run(
-                ["cdo", "selname,SP,P,T", meteo_file, temp_output_meteo],
-                stdout=log_file, stderr=log_file, check=True
-            )
+        # Step 1: Select SP, P, and T from the input meteo file
+        subprocess.run(
+            ["cdo", "selname,SP,P,T", meteo_file, temp_output_meteo], check=True
+        )
 
-            # Step 2: Select the timestep from the rounded timestamp
-            subprocess.run(
-                ["cdo", f"seltimestep,{rounded_timestamp.hour}", temp_output_meteo, temp_output_meteo_selected],
-                stdout=log_file, stderr=log_file, check=True
-            )
+        # Step 2: Select the timestep from the rounded timestamp
+        subprocess.run(
+            ["cdo", f"seltimestep,{rounded_timestamp.hour}", temp_output_meteo, temp_output_meteo_selected], check=True
+        )
 
-            # Step 3: Shift time by 1 hour
-            subprocess.run(
-                ["cdo", "shifttime,1hour", temp_output_meteo_selected, temp_output_meteo_plus1],
-                stdout=log_file, stderr=log_file, check=True
-            )
+        # Step 3: Shift time by 1 hour
+        subprocess.run(
+            ["cdo", "shifttime,1hour", temp_output_meteo_selected, temp_output_meteo_plus1], check=True
+        )
 
-            # Step 4: Convert FARM concentrations using arconv
-            subprocess.run(
-                ["/gporq3/minni/FARM-DART/arconv-2.5.10", arconv_input_file, arconv_output_file, "1"],
-                stdout=log_file, stderr=log_file, check=True
-            )
+        # Step 4: Convert FARM concentrations using arconv
+        subprocess.run(
+            ["/gporq3/minni/FARM-DART/arconv-2.5.10", arconv_input_file, arconv_output_file, "1"], check=True
+        )
 
-            # Step 5: Use ncks to append SP, P, and T variables to the FARM concentration file
-            subprocess.run(
-                ["ncks", "-A", "-v", "P,SP,T", temp_output_meteo_plus1, arconv_output_file],
-                stdout=log_file, stderr=log_file, check=True
-            )
+        # Step 5: Use ncks to append SP, P, and T variables to the FARM concentration file
+        subprocess.run(
+            ["ncks", "-A", "-v", "P,SP,T", temp_output_meteo_plus1, arconv_output_file], check=True
+        )
 
-            # Step 6: Copy the result to the final concentration file
-            subprocess.run(["cp", arconv_output_file, final_concentration_file], check=True)
+        # Step 6: Copy the result to the final concentration file
+        subprocess.run(["cp", arconv_output_file, final_concentration_file], check=True)
 
-            # Step 7: Set reference time in the concentration file
-            subprocess.run(
-                ["cdo", "-setreftime,1900-01-01,00:00:00,days", final_concentration_file, temp_concentration_file],
-                check=True
-            )
+        # Step 7: Set reference time in the concentration file
+        subprocess.run(
+            ["cdo", "-setreftime,1900-01-01,00:00:00,days", final_concentration_file, temp_concentration_file],
+            check=True
+        )
 
-            # Step 8: Set calendar to Gregorian
-            subprocess.run(
-                ["cdo", "-setcalendar,gregorian", temp_concentration_file, temp1_concentration_file],
-                check=True
-            )
+        # Step 8: Set calendar to Gregorian
+        subprocess.run(
+            ["cdo", "-setcalendar,gregorian", temp_concentration_file, temp1_concentration_file],
+            check=True
+        )
 
-            # Step 9: Remove unnecessary attributes from the concentration file
-            subprocess.run(
-                ["ncatted", "-a", "add_offset,,d,,", temp1_concentration_file], check=True
-            )
-            subprocess.run(
-                ["ncatted", "-a", "scale_factor,,d,,", temp1_concentration_file], check=True
-            )
-            subprocess.run(
-                ["ncatted", "-a", "_FillValue,,d,,", temp1_concentration_file], check=True
-            )
-            subprocess.run(
-                ["ncatted", "-a", "missing_value,,d,,", temp1_concentration_file], check=True
-            )
+        # Step 9: Remove unnecessary attributes from the concentration file
+        subprocess.run(
+            ["ncatted", "-a", "add_offset,,d,,", temp1_concentration_file], check=True
+        )
+        subprocess.run(
+            ["ncatted", "-a", "scale_factor,,d,,", temp1_concentration_file], check=True
+        )
+        subprocess.run(
+            ["ncatted", "-a", "_FillValue,,d,,", temp1_concentration_file], check=True
+        )
+        subprocess.run(
+            ["ncatted", "-a", "missing_value,,d,,", temp1_concentration_file], check=True
+        )
 
-            # Step 10: Copy the cleaned file to the final concentration file location
-            subprocess.run(["cp", temp1_concentration_file, final_concentration_file], check=True)
+        # Step 10: Copy the cleaned file to the final concentration file location
+        subprocess.run(["cp", temp1_concentration_file, final_concentration_file], check=True)
 
     except subprocess.CalledProcessError as e:
         logging.error(f"Command failed for member {mem}: {e.cmd}")
@@ -116,14 +110,17 @@ def process_member(mem, path_manager, timestamp_farm, rounded_timestamp, seconds
 
 def prepare_farm_to_dart_nc_par(path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model, no_mems):
     # Get number of workers from LSF or default to 1
-    max_workers = 10
+    max_workers = 48
+    logger.info("Starting the orchestration of FARM to DART NetCDF conversion")
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(process_member, mem, path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model): mem for mem in range(no_mems)}
         for future in as_completed(futures):
+            mem = futures[future]
             try:
                 future.result()  # Check if there were exceptions
+                logger.info(f"Member {mem} processed successfully.")
             except Exception as e:
-                logging.error(f"An error occurred during processing of member {futures[future]}: {e}")
+                logging.error(f"An error occurred during processing of member {mem}: {e}")
 
 
 
