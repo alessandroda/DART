@@ -19,9 +19,10 @@ from orchestrator_utils import (
     TimeManager,
     submit_and_wait,
     prepare_dart_to_farm_nc,
+    modify_yaml_date
 )
  
-logging.basicConfig(filename=f'logs_orchestrator/farm_to_dart_{time.strftime("%Y%m%d_%H%M%S")}.log', format="%(asctime)s [%(processName)s/%(threadName)s] %(levelname)s: %(message)s", level=logging.INFO)
+logging.basicConfig(filename=f'logs_orchestrator/farm_to_dart_{time.strftime("%Y%m%d_%H%M%S")}.log', format="%(asctime)s %(message)s", level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,6 @@ class FarmToDartPipeline:
     def __init__(self):
         # Load configuration from YAML file
         self.config = load_config(CONFIG_PATH)
-        
         # Setup path manager and time manager with loaded configurations
         self.path_manager = PathManager(
             base_path=self.config['paths']['base_path'],
@@ -83,16 +83,16 @@ class FarmToDartPipeline:
             self.path_manager.path_submit_bsh
             / f"run_submit_ens{string_to_replace_template}"
         )
-
+        list_mems = [str(mem) for mem in range(self.no_mems)]
         replace_nml_template(
             input_nml_path=self.path_manager.run_submit_farm_template,
             entries_tbr_dict={
                 "da_date_start": timestamp_farm,
                 "da_date_end": timestamp_farm,
+                "@no_mems_list": str(tuple(list_mems)).replace(',','')
             },
             output_nml_path=path_run,
         )
-
         commands_with_directories = [
             (command_farm_run, self.path_manager.path_submit_bsh)
         ]
@@ -185,6 +185,7 @@ class FarmToDartPipeline:
                 "$init_time_seconds": str(self.seconds_model),
                 "$first_obs_days": str(self.days_obs),
                 "$first_obs_seconds": str(self.seconds_obs),
+                "$no_mems": str(self.no_mems)
             },
             output_nml_path=self.path_manager.base_path
             / "DART/models/FARM/work/input.nml",
@@ -225,6 +226,7 @@ class FarmToDartPipeline:
             "./submit_filter.bsh", self.path_manager.path_submit_bsh, farm =
             False
         )
+        time.sleep(10)
         self.monitor_job(job_id)
 
     def monitor_job(self, job_id):
@@ -286,12 +288,13 @@ class FarmToDartPipeline:
         while self.time_manager.current_time <= self.time_manager.end_time:
             self.run_farm()  # Run FARM executable
             self.time_manager.simulated_time = self.time_manager.current_time + timedelta(hours=1)
+            modify_yaml_date(CONFIG_PATH, self.time_manager.simulated_time.strftime("%Y-%m-%d %H:00:00")) 
             self.set_days_seconds_model() 
             orbit_filename = self.process_satellite_data()  # Process satellite data
             if orbit_filename:  # Only proceed if satellite data is found
                 obs_seq_name = self.run_obs_converter(orbit_filename)
                 
-                prepare_farm_to_dart_nc_par(
+                prepare_farm_to_dart_nc(
                     self.path_manager,
                     self.time_manager.simulated_time,
                     self.time_manager.simulated_time,
