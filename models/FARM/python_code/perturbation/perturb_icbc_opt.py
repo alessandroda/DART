@@ -26,16 +26,16 @@ EARTH_RADIUS_KM = 6371.0
 # Settings class using Pydantic BaseSettings
 class Settings(BaseSettings):
     path_emissions: str = "/gporq3/minni/FARM-DART/perturbation_fields/"
-    emission_base_dir : str = 'data/st/2023/c-ifs/tmp/'
-    name_netcdfs: str = "out2023010300.nc"
+    emission_base_dir : str = 'data/bc_base_test/2023/c-ifs/tmp/08/'
+    name_netcdfs: str = "bc_20230801_int.nc"
     dim_to_groud_ncs: str = "time"
     tau: int = 6  # Time decorrelation scale in hours
     alpha: float = np.exp(-1 / tau)  # Smoothing coefficient
-    var: str = "c_NO2"
+    var: str = "c_SO2"
     mems: int = 20
-    corr_length_hz: float = 100000
+    corr_length_hz: float = 20000
     corr_length_vz: float = 500
-    spread: float = 0.2
+    spread: float = 0.5
     corr_time: int = 48
     max_workers: int = 1  # Number of threads
     
@@ -233,7 +233,7 @@ def recenter_and_rescale(field: np.ndarray, spread: float) -> np.ndarray:
 def perturb_emission():
     """Perturb emission data."""
     netcdfs = glob(settings.path_emissions + settings.emission_base_dir + settings.name_netcdfs)
-    
+    print(f'netcdfs : {netcdfs}')
     for netcdf_emi in netcdfs:
         try:
             emission_dataset = xr.open_dataset(netcdf_emi)

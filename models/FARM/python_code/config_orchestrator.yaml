@@ -1,42 +1,30 @@
-# General paths and environment configuration
-paths:
-  base_path: "/gporq3/minni/FARM-DART/"
-  env_python: "miniconda3/bin/python3.10"
-  listing_file: "DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03__listing.csv"
-  run_submit_farm_template: "RUN/script/templates/run_submit_ens.template.bsh"
-  path_submit_bsh: "RUN/script/auto_runs/"
-  path_filter: "DART/models/FARM/work/"
-  path_data: "RUN/data/"
-  log_directory: "logs_orchestrator/"
-
-time:
-  start_time: "2023-03-01 23:00:00"
-  end_time: "2023-03-03 09:00:00"
-  dt_seconds: 3600  # Time step in seconds
-
-# Assimilation settings
 assimilation:
-  ass_var: "c_SO2"
+  ass_var: c_SO2
   no_mems: 20
-
-# DART processing configuration
 dart:
-  obs_converters_dir: "DART/observations/obs_converters/S5P_TROPOMI_L3/"
-  work_dir: "DART/models/FARM/work/"
-  posteriors_dir: "RUN/data/posteriors/"
-  analysis_dir: "RUN/data/analysis/"
-  preassim_dir: "RUN/data/preassim/"
-
-# Job monitoring settings
-monitoring:
-  job_check_interval: 10  # Check every 10 seconds
-  cores: 20  # Number of cores to use
-
-# Satellite data processing
-satellite_data:
-  search_window_seconds: 1800  # +/- 30 minutes window to find orbit file
-
-# Logging configuration
+  analysis_dir: RUN/data/analysis/
+  obs_converters_dir: DART/observations/obs_converters/S5P_TROPOMI_L3/
+  posteriors_dir: RUN/data/posteriors/
+  preassim_dir: RUN/data/preassim/
+  work_dir: DART/models/FARM/work/
 logging:
-  level: "INFO"
-  format: "%(asctime)s %(message)s"
+  format: '%(asctime)s %(message)s'
+  level: INFO
+monitoring:
+  cores: 20
+  job_check_interval: 10
+paths:
+  base_path: /gporq3/minni/FARM-DART/
+  env_python: miniconda3/bin/python3.10
+  listing_file: DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03__listing.csv
+  log_directory: logs_orchestrator/
+  path_data: RUN/data/
+  path_filter: DART/models/FARM/work/
+  path_submit_bsh: RUN/script/auto_runs/
+  run_submit_farm_template: RUN/script/templates/run_submit_ens.template.bsh
+satellite_data:
+  search_window_seconds: 1800
+time:
+  dt_seconds: 3600
+  end_time: '2023-08-05 23:00:00'
+  start_time: '2023-08-02 17:00:00'

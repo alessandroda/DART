@@ -25,16 +25,16 @@ EARTH_RADIUS_KM = 6371.0
 # Settings class using Pydantic BaseSettings
 class Settings(BaseSettings):
     path_emissions: str = "/gporq3/minni/FARM-DART/perturbation_fields/"
-    emission_base_dir : str = 'data/emission_base_test/2023/emi/'
+    emission_base_dir : str = 'data/emission_base_test/2023/emi/08/'
     name_netcdfs: str = "HERMESv3_*.nc"
     dim_to_groud_ncs: str = "time"
     tau: int = 6  # Time decorrelation scale in hours
     alpha: float = np.exp(-1 / tau)  # Smoothing coefficient
     var: str = "veSO2"
     mems: int = 20
-    corr_length_hz: float = 100000
+    corr_length_hz: float = 200000
     corr_length_vz: float = 500
-    spread: float = 0.8
+    spread: float = 1.6
     corr_time: int = 24
     max_workers: int = 1  # Number of threads
 
