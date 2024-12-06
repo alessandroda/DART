@@ -5,10 +5,13 @@
 
 ![DARTlogo](guide/images/Dartboard7.png)
 
-# DART 
+# DART - FARM
 
-Welcome to DART, the **Data Assimilation Research Testbed**. DART is an open-source, 
-freely available community facility for ensemble data assimilation (DA). 
+Welcome to DART-FARM, a fork of the **Data Assimilation Research Testbed** that includes the Chemical Transport Model **FARM**
+
+[FARM model](http://www.farm-model.org/)
+
+[FORAIR-IT model](https://clima.sostenibilita.enea.it/research/FORAIR-IT)
 
 [The DART documentation is available online](https://dart-documentation.readthedocs.io/en/latest/).
 
@@ -16,23 +19,7 @@ There is a mailing list where we summarize updates to the DART repository and no
 recent bug fixes. It is not generally used for discussion so it's a low-traffic list. 
 To subscribe to the list, click on [Dart-users](http://mailman.ucar.edu/mailman/listinfo/dart-users). 
 
-#### Downloading DART
-
-DART is available through GitHub. To download the latest version of DART:
-
-```
-git clone https://github.com/NCAR/DART.git
-```
-
-#### Citing DART
-
-To cite DART, please use the following text:
-
-> The Data Assimilation Research Testbed (Version X.Y.Z) [Software]. (2021). Boulder, Colorado: UCAR/NSF NCAR/CISL/DAReS.
-> http://doi.org/10.5065/D6WQ0202
-
-and update the DART version and year as appropriate.
-
+#### 
 ### DAReS team
 
 DART is developed and maintained by the [Data Assimilation Research Section
