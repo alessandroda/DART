@@ -32,7 +32,7 @@ def process_member(mem, path_manager, timestamp_farm, rounded_timestamp, seconds
 
         # Ensure the output directory exists
         final_concentration_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(f"logs_orchestrator/subprocess_out_{mem}_{rounded_timestamp.strftime("%Y%m%d%H")}.log", "a") as log_file:  # Append log file
+        with open(f'logs_orchestrator/farm_to_dart_full_logs/subprocess_out_{mem}_{rounded_timestamp.strftime("%Y%m%d%H")}.log', "a") as log_file:  # Append log file
             logging.info(f"Processing member {mem}")
 
             # Step 1: Select SP, P, and T from the input meteo file

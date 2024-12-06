@@ -12,7 +12,7 @@ logging:
   level: INFO
 monitoring:
   cores: 20
-  job_check_interval: 10
+  job_check_interval: 7
 paths:
   base_path: /gporq3/minni/FARM-DART/
   env_python: miniconda3/bin/python3.10
@@ -26,5 +26,5 @@ satellite_data:
   search_window_seconds: 1800
 time:
   dt_seconds: 3600
-  end_time: '2023-08-05 23:00:00'
-  start_time: '2023-08-02 17:00:00'
+  end_time: '2023-08-31 23:00:00'
+  start_time: '2023-08-08 19:00:00'
