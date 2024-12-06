@@ -1,0 +1,6 @@
+# input_farm_file should contain the ens_member keyword
+ens_members : ['00']
+input_farm_file: "/gporq3/minni/FARM-DART/RUN/data/OUTPUT/OUT/conc_g1_{date}_withMET_arconv.nc"
+output_folder: "/gporq3/minni/FARM-DART/DART/models/FARM/projects/CAMEO/to_DART/"
+pol : SO2
+QA : False

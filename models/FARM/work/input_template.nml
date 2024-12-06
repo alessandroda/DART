@@ -2,7 +2,7 @@
    /
 
 &algorithm_info_nml
-   qceff_table_filename = '/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/qceff_table.csv'
+   qceff_table_filename = '../projects/CAMEO/qceff_table.csv'
    /
 
 &perfect_model_obs_nml
@@ -47,24 +47,24 @@
    output_state_file_list       = 'filter_output_list.txt'
    output_interval              = 1,
    output_members               = .true.
-   num_output_state_members     = 17,
+   num_output_state_members     = $no_mems,
    output_mean                  = .true.
    output_sd                    = .true.
    write_all_stages_at_end      = .false.
 
-   ens_size                     = 17,
+   ens_size                     = $no_mems,
    num_groups                   = 1,
    ! AD'A we should try with this setting to not genereate 50 ensemble
    perturb_from_single_instance = .false.,
-   perturbation_amplitude       = 0.5,
+   perturbation_amplitude       = 0.005,
    distributed_state            = .false.
 
    async                        = 0,
    adv_ens_command              = "",
 
-   obs_sequence_in_name         = "/mnt/mumbai_n4r5/dausilio/projects/DART/observations/obs_converters/S5P_TROPOMI_L3/work/$obs_sequence_name",
+   obs_sequence_in_name         = "$folder_obs_path/$obs_sequence_name",
    obs_sequence_out_name        = "$folder_path/obs_seq_$date_assim.final",
-   num_output_obs_members       = 16,
+   num_output_obs_members       = $no_mems,
    init_time_days               = $init_time_days,
    init_time_seconds            = $init_time_seconds,
    first_obs_days               = $first_obs_days,
@@ -72,13 +72,13 @@
    last_obs_days                = -1,
    last_obs_seconds             = -1,
 
-   inf_flavor                  = 0,                       0,
+   inf_flavor                  =  0,                       0,
    inf_initial_from_restart    = .false.,                 .false.,
    inf_sd_initial_from_restart = .false.,                 .false.,
    inf_deterministic           = .true.,                  .true.,
-   inf_initial                 = 1.0,                    1.0,
+   inf_initial                 = 1.02,                    1.0,
    inf_lower_bound             = 1.0,                     1.0,
-   inf_upper_bound             = 100.0,                   1000000.0,
+   inf_upper_bound             = 100.0,                   100.0,
    inf_damping                 = 0.9,                     1.0,
    inf_sd_initial              = 0.6,                     0.0,
    inf_sd_lower_bound          = 0.6,                     0.0,
@@ -124,7 +124,7 @@
    /
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'SAT_NO2_TROPOMI'
+   assimilate_these_obs_types = 'SAT_SO2_TROPOMI'
    evaluate_these_obs_types   = ''
    /
 
@@ -138,10 +138,10 @@
    /
 
 &model_nml
-   farm_template_filename = '../IRIDE_ens/to_DART/$template_farm'
+   farm_template_filename = '$template_farm'
    state_variables  = 'P',     'QTY_PRESSURE','NA', 'NA', 'UPDATE'
                       'SP',     'QTY_SURFACE_PRESSURE','NA', 'NA', 'UPDATE'
-                      'c_NO2', 'QTY_NO2', 'NA', 'NA', 'UPDATE'
+                      'c_SO2', 'QTY_SO2', 'NA', 'NA', 'UPDATE'
    time_step_days      = 0,
 !A.D using DA_SATOFFLINE approach
    time_step_seconds   = 5000
@@ -220,6 +220,21 @@
    /
 &obs_def_SAT_NO2_TROPOMI_nml
    /
+
+&fill_inflation_restart_nml
+
+   write_prior_inf    = .TRUE.
+   prior_inf_mean     = 1.01
+   prior_inf_sd       = 0.6
+
+   write_post_inf     = .FALSE.
+   post_inf_mean      = 1.0
+   post_inf_sd        = 0.6
+
+   single_file        = .FALSE.
+   input_state_files  = ''
+   verbose            = .FALSE.
+/
 
 &obs_def_SAT_SO2_TROPOMI_nml
    unit_conversion = 'ppb',

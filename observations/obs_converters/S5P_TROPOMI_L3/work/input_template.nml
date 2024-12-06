@@ -61,10 +61,10 @@
    /
 
 &model_grid_nml
-   dom_west  = 5.325,  !-25.075  
-   dom_east  = 19.20,  !45.125    
-   dom_south = 35.380, !29.95 
-   dom_north = 47.81  !72.05  
+   dom_west  = -25.075  
+   dom_east  = 45.125    
+   dom_south = 29.95 
+   dom_north = 72.05  
    nz = 16,
    dlon = 0.15,
    dlat = 0.104 !0.1,
@@ -80,6 +80,6 @@
    s5p_netcdf_file = '$file_path_s5p',
    s5p_out_file = '$file_out',
    vertical_ref_height = 975.0,
-   which_gas = 'SAT_NO2_TROPOMI'
+   which_gas = 'SAT_SO2_TROPOMI'
    /
 /

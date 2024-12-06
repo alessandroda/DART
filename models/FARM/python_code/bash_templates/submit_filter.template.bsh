@@ -1,0 +1,8 @@
+#!/bin/bash
+
+queue=cresco6_h4
+current_date=CURRENT_DATE
+proc=CORES
+bsub -n ${proc} -q ${queue} -o ${current_date}_filter.out -e ${current_date}_filter.err ./run_filter.bsh
+
+

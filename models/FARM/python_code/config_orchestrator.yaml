@@ -1,0 +1,30 @@
+assimilation:
+  ass_var: c_SO2
+  no_mems: 20
+dart:
+  analysis_dir: RUN/data/analysis/
+  obs_converters_dir: DART/observations/obs_converters/S5P_TROPOMI_L3/
+  posteriors_dir: RUN/data/posteriors/
+  preassim_dir: RUN/data/preassim/
+  work_dir: DART/models/FARM/work/
+logging:
+  format: '%(asctime)s %(message)s'
+  level: INFO
+monitoring:
+  cores: 20
+  job_check_interval: 7
+paths:
+  base_path: /gporq3/minni/FARM-DART/
+  env_python: miniconda3/bin/python3.10
+  listing_file: DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03__listing.csv
+  log_directory: logs_orchestrator/
+  path_data: RUN/data/
+  path_filter: DART/models/FARM/work/
+  path_submit_bsh: RUN/script/auto_runs/
+  run_submit_farm_template: RUN/script/templates/run_submit_ens.template.bsh
+satellite_data:
+  search_window_seconds: 1800
+time:
+  dt_seconds: 3600
+  end_time: '2023-08-31 23:00:00'
+  start_time: '2023-08-08 19:00:00'
