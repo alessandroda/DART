@@ -22,4 +22,11 @@ For information specific to the **DART-FARM** implementation, refer to the `READ
 For all the info related to DART please refer to the main repository and its documentation
 [The DART documentation is available online](https://dart-documentation.readthedocs.io/en/latest/).
 
-### Contributing
+## :busts_in_silhouette: About Us
+**Organizations**
+- [ENEA](https://www.enea.it/it)
+- [Arianet srl](https://www.aria-net.it/it/)
+- [SUEZ]()
+
+**Team**
+- Alessandro D’Ausilio, [ResearchGate](), [LinkedIn]()
