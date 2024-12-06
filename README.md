@@ -13,7 +13,7 @@ For more info about FARM:
 [FARM model](http://www.farm-model.org/)
 [FORAIR-IT model](https://clima.sostenibilita.enea.it/research/FORAIR-IT)
 
-<p align="center" width="100%"><img width="70%" src="imgs/" alt='DART-FARM application on S5P NO2 TROPOMI (ISDA 2024).'></p>
+<p align="center" width="100%"><img width="70%" src="IRIDE_tropomi_no2.png" alt='DART-FARM application on S5P NO2 TROPOMI (ISDA 2024).'></p>
 
 For all the info related to DART please refer to the main repository and its documentation
 [The DART documentation is available online](https://dart-documentation.readthedocs.io/en/latest/).
