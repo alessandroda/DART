@@ -15,6 +15,10 @@ For more info about FARM:
 
 <p align="center" width="100%"><img width="70%" src="IRIDE_obs_tropomi.png" alt='DART-FARM application on S5P NO2 TROPOMI (ISDA 2024).'></p>
 
+### **DART-FARM Model Implementation**
+For information specific to the **DART-FARM** implementation, refer to the `README.md` file located in:  
+**`models/FARM/README.md`**
+
 For all the info related to DART please refer to the main repository and its documentation
 [The DART documentation is available online](https://dart-documentation.readthedocs.io/en/latest/).
 
