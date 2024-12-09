@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     alpha: float = np.exp(-1 / tau)  # Smoothing coefficient
     var: str = "veSO2"
     mems: int = 20
-    corr_length_hz: float = 200000
+    corr_length_hz: float = 100000
     corr_length_vz: float = 500
     spread: float = 1.6
     corr_time: int = 24
@@ -43,6 +43,35 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def constrain_mean_to_target(dict_members, target_field, var_name):
+    """
+    Adjust the ensemble perturbations so that their mean matches the target field.
+
+    Args:
+        dict_members (dict): Dictionary of ensemble members.
+        target_field (np.ndarray): The target perturbed field (F1).
+        var_name (str): Name of the variable being adjusted.
+    """
+    # Calculate current ensemble mean
+    print("7.1: Calculating mean start")
+    ensemble_sum = np.zeros_like(target_field)
+    for imem in dict_members:
+        ensemble_sum += dict_members[imem][var_name].values
+    ensemble_mean = ensemble_sum / len(dict_members)
+    print("7.1: Calculating mean end")
+    # Adjust each member to ensure ensemble mean matches target_field
+    for imem in dict_members:
+        dict_members[imem][var_name].values -= (ensemble_mean - target_field)
+
+    # Verify the constraint
+    adjusted_sum = np.zeros_like(target_field)
+    for imem in dict_members:
+        adjusted_sum += dict_members[imem][var_name].values
+    adjusted_mean = adjusted_sum / len(dict_members)
+    assert np.allclose(adjusted_mean, target_field, atol=1e-6), "Ensemble mean does not match target field!"
+
 
 def process_time_step(i, time_step, emission_dataset, weights_dict, nx, ny, nz, A, grid_length, dict_members, chem_fac_pr):
     print(f'-------------------Time: {time_step.values}')
@@ -290,6 +319,13 @@ def perturb_emission():
                 dict_members[imem][settings.var][i, :, :, :] *= np.exp(chem_fac_t)
             chem_fac_pr = chem_fac
 
+            # After generating perturbations and before saving
+            print(f' 7- Constrain Ensemble Mean to Target Field')
+            constrain_mean_to_target(
+                dict_members=dict_members,
+                target_field=emission_dataset[settings.var].values,
+                var_name=settings.var,
+            )
         try:
             for imem in range(settings.mems):
                 dir_path = Path(settings.path_emissions) / 'emi_mems' /  f'emi_{imem}'
