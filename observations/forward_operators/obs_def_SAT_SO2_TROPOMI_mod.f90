@@ -38,7 +38,7 @@
 
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 !   case(SAT_SO2_TROPOMI)
-!       call get_expected_SAT_SO2_TROPOMI(state_handle, ens_size, location, obs_def%key, expected_obs, istatus)
+!       call get_expected_SAT_SO2_TROPOMI(state_handle, ens_size, location, obs_def%key, obs_value, amf_ratio, expected_obs, istatus)
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 
 ! BEGIN DART PREPROCESS READ_OBS_DEF
@@ -154,7 +154,7 @@ contains
 
 
 !------------------------------------------------------------------------------
-   subroutine get_expected_SAT_SO2_TROPOMI(state_handle, ens_size, location, key, val, istatus)
+   subroutine get_expected_SAT_SO2_TROPOMI(state_handle, ens_size, location, key, obs_sat, amf_ratio, val, istatus)
 !------------------------------------------------------------------------------
 !------------------------------------------------------------------------------
 !  Author: Alessandro D'Ausilio ,  Version 0: 08/03/2024
@@ -169,6 +169,8 @@ contains
       integer,             intent(in)  :: key
       ! Output parameters
       real(r8),            intent(out) :: val(ens_size)
+      real(r8),dimension(1),        intent(inout) :: obs_sat
+      real(r8),      intent(out) :: amf_ratio
       integer,             intent(out) :: istatus(ens_size)
 
       ! Local variables
@@ -314,6 +316,8 @@ contains
       do imem = 1, ens_size
          call AirMassFactorModel(tropomi_amf_local, tropomi_dim, model_conc_vcd(imem), model_conc_2d_kl(imem, :), amf_model(imem))
       end do
+      amf_ratio = tropomi_amf_local / amf_model(1)
+      obs_sat = obs_sat * tropomi_amf_local/amf_model
       val = model_conc_vcd*tropomi_amf_local/amf_model
       istatus = 0
 
