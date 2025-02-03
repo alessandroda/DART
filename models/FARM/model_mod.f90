@@ -306,9 +306,9 @@ contains
       ! Get variable indices and associated quantity
       call get_model_variable_indices(index_in, iloc, jloc, vloc, var_id = myvarid, dom_id = dom_id, kind_index=myqty)
       ! Check dimensions
-      if (grid_data%lons%nsize <= iloc .or. grid_data%lats%nsize <= jloc) then
-         call error_handler(E_MSG, routine, text = "Invalid index: Out of bounds for grid dimensions.")
-      end if
+      !if (grid_data%lons%nsize <= iloc .or. grid_data%lats%nsize <= jloc) then
+      !   call error_handler(E_MSG, routine, text = "Invalid index: Out of bounds for grid dimensions.")
+      !end if
 
       ! Set the location using set_location()
       location = set_location(real(grid_data%lons%vals(iloc), r8), real(grid_data%lats%vals(jloc), r8), grid_data%levs%vals(vloc), 3)

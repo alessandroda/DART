@@ -446,10 +446,12 @@ contains
             call get_expected_obs_from_def_distrib_state(state_ens_handle, num_ens, copy_indices, keys(i), &
                obs_def, obs_kind_ind, state_time, isprior, &
                assimilate_this_ob, evaluate_this_ob, obs_value, amf_ratio, expected_obs, istatus)
-            call replace_obs_values(seq, key_value, obs_value)
+            !if (.not. isprior) then
+            call replace_obs_values(seq, key_value, obs_value, 1)
             obs_err_var = get_obs_def_error_variance(obs_def)
             updated_error_variance = obs_err_var * amf_ratio**2
             call set_obs_def_error_variance(obs_def, updated_error_variance)
+            !endif
          endif
       end do
 

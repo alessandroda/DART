@@ -183,6 +183,7 @@ contains
       real(r8)                         :: tropomi_trop_kernel_local(ens_size,tropomi_dim)
       real(r8)                         :: tropomi_amf_local
       real(r8)                         :: amf_model(ens_size)
+      real(r8)                         :: amf_mean
       integer                          :: p_col_istatus(ens_size), int_conc_status(ens_size)
       type(location_type)              :: locS
       real(r8)                         :: mloc(3)
@@ -316,9 +317,11 @@ contains
       do imem = 1, ens_size
          call AirMassFactorModel(tropomi_amf_local, tropomi_dim, model_conc_vcd(imem), model_conc_2d_kl(imem, :), amf_model(imem))
       end do
-      amf_ratio = tropomi_amf_local / amf_model(1)
+      amf_mean = sum(amf_model) / size(amf_model)
+      amf_ratio = tropomi_amf_local / amf_mean
       obs_sat = obs_sat * tropomi_amf_local/amf_model
-      val = model_conc_vcd*tropomi_amf_local/amf_model
+      val = model_conc_vcd * tropomi_amf_local/amf_model
+            
       istatus = 0
 
    end subroutine get_expected_SAT_SO2_TROPOMI
