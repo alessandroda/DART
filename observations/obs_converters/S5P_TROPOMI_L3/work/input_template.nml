@@ -8,9 +8,7 @@
    obs_type_files          = '../../../../observations/forward_operators/obs_def_reanalysis_bufr_mod.f90',
                               '../../../../observations/forward_operators/obs_def_SAT_NO2_TROPOMI_mod.f90',
                               '../../../../observations/forward_operators/obs_def_SAT_SO2_TROPOMI_mod.f90',
-                              '../../../../observations/forward_operators/obs_def_TROPOMI_NO2_TOTAL_COL_mod.f90',
-                             '../../../../observations/forward_operators/obs_def_TROPOMI_NO2_TROP_COL_mod.f90',
-   /
+/
 
 &obs_kind_nml
  /
