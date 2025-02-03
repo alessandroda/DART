@@ -19,7 +19,8 @@ from orchestrator_utils import (
     TimeManager,
     submit_and_wait,
     prepare_dart_to_farm_nc,
-    modify_yaml_date
+    modify_yaml_date,
+    replace_priorinflation,
 )
  
 logging.basicConfig(filename=f'logs_orchestrator/farm_to_dart_{time.strftime("%Y%m%d_%H%M%S")}.log', format="%(asctime)s [%(processName)s/%(threadName)s] %(levelname)s: %(message)s", level=logging.INFO)
@@ -176,25 +177,22 @@ class FarmToDartPipeline:
             entries_tbr_dict={
                 "$obs_sequence_name": obs_seq_name,
                 "$folder_path": self.output_sim_folder,
-                "$folder_obs_path": self.path_manager.base_path
-                / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/",
+                "$folder_obs_path": self.path_manager.base_path / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/",
                 "$date_assim": self.time_manager.current_time.strftime("%Y%m%d_%H%M%S"),
-                "$template_farm": self.path_manager.base_path
-                / f"RUN/data/to_DART/ic_g1_{self.seconds_model}_{self.days_model}_0.nc",
+                "$template_farm": self.path_manager.path_data / f"to_DART/ic_g1_{self.seconds_model}_{self.days_model}_0.nc",
                 "$init_time_days": str(self.days_model),
                 "$init_time_seconds": str(self.seconds_model),
                 "$first_obs_days": str(self.days_obs),
                 "$first_obs_seconds": str(self.seconds_obs),
                 "$no_mems": str(self.no_mems)
             },
-            output_nml_path=self.path_manager.base_path
-            / "DART/models/FARM/work/input.nml",
+            output_nml_path=self.path_manager.base_path / "DART/models/FARM/work/input.nml",
         )
         # FILTER_INPUT_LIST.TXT
         replace_nml_template(
             self.path_manager.base_path / "DART/models/FARM/work/filter_input_list_template.txt",
-            entries_tbr_dict={
-                "$folder_path": self.path_manager.base_path / f"RUN/data/to_DART/",
+            entries_tbr_dict = {
+                "$folder_path": self.path_manager.path_data / f"to_DART/",
                 "$days": str(self.seconds_model),
                 "$seconds": str(self.days_model),
             },
@@ -203,8 +201,7 @@ class FarmToDartPipeline:
 
         # FILTER_OUTPUT_LIST.TXT
         replace_nml_template(
-            self.path_manager.base_path
-            / "DART/models/FARM/work/filter_output_list_template.txt",
+            self.path_manager.base_path / "DART/models/FARM/work/filter_output_list_template.txt",
             entries_tbr_dict={
                 "$folder_path": self.output_sim_folder,
                 "$date": self.time_manager.simulated_time.strftime("%Y%m%d%H"),
@@ -238,6 +235,7 @@ class FarmToDartPipeline:
                 print("Job completed successfully.")
                 # Handle successful job completion: move files
                 self.move_analysis_files()
+                replace_priorinflation(self.path_manager,self.time_manager.simulated_time.strftime("%Y%m%d%H"))
                 break
             else:
                 print("Job is still running. Waiting...")
@@ -293,7 +291,9 @@ class FarmToDartPipeline:
             orbit_filename = self.process_satellite_data()  # Process satellite data
             if orbit_filename:  # Only proceed if satellite data is found
                 obs_seq_name = self.run_obs_converter(orbit_filename)
-                
+                if not os.path.exists(self.path_manager.base_path / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/{obs_seq_name}"): 
+                    logger.info(f'{obs_seq_name} does not exists. skip assim cycle')
+                    continue
                 prepare_farm_to_dart_nc_par(
                     self.path_manager,
                     self.time_manager.simulated_time,
@@ -313,9 +313,19 @@ class FarmToDartPipeline:
             logger.info(
                 f"Completed processing for {self.time_manager.current_time.strftime('%Y-%m-%d %H:%M')}"
             )
+#            if self.time_manager.simulated_time.hour == 0:
+#                cleanup_days(self.time_manager.simulated_time, 2, path_manager)
         logger.info("Pipeline execution completed.")
 
-
+#def cleanup_days(current_time : datetime, days_before : int, path_manager)
+#        #current_time shift two days back
+#        try:
+#            for hour in range(1,23):
+#            # os.remove(path_manager.ic_g1_{date_str}{hour}.nc)
+#            logger.info(f'removed ic_g1: ic_g1{date_str}{hour}.nc')
+#        except:
+#            logger.warning(f'{date_str}{hour} does not exist')
+    
 # Instantiate and run the pipeline
 pipeline = FarmToDartPipeline()
 pipeline.run_pipeline()

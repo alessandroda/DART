@@ -19,19 +19,18 @@ logger = logging.getLogger(__name__)
 def process_member(mem, path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model):
     try:
         meteo_file = f'/gporq3/minni/CAMEO/RUN/data/INPUT/METEO/ifsecmwf_d0_g1_{timestamp_farm.strftime("%Y%m%d")}.nc'
-        temp_output_meteo = path_manager.base_path / f'RUN/data/temp/output_meteo_{mem}.nc'
-        temp_output_meteo_plus1 = path_manager.base_path / f'RUN/data/temp/output_meteo_plus1_{mem}.nc'
-        temp_output_meteo_selected = path_manager.base_path / f'RUN/data/temp/output_meteo_selected_{mem}.nc'
+        temp_output_meteo = path_manager.path_data / f'temp/output_meteo_{mem}.nc'
+        temp_output_meteo_plus1 = path_manager.path_data / f'temp/output_meteo_plus1_{mem}.nc'
+        temp_output_meteo_selected = path_manager.path_data / f'temp/output_meteo_selected_{mem}.nc'
+        arconv_input_file = path_manager.path_data / f'OUTPUT_{mem}/OUT/ic_g1_{rounded_timestamp.strftime("%Y%m%d%H")}.nc'
+        arconv_output_file = path_manager.path_data / f'temp/arconv_output_{mem}.nc'
         
-        arconv_input_file = path_manager.base_path / f'RUN/data/OUTPUT_{mem}/OUT/ic_g1_{rounded_timestamp.strftime("%Y%m%d%H")}.nc'
-        arconv_output_file = path_manager.base_path / f'RUN/data/temp/arconv_output_{mem}.nc'
-        
-        final_concentration_file = path_manager.base_path / f'RUN/data/to_DART/ic_g1_{seconds_model}_{days_model}_{mem}.nc'
-        temp_concentration_file = path_manager.base_path / f'RUN/data/to_DART/temp_conc_{mem}.nc'
-        temp1_concentration_file = path_manager.base_path / f'RUN/data/to_DART/temp1_conc_{mem}.nc'
+        final_concentration_file = path_manager.path_data / f'to_DART/ic_g1_{seconds_model}_{days_model}_{mem}.nc'
+        temp_concentration_file =  path_manager.path_data / f'to_DART/temp_conc_{mem}.nc'
+        temp1_concentration_file = path_manager.path_data  / f'to_DART/temp1_conc_{mem}.nc'
 
         # Ensure the output directory exists
-        final_concentration_file.parent.mkdir(parents=True, exist_ok=True)
+        #final_concentration_file.parent.mkdir(parents=True, exist_ok=True)
         with open(f'logs_orchestrator/farm_to_dart_full_logs/subprocess_out_{mem}_{rounded_timestamp.strftime("%Y%m%d%H")}.log', "a") as log_file:  # Append log file
             logging.info(f"Processing member {mem}")
 
@@ -233,7 +232,7 @@ class PathManager:
         self.path_submit_bsh = self.base_path / path_submit_bsh
         self.path_filter = self.base_path / path_filter
         self.log_paths = log_paths
-        self.path_data = self.base_path / path_data
+        self.path_data = Path(self.base_path / path_data).resolve()
 
         self.check_paths_exist()
 
@@ -373,9 +372,10 @@ def set_date_gregorian(year, month, day, hours=0, minutes=0, seconds=0):
         errstring = f"year,mon,day,hour,min,sec {year} {month} {day} {hours} {minutes} {seconds} not a valid date."
         raise ValueError(errstring)
 
-    if month != 2 and any([day > month_day for month_day in days_per_month]):
+    #if month != 2 and any([day > month_day for month_day in days_per_month]):
+    #    raise ValueError(f"month ({month}) does not have {day} days.")
+    if day > days_per_month[month-1]:
         raise ValueError(f"month ({month}) does not have {day} days.")
-
     # Check for leap year
     leap = is_leap_year(year)
 
@@ -685,29 +685,27 @@ def prepare_farm_to_dart_nc(
             logging.info
             meteo_file = f'/gporq3/minni/CAMEO/RUN/data/INPUT/METEO/ifsecmwf_d0_g1_{timestamp_farm.strftime("%Y%m%d")}.nc'
 
-            temp_output_meteo = path_manager.base_path / "RUN/data/temp/output_meteo.nc"
+            temp_output_meteo = path_manager.path_data / "/temp/output_meteo.nc"
             temp_output_meteo_plus1 = (
-                path_manager.base_path / "RUN/data/temp/output_meteo_plus1.nc"
+                path_manager.path_data / "/temp/output_meteo_plus1.nc"
             )
             temp_output_meteo_selected = (
-                path_manager.base_path / "RUN/data/temp/output_meteo_selected.nc"
+                path_manager.path_data / "/temp/output_meteo_selected.nc"
             )
             logging.info('Running ARCONV for the members')
             arconv_input_file = (
-                path_manager.base_path
-                / f'RUN/data/OUTPUT_{mem}/OUT/ic_g1_{rounded_timestamp.strftime("%Y%m%d%H")}.nc'
+                path_manager.path_data / f'/OUTPUT_{mem}/OUT/ic_g1_{rounded_timestamp.strftime("%Y%m%d%H")}.nc'
             )
-            arconv_output_file = path_manager.base_path / "RUN/data/temp/arconv_output.nc"
+            arconv_output_file = path_manager.path_data / "/temp/arconv_output.nc"
 
             final_concentration_file = (
-                path_manager.base_path
-                / f"RUN/data/to_DART/ic_g1_{seconds_model}_{days_model}_{mem}.nc"
+                path_manager.path_data / f"/to_DART/ic_g1_{seconds_model}_{days_model}_{mem}.nc"
             )
             temp_concentration_file = (
-                path_manager.base_path / "RUN/data/to_DART/temp_conc.nc"
+                path_manager.path_data / "/to_DART/temp_conc.nc"
             )
             temp1_concentration_file = (
-                path_manager.base_path / "RUN/data/to_DART/temp1_conc.nc"
+                path_manager.path_data / "/to_DART/temp1_conc.nc"
             )
 
             final_concentration_file.parent.mkdir(parents=True, exist_ok=True)
@@ -897,3 +895,41 @@ def ic_g1_not_existing(path_manager : PathManager, timestamp_farm : str, no_mems
             logger.info(f"The core {file_name} for mem {mem} does not exist in the directory")
             mems_not_existing.append(mem)
     return mems_not_existing
+
+
+def replace_priorinflation(path_manager: PathManager, timestamp_farm: str):
+    """
+    Replaces the priorinflation files in the FARM model's working directory.
+
+    Args:
+        path_manager (PathManager): Object containing the base path.
+        timestamp_farm (str): Timestamp for logging purposes.
+    """
+    # Define file names
+    file_mappings = {
+        "output_priorinf_mean.nc": "input_priorinf_mean.nc",
+        "output_priorinf_sd.nc": "input_priorinf_sd.nc",
+    }
+
+    # Define working directory
+    work_path = Path(path_manager.base_path / 'DART/models/FARM/work/')
+    
+    logger.info(f"Starting renaming of priorinflation files for next run: {timestamp_farm}")
+
+    for input_file, output_file in file_mappings.items():
+        try:
+            # Resolve full paths
+            src = work_path / input_file
+            dest = work_path / output_file
+
+            # Rename the file
+            if src.exists():
+                src.rename(dest)
+                logger.info(f"Renamed {src} to {dest}")
+            else:
+                logger.warning(f"Source file not found: {src}")
+        except Exception as e:
+            logger.error(f"Failed to rename {input_file} to {output_file}: {e}")
+
+    logger.info(f"Finished renaming priorinflation files for run: {timestamp_farm}")
+
