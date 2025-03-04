@@ -846,7 +846,7 @@ def modify_yaml_date(file_path, new_date):
         logger.error(f"An error occurred: {e}")
         
 
-def submit_and_wait(path_manager : PathManager, commands_with_directories: list, timestamp_farm : str, no_mems : int) -> bool:
+def submit_and_wait(path_manager : PathManager, commands_with_directories: list, timestamp_farm : str, no_mems : int, case_dir : str) -> bool:
     for command, directory in commands_with_directories:
         job_ids = run_command_in_directory_bsub(command, directory)
         time.sleep(10)
@@ -860,7 +860,8 @@ def submit_and_wait(path_manager : PathManager, commands_with_directories: list,
             entries_tbr_dict={
                 "da_date_start": timestamp_farm_min1.strftime('%Y%m%d%H'),
                 "da_date_end": timestamp_farm_min1.strftime('%Y%m%d%H'),
-                "@no_mems_list": str(tuple(list_mems)).replace(',','')
+                "@no_mems_list": str(tuple(list_mems)).replace(',',''),
+                "@case_dir" : case_dir
             },
             output_nml_path= directory / command,
         )
@@ -888,7 +889,7 @@ def ic_g1_not_existing(path_manager : PathManager, timestamp_farm : str, no_mems
     file_name = f'ic_g1_{timestamp_farm}.nc'
     mems_not_existing = []
     for mem in range(no_mems):
-        file_path  = Path(path_manager.base_path / f'RUN/data/OUTPUT_{mem}/OUT/{file_name}')
+        file_path  = Path(path_manager.path_data / f'OUTPUT_{mem}/OUT/{file_name}')
         if os.path.exists(file_path):
             logger.info(f"The core {file_name} for mem {mem} exists in the directory {os.path.getsize(file_path)} bytes")
         else:

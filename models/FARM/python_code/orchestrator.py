@@ -1,3 +1,4 @@
+import argparse
 import shutil
 import time
 import pandas as pd
@@ -27,15 +28,16 @@ logging.basicConfig(filename=f'logs_orchestrator/farm_to_dart_{time.strftime("%Y
 
 logger = logging.getLogger(__name__)
 
+parser = argparse.ArgumentParser(description="Python orchestrator for FARM-DART")
+parser.add_argument("-c", "--conf", type=str, required=True, help="Path to the YAML config file")
+args = parser.parse_args()
 
-CONFIG_PATH = "config_orchestrator.yaml"
-
+CONFIG_PATH = args.conf
 
 def load_config(file_path):
+    print(f"Using config file: {file_path}")
     with open(file_path, 'r') as file:
         return yaml.safe_load(file)
-
-
 
 class FarmToDartPipeline:
     def __init__(self):
@@ -68,6 +70,7 @@ class FarmToDartPipeline:
         self.output_sim_folder = None
         self.ass_var = self.config['assimilation']['ass_var']
         self.no_mems = self.config['assimilation']['no_mems']
+        self.case_dir = self.config['assimilation']['case_dir']
         
 
     def run_farm(self):
@@ -90,7 +93,8 @@ class FarmToDartPipeline:
             entries_tbr_dict={
                 "da_date_start": timestamp_farm,
                 "da_date_end": timestamp_farm,
-                "@no_mems_list": str(tuple(list_mems)).replace(',','')
+                "@no_mems_list": str(tuple(list_mems)).replace(',',''),
+                "@case_dir": self.case_dir
             },
             output_nml_path=path_run,
         )
@@ -109,6 +113,13 @@ class FarmToDartPipeline:
             self.listing,
         )
         if orbit_filename.empty:
+            return False
+
+        orbit_filename["start_time"] = pd.to_datetime(orbit_filename["start_time"])
+        orbit_filename = orbit_filename[orbit_filename["start_time"].dt.hour >= 10]
+
+        if orbit_filename.empty:
+            logger.info(f'No valid orbit file found after 10 AM.{orbit_filename["start_time"]}')
             return False
 
         logger.info(f"Orbit file found: {orbit_filename['filename'].values[0]}")
@@ -290,6 +301,7 @@ class FarmToDartPipeline:
             self.set_days_seconds_model() 
             orbit_filename = self.process_satellite_data()  # Process satellite data
             if orbit_filename:  # Only proceed if satellite data is found
+            #if False:
                 obs_seq_name = self.run_obs_converter(orbit_filename)
                 if not os.path.exists(self.path_manager.base_path / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/{obs_seq_name}"): 
                     logger.info(f'{obs_seq_name} does not exists. skip assim cycle')
