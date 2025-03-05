@@ -28,9 +28,11 @@ class Settings(BaseSettings):
     emission_base_dir : str = 'data/emission_base_test/2023/emi/08/'
     name_netcdfs: str = "HERMESv3_*.nc"
     dim_to_groud_ncs: str = "time"
-    tau: int = 6  # Time decorrelation scale in hours
-    alpha: float = np.exp(-1 / tau)  # Smoothing coefficient
     var: str = "veSO2"
+# convention sub_dir_emi
+# 0000 : 0 spread, 0 vz, 0 hz, 0 corr_time
+# ex: 2000 means there are 
+    sub_dir_emi : str = '0000'
     mems: int = 20
     corr_length_hz: float = 100000
     corr_length_vz: float = 500
@@ -62,8 +64,13 @@ def constrain_mean_to_target(dict_members, target_field, var_name):
     ensemble_mean = ensemble_sum / len(dict_members)
     print("7.1: Calculating mean end")
     # Adjust each member to ensure ensemble mean matches target_field
+    print(f"7.1test: target_field {target_field.shape}")
+    print(f"7.2test: ensemble_mean {ensemble_mean.shape}")
+    epsilon = 1e-6
+    ensemble_mean_safe = np.maximum(ensemble_mean, epsilon)
+    scaling_factor = target_field / ensemble_mean_safe
     for imem in dict_members:
-        dict_members[imem][var_name].values -= (ensemble_mean - target_field)
+        dict_members[imem][var_name].values *= scaling_factor
 
     # Verify the constraint
     adjusted_sum = np.zeros_like(target_field)
@@ -328,7 +335,7 @@ def perturb_emission():
             )
         try:
             for imem in range(settings.mems):
-                dir_path = Path(settings.path_emissions) / 'emi_mems' /  f'emi_{imem}'
+                dir_path = Path(settings.path_emissions) / 'emi_mems' / f'emi_{imem}' / f'{settings.var}_{settings.sub_dir_emi}'
                 file_name = f'{os.path.basename(netcdf_emi).strip(".nc")}_{imem}.nc'
                 print(file_name) 
                 path_filename = dir_path / file_name

@@ -1,7 +1,9 @@
 assimilation:
   ass_var: c_SO2
-  case_name: data_cr
+  case_dir: data_cr
   no_mems: 20
+cluster:
+  cresco_queue: cameo_h144
 dart:
   analysis_dir: RUN/data_cr/analysis/
   obs_converters_dir: DART/observations/obs_converters/S5P_TROPOMI_L3/
@@ -28,4 +30,4 @@ satellite_data:
 time:
   dt_seconds: 3600
   end_time: '2023-08-16 00:00:00'
-  start_time: '2023-08-03 11:00:00'
+  start_time: '2023-08-07 06:00:00'

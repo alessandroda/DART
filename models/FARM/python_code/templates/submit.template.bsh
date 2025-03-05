@@ -1,0 +1,141 @@
+#!/bin/sh 
+
+export OMP_NUM_THREADS=24
+executable=farm
+date_arg=$1
+inifile=$2
+
+slots=`awk 'END{print NR}' $LSB_DJOB_HOSTFILE`
+N_procs=`echo "$slots/$OMP_NUM_THREADS" | bc`
+N_procs_host=`echo "$N_procs/$(sort -u $LSB_DJOB_HOSTFILE | wc -l)" | bc`
+for host in `sort -u $LSB_DJOB_HOSTFILE`
+do
+for proc in `seq 1 $N_procs_host`
+do
+echo $host >> $SCRATCH/hosts.$LSB_JOBID
+done
+done
+
+#------------------------------------------------------------
+#cp -f $NAMELIST/farm_template.ini      farm_template.tpl                 
+#cp -f $NAMELIST/farmdasat_template.ini      farm_5.1_template.ini                 
+#cp -f $NAMELIST/farmdasat.nml               farmdasat.nml
+
+#dd=`echo $date | cut -b"1-8"`
+
+year1=`echo $date_arg | cut -b"1-4"`
+month1=`echo $date_arg | cut -b"5 6"`
+day1=`echo $date_arg | cut -b"7 8"`
+dd1=${year1}${month1}${day1}
+date_stpp1=`date -d "$dd1 +${step} day" +%Y%m%d`
+yearp1=`echo $date_stpp1 | cut -b"1-4"`
+monthp1=`echo $date_stpp1 | cut -b"5 6"`
+dayp1=`echo $date_stpp1 | cut -b"7 8"`
+#date_stpm1=`date -d "$dd1 -${step} day" +%Y%m%d`
+#yearm1=`echo $date_stpm1 | cut -b"1-4"`
+#monthm1=`echo $date_stpm1 | cut -b"5 6"`
+#daym1=`echo $date_stpm1 | cut -b"7 8"`
+
+#hh=`echo ${date_arg} | cut -b"9 10"`
+
+#h_stpp1="${year1}-${month1}-${day1} ${hh}"
+#hour_stpp1=`date -d "${h_stpp1} +${step} hour" +%Y%m%d%H`
+#yearp1_ic=`echo $hour_stpp1 | cut -b"1-4"`
+#monthp1_ic=`echo $hour_stpp1 | cut -b"5 6"`
+#dayp1_ic=`echo $hour_stpp1 | cut -b"7 8"`
+
+#hour1=0
+#hour2=0
+
+#-----------------------------------------------------------
+# check sulle IC
+#-----------------------------------------------------------
+# IC
+ic_file=${SCRATCH}/OUT/ic_g1_${date_arg}.nc
+
+#if [ ! -f ${ic_file} ]; then
+#   echo "IC file: "${ic_file}" not found!!"
+#   exit
+#else
+#   build_time=${year1}"-"${month1}"-"${day1}"T00:00:00"
+#   time_check=`cdo -s showtimestamp ${ic_file} | awk '{print $1}'`
+#   if [ ${time_check} != ${build_time} ]; then
+#      echo "["elaborating ${date}"]: time record in "${ic_file} " is not correct. It should be = "${time_check}
+#      exit
+#   fi
+#fi
+ln -fs ${ic_file}      ic_g1.nc
+cp -f ${ic_file} ${SCRATCH}/INI/.
+
+#EMISSION
+ln -fs  $EMISSION/HERMESv3_${dd1}00.nc          diffemi_g1.nc       #daily HERMES
+#ln -fs  $EMISSION/HERMESv3_${year1}${month1}0100.nc          diffemi_g1.nc  #monthly HERMES
+#FIRE
+ln -fs  $FIRE/FarmFire_${dd1}_tag_hr.nc           FarmFire_g1.nc
+#POLLEN
+# ln -fs  $POLLEN/EmiPollen_${date}.nc            pollen.nc
+#BOUNDARY
+#ln -fs ${BOUNDARY}/bound_g1_${dd1}.lat.nc bound.lat.nc
+#ln -fs ${BOUNDARY}/bound_g1_${dd1}.top.nc bound.top.nc
+rm bound.lat.nc bound.top.nc bound.lat.nextday.nc bound.top.nextday.nc bound.lat.tmp.nc bound.top.tmp.nc
+cdo seltimestep,1 ${BOUNDARY}/bound_g1_${date_stpp1}.lat.nc bound.lat.nextday.nc
+cdo seltimestep,1 ${BOUNDARY}/bound_g1_${date_stpp1}.top.nc bound.top.nextday.nc
+cdo mergetime ${BOUNDARY}/bound_g1_${dd1}.lat.nc bound.lat.nextday.nc bound.lat.tmp.nc
+cdo mergetime ${BOUNDARY}/bound_g1_${dd1}.top.nc bound.top.nextday.nc bound.top.tmp.nc
+cdo inttime,${dd1},00:00:00,1hours bound.lat.tmp.nc bound.lat.nc
+cdo inttime,${dd1},00:00:00,1hours bound.top.tmp.nc bound.top.nc
+rm bound.lat.nextday.nc bound.top.nextday.nc bound.lat.tmp.nc bound.top.tmp.nc
+
+#METEO
+ln -fs $METEO/ifsecmwf_d0_g1_${dd1}.nc    meteo_g1.nc
+#ln -fs $METEO/meteo_g1_${date}.nc    meteo_g1.nc
+#SURFPRO
+ln -fs $SURFPRO/surf_${dd1}_g1.nc   surfpro_g1.nc
+#OBS
+#ln -fs $OBS/obs_CO_${year1}${month1}${day1}.csv       obs_CO.csv
+#ln -fs $OBS/obs_SO2_${year1}${month1}${day1}.csv      obs_SO2.csv
+#ln -fs $OBS/obs_O3_${year1}${month1}${day1}.csv       obs_O3.csv
+#ln -fs $OBS/obs_NO2_${year1}${month1}${day1}.csv      obs_NO2.csv
+#ln -fs $OBS/obs_PM10_${year1}${month1}${day1}.csv     obs_PM10.csv
+#ln -fs $OBS/obs_PM25_${year1}${month1}${day1}.csv     obs_PM25.csv
+
+# CORRH
+#ln -fs $OBS/CO_GGarknc.nc    CO_GGarknc.nc
+#ln -fs $OBS/NO2_GGarknc.nc   NO2_GGarknc.nc
+#ln -fs $OBS/O3_GGarknc.nc    O3_GGarknc.nc
+#ln -fs $OBS/PM10_GGarknc.nc  PM10_GGarknc.nc
+#ln -fs $OBS/PM25_GGarknc.nc  PM25_GGarknc.nc
+#ln -fs $OBS/SO2_GGarknc.nc   SO2_GGarknc.nc
+
+
+#ANCILLARY FILES
+rm -f metadata.txt projections.txt species.ini farm
+cp -f ${NAMELIST}/metadata.txt .
+cp -f ${NAMELIST}/projections.txt  .
+cp -f ${NAMELIST}/farm_species.ini  species.ini
+#sed -e "s/year1/${year1}/g" \
+#  -e "s/year2/${year2}/g" \
+#  -e "s/month1/${month1}/g" \
+#  -e "s/month2/${month2}/g" \
+#  -e "s/day1/${day1}/g" \
+#  -e "s/day2/${day2}/g" \
+#  -e "s/hour1/${hour1}/g" \
+#  -e "s/hour2/${hour2}/g" \
+#  -e "s/dayyear/${dayyear}/g" \
+#  -e "s/dayrest/${dayyear1}/g" \
+#  -e "s/flag_farmda/no/g" \
+#  farm_template.tpl > farm.ini
+
+#cp -f farm.ini ${SCRATCH}/INI/farm_${year1}${month1}${day1}.ini
+#rm -f  farm_template.tpl
+
+cp -f ${EXE}/farm.saprc99f_pops-Hg.aero3_new.rosenbrock.MPI.OMP.6.0.intel.x  farm
+
+#------------------------------------------------------------
+
+sleep 10
+
+#mpirun --mca plm_rsh_agent blaunch.sh -n "$N_procs" --hostfile $SCRATCH/hosts."$LSB_JOBID" $executable  ./farm.ini
+mpirun --mca plm_rsh_agent blaunch.sh -n "$N_procs" --hostfile $SCRATCH/hosts."$LSB_JOBID" $executable  $inifile
+
+sleep 10

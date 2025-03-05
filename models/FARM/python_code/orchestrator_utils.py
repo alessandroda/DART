@@ -846,7 +846,8 @@ def modify_yaml_date(file_path, new_date):
         logger.error(f"An error occurred: {e}")
         
 
-def submit_and_wait(path_manager : PathManager, commands_with_directories: list, timestamp_farm : str, no_mems : int, case_dir : str) -> bool:
+def submit_and_wait(path_manager : PathManager, commands_with_directories:
+        list, timestamp_farm : str, no_mems : int, case_dir : str, cresco_queue: str) -> bool:
     for command, directory in commands_with_directories:
         job_ids = run_command_in_directory_bsub(command, directory)
         time.sleep(10)
@@ -861,7 +862,8 @@ def submit_and_wait(path_manager : PathManager, commands_with_directories: list,
                 "da_date_start": timestamp_farm_min1.strftime('%Y%m%d%H'),
                 "da_date_end": timestamp_farm_min1.strftime('%Y%m%d%H'),
                 "@no_mems_list": str(tuple(list_mems)).replace(',',''),
-                "@case_dir" : case_dir
+                "@case_dir" : case_dir,
+                "@cresco_queue" : cresco_queue
             },
             output_nml_path= directory / command,
         )

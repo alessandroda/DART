@@ -71,7 +71,7 @@ class FarmToDartPipeline:
         self.ass_var = self.config['assimilation']['ass_var']
         self.no_mems = self.config['assimilation']['no_mems']
         self.case_dir = self.config['assimilation']['case_dir']
-        
+        self.cresco_queue = self.config['cluster']['cresco_queue']
 
     def run_farm(self):
         logger.info(
@@ -94,14 +94,16 @@ class FarmToDartPipeline:
                 "da_date_start": timestamp_farm,
                 "da_date_end": timestamp_farm,
                 "@no_mems_list": str(tuple(list_mems)).replace(',',''),
-                "@case_dir": self.case_dir
+                "@case_dir": self.case_dir,
+                "@cresco_queue" : self.cresco_queue
             },
             output_nml_path=path_run,
         )
         commands_with_directories = [
             (command_farm_run, self.path_manager.path_submit_bsh)
         ]
-        submit_and_wait(self.path_manager, commands_with_directories, timestamp_farm, self.no_mems)
+        submit_and_wait(self.path_manager, commands_with_directories,
+                timestamp_farm, self.no_mems, self.case_dir, self.cresco_queue)
         
     def process_satellite_data(self):
         logger.info(f"2. Increment time and search for orbit")
@@ -226,6 +228,7 @@ class FarmToDartPipeline:
             entries_tbr_dict={
                 "CURRENT_DATE": self.time_manager.simulated_time.strftime("%Y%m%d%H"),
                 "CORES": str(5),
+                "QUEUE": self.cresco_queue
             },
             output_nml_path=self.path_manager.path_submit_bsh / "submit_filter.bsh",
         )

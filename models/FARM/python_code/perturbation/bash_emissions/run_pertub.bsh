@@ -1,0 +1,17 @@
+#!/bin/bash
+
+format_date() {
+    date -I -d "$1"
+}
+start_date="2023-08-14"
+end_date="2023-08-14"
+current_date=$(format_date "$start_date")
+end_date=$(format_date "$end_date")
+cd /gporq3/minni/FARM-DART/DART/models/FARM/python_code/perturbation/bash_emissions/
+queue=cresco6_h144
+while [ "$current_date" != "$(format_date "$end_date + 1 day")" ]; do
+    echo "Running template.bsh for date: $current_date"
+    bsub -n 4 -q ${queue} -o ${current_date}_pert.out -e ${current_date}_pert.err ./perturb_fields_emission.bsh "$current_date"
+    current_date=$(format_date "$current_date + 1 day")
+done
+

@@ -1,0 +1,24 @@
+#!/bin/bash
+export LD_LIBRARY_PATH=/gporq2/scratch_0/usr/forecast/LIB6_INTEL/lib64:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=/gporq2/scratch_0/usr/forecast/LIB6_INTEL/lib:$LD_LIBRARY_PATH
+export PATH=/gporq2/scratch_0/usr/forecast/LIB6_INTEL/bin:$PATH
+source /gporq3/minni/FARM-DART/miniconda3/etc/profile.d/conda.sh
+#Define date parameters
+DATE=$1
+HOUR=$2
+YEAR=$(echo $DATE | cut -c1-4)
+DATE_WITHOUT_DASH=$(echo $DATE | sed 's/-//g')
+VAR="veSO2"
+MEMS=20
+export EMISSION_PATH_EMISSIONS="/gporq3/minni/FARM-DART/perturbation_fields/"
+export EMISSION_EMISSION_BASE_DIR="/data/emission_base_test/2023/emi/08/"
+export EMISSION_NAME_NETCDFS="HERMESv3_${DATE_WITHOUT_DASH}00.nc"
+echo "HERMESv3_${DATE_WITHOUT_DASH}00.nc"
+export EMISSION_MEMS=$MEMS
+export EMISSION_VAR=$VAR
+export EMISSION_CORR_TIME=24
+export EMISSION_CORR_LENGTH_VZ=500
+export EMISSION_CORR_LENGTH_HZ=200000
+export EMISSION_SPREAD=3.2
+export EMISSION_SUB_DIR_EMI="1000"
+/gporq3/minni/FARM-DART/miniconda3/bin/python3.10 -u /gporq3/minni/FARM-DART/DART/models/FARM/python_code/perturbation/perturb_emi_opt.py 
