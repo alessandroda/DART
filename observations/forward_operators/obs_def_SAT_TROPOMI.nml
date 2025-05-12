@@ -5,6 +5,8 @@
    g = 9.8_r8,
    max_model_levs = 16,
    max_model_p_levs = 17,
+   amf_correction = .false.,
+   unit_conversion = 'ppb'
    /
 
 &obs_def_SAT_NO2_TROPOMI_nml
@@ -14,5 +16,17 @@
    g = 9.8_r8,
    max_model_levs = 16,
    max_model_p_levs = 17,
+   amf_correction = .false.,
+   unit_conversion = 'ppb'
+   /
+&obs_def_SAT_HCHO_TROPOMI_nml
+   tropomi_dim = 34,
+   max_obs = 1000000,
+   Mw_HCHO = 30.031,
+   g = 9.8_r8,
+   max_model_levs = 16,
+   max_model_p_levs = 17,
+   amf_correction = .false.,
+   unit_conversion = 'ppb'
    /
 /

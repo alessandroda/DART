@@ -84,8 +84,8 @@ module obs_def_SAT_NO2_TROPOMI_mod
 
    public ::  get_expected_SAT_NO2_TROPOMI, write_tropomi_no2,read_tropomi_no2, set_obs_def_no2_tropomi
 
-   integer, parameter               :: max_model_levs = 16
-   integer, parameter               :: max_model_p_levs = 17
+   integer, parameter               :: max_model_levs = 17
+   integer, parameter               :: max_model_p_levs = 18
 
 ! version controlled file description for error handling, do not edit
    character(len=256), parameter :: source   = &
@@ -102,9 +102,9 @@ module obs_def_SAT_NO2_TROPOMI_mod
    real(r8), parameter :: density = 1000.0_r8   ! water density in kg/m^3
 
    integer :: max_pressure_intervals = 1000   ! increase as needed
-   real(r8)   :: farm_heights(16) =(/ &
-      20.,   65.,  125.,  210.,  325.,  480.,  690.,  975., 1360., &
-      1880., 2580., 3525., 4805., 6290., 7790., 9290./)
+   real(r8)   :: farm_heights(17) =(/ &
+      20., 65., 125., 210., 325., 480., 690., 975., 1360., 1880., 2580., 3525., 4805., &
+      6290., 8040., 9790., 11790./)
 ! default samples the atmosphere between the surface and 200 hPa
 ! at the model level numbers.  if model_levels is set false,
 ! then the default samples at 40 heights, evenly divided in
@@ -116,17 +116,16 @@ module obs_def_SAT_NO2_TROPOMI_mod
    ! true: sfc is separate from 3d grid
    integer  :: num_pressure_intervals = 30
    integer, parameter :: tropomi_dim = 34 ! hardcoded
-   integer, parameter :: nretr = 1 ! hardcoded
-   integer, parameter, dimension(nretr) :: nla  = 34! hardcoded
    integer, parameter :: max_obs = 1000000 ! number of intervals if model_levels is F
    integer,  dimension(max_obs)   :: tropomi_nlevels
    real(r8),dimension(tropomi_dim, max_obs) :: kernel_trop_px
    real(r8),dimension(tropomi_dim, max_obs) :: pressure_px
    real(r8),dimension(max_obs) :: amf
    character(len=6), parameter :: S5Pstring = 'FO_params'
-   logical :: amf_from_model = .true.
-   namelist /obs_def_SAT_NO2_TROPOMI_nml/ model_levels, pressure_top,  &
-      separate_surface_level, num_pressure_intervals
+   character(len=126) :: unit_conversion = 'ugm3'
+   logical :: amf_correction = .false.
+
+   namelist /obs_def_SAT_NO2_TROPOMI_nml/ unit_conversion, amf_correction, 
 
 contains
 
@@ -156,7 +155,7 @@ contains
 
 
 !------------------------------------------------------------------------------
-   subroutine get_expected_SAT_NO2_TROPOMI(state_handle, ens_size, location, key, val, istatus)
+   subroutine get_expected_SAT_NO2_TROPOMI(state_handle, ens_size, location, key, obs_sat, amf_ratio, val, istatus)
 !------------------------------------------------------------------------------
 !------------------------------------------------------------------------------
 !  Author: Alessandro D'Ausilio ,  Version 0: 08/03/2024
@@ -171,6 +170,8 @@ contains
       integer,             intent(in)  :: key
       ! Output parameters
       real(r8),            intent(out) :: val(ens_size)
+      real(r8),dimension(1),        intent(inout) :: obs_sat
+      real(r8),      intent(out) :: amf_ratio
       integer,             intent(out) :: istatus(ens_size)
 
       ! Local variables
@@ -183,6 +184,7 @@ contains
       real(r8)                         :: model_conc_vcd_alt(ens_size)
       real(r8)                         :: tropomi_pres_local(ens_size,tropomi_dim +1)
       real(r8)                         :: tropomi_trop_kernel_local(ens_size,tropomi_dim)
+      real(r8)                         :: tropomi_amf_local
       real(r8)                         :: amf_local(ens_size)
       integer                          :: p_col_istatus(ens_size), int_conc_status(ens_size)
       type(location_type)              :: locS
@@ -207,7 +209,8 @@ contains
       ! Initialize arrays
       tropomi_pres_local = 0.0_r8
       tropomi_trop_kernel_local = 0.0_r8
-
+      tropomi_amf_local = 0.0_r8
+      tropomi_amf_local = amf(key)
       ! Populate tropomi_pres_local and tropomi_trop_kernel_local arrays
       do imem = 1, ens_size
          do level_ith = 1, tropomi_dim
@@ -246,17 +249,18 @@ contains
       nz = 1
       !     FARM species field at pixel position
       model_levels_conc: do
+         if(nz == max_model_levs) then
+            istatus = 0
+            num_levs = nz - 1
+            exit model_levels_conc
+         end if
          locS = set_location(mloc(1),mloc(2),farm_heights(nz),VERTISHEIGHT)
          call interpolate(state_handle, ens_size, locS, QTY_NO2, model_conc(:, nz), int_conc_status)
          ! call track_status(ens_size, int_conc_status, model_conc(:, nz), istatus, return_now)
          ! if(return_now) return
          if (any(int_conc_status /= 0)) then
             model_conc(:, nz) = MISSING_R8
-            num_levs = nz - 1
-            if(nz == 17) then
-               istatus = 0
-            end if
-            exit model_levels_conc
+
          endif
          nz = nz + 1
       enddo model_levels_conc
@@ -300,23 +304,43 @@ contains
       ! conversion ug/m3 * Pa to mol/m2
       do imem = 1, ens_size
          do level_ith = 1, tropomi_dim
-            model_conc_2d_kl(imem, level_ith) = UnitConversion_ugm3Pa_molm2(model_conc_2d_kl(imem, level_ith))
+            select case (unit_conversion)
+             case ('ppb')
+               model_conc_2d_kl(imem, level_ith) = UnitConversion_ppbPa_molm2(model_conc_2d_kl(imem, level_ith))
+             case ('ugm3')
+               model_conc_2d_kl(imem, level_ith) = UnitConversion_ugm3Pa_molm2(model_conc_2d_kl(imem, level_ith))
+            end select
+
          end do
       end do
       model_conc_vcd = 0.0_r8
-      model_conc_vcd_alt = 0.0_r8
       do imem = 1, ens_size
          call ApplyKernel(tropomi_dim, tropomi_trop_kernel_local(imem, :), model_conc_2d_kl(imem, :), model_conc_vcd(imem))
       end do
-      ! vcd using the standard air mass factor
-      do imem = 1, ens_size
-         ! compute partial column sx
-         call PartialColumn(nretr,tropomi_dim,nla,model_conc_2d_kl(imem, :),Sx(imem,:))
-         ! compute alternative air mass factor correction M_m
-         call AltAirMassFactor(nretr,tropomi_dim,amf_local,tropomi_trop_kernel_local(imem, :),model_conc_2d_kl(imem, :),Sx(imem,:),model_conc_vcd_alt(imem))
-      end do
+      if (amf_correction) then
 
-      val = model_conc_vcd
+        amf_model = 0.0_r8
+        do imem = 1, ens_size
+            call AirMassFactorModel(tropomi_amf_local, tropomi_dim, model_conc_vcd(imem), model_conc_2d_kl(imem, :), amf_model(imem))
+        end do
+
+        amf_mean = sum(amf_model) / size(amf_model)
+        amf_ratio = tropomi_amf_local / amf_mean
+
+        !amf_ratio = 1.0_r8
+        obs_sat = obs_sat * amf_ratio
+        if (ANY(obs_sat <= 0.0_r8)) then
+            return
+        endif
+        val = model_conc_vcd * tropomi_amf_local/amf_model
+        !val = model_conc_vcd
+        if (ANY(val <=0.0_r8)) then
+            return
+        endif
+        else
+        val = model_conc_vcd
+        amf_ratio = 1.0_r8
+      endif
       istatus = 0
 
    end subroutine get_expected_SAT_NO2_TROPOMI
@@ -1093,4 +1117,5 @@ contains
 end module obs_def_SAT_NO2_TROPOMI_mod
 
 ! END DART PREPROCESS MODULE CODE
+
 

@@ -123,8 +123,9 @@ module obs_def_SAT_SO2_TROPOMI_mod
    real(r8),dimension(max_obs) :: amf
    character(len=6), parameter :: S5Pstring = 'FO_params'
    character(len=126) :: unit_conversion = 'ugm3'
+   logical :: amf_correction = .false.
 
-   namelist /obs_def_SAT_SO2_TROPOMI_nml/ unit_conversion
+   namelist /obs_def_SAT_SO2_TROPOMI_nml/ unit_conversion, amf_correction
 
 contains
 
@@ -313,18 +314,32 @@ contains
       do imem = 1, ens_size
          call ApplyKernel(tropomi_dim, tropomi_trop_kernel_local(imem, :), model_conc_2d_kl(imem, :), model_conc_vcd(imem))
       end do
-      amf_model = 0.0_r8
-      do imem = 1, ens_size
-         call AirMassFactorModel(tropomi_amf_local, tropomi_dim, model_conc_vcd(imem), model_conc_2d_kl(imem, :), amf_model(imem))
-      end do
-      amf_mean = sum(amf_model) / size(amf_model)
-      amf_ratio = tropomi_amf_local / amf_mean
-      obs_sat = obs_sat * tropomi_amf_local/amf_model
-      val = model_conc_vcd * tropomi_amf_local/amf_model
-            
-      istatus = 0
+      if (amf_correction) then
 
-   end subroutine get_expected_SAT_SO2_TROPOMI
+        amf_model = 0.0_r8
+        do imem = 1, ens_size
+            call AirMassFactorModel(tropomi_amf_local, tropomi_dim, model_conc_vcd(imem), model_conc_2d_kl(imem, :), amf_model(imem))
+        end do
+
+        amf_mean = sum(amf_model) / size(amf_model)
+        amf_ratio = tropomi_amf_local / amf_mean
+
+        !amf_ratio = 1.0_r8
+        obs_sat = obs_sat * amf_ratio
+        if (ANY(obs_sat <= 0.0_r8)) then
+            return
+        endif
+        val = model_conc_vcd * tropomi_amf_local/amf_model
+        !val = model_conc_vcd
+        if (ANY(val <=0.0_r8)) then
+            return
+        endif
+        else
+        val = model_conc_vcd
+        amf_ratio = 1.0_r8
+        endif
+      istatus = 0
+      end subroutine get_expected_SAT_SO2_TROPOMI
 
    subroutine read_tropomi_so2(key, ifile, fform)
       integer, intent(out) :: key
@@ -861,4 +876,5 @@ contains
 end module obs_def_SAT_SO2_TROPOMI_mod
 
 ! END DART PREPROCESS MODULE CODE
+
 
