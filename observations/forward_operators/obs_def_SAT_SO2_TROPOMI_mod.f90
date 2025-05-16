@@ -823,7 +823,7 @@ contains
       real, parameter     ::  grav   = 9.80665 ! m/s2
       ! mole mass of air:
       real, parameter     ::  rho_air = 1.225     ! kg_air/m3
-      real, parameter     ::  Mw = 46.0055     ! g_tr/mol_tr
+      real, parameter     ::  Mw = 64.07     ! g_tr/mol_tr
       ! begin ----------------------------------
 
       ! unit conversion:

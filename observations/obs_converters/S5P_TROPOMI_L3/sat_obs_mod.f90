@@ -96,7 +96,7 @@ contains
          call Nc_GetVar(ncid,'amf_trop',var2d=self%amf_trop)
          call Nc_GetVar(ncid,'nla',ivar2d=self%nla)
          call Nc_Getattr(ncid, 'vcd', 'vcd_errvar:multiplication_factor_to_convert_to_molecules_percm2', self%vcd_multiplication_factor)
-      elseif ( ( pollutant == 'SO2' ) .or. ( pollutant == 'HCHO' ) ) then
+      elseif ( pollutant == 'SO2' ) then
          ! Kernel is defined up to the stratosphere
          ! Consistently with kernel and vcd amf is chosen for polluted scenario
          call Nc_GetVar(ncid,'kernel',var3d=self%kernel_trop)
@@ -104,7 +104,18 @@ contains
          call Nc_Getattr(ncid, 'vcd', 'vcd_errvar:multiplication_factor_to_convert_to_molecules_percm2', self%vcd_multiplication_factor)
          if ( .not. allocated(self%nla)) allocate(self%nla(self%nretr,self%npix))
          self%nla(:,:)=self%nlayer
-      else
+      elseif ( pollutant == 'HCHO' ) then
+         ! Kernel is defined up to the stratosphere
+         ! Consistently with kernel and vcd amf is chosen for polluted scenario
+         print*,'HCHO: ',trim(pollutant)
+         call Nc_GetVar(ncid,'kernel',var3d=self%kernel_trop)
+         print*,'kernel: ',trim(pollutant)
+         call Nc_GetVar(ncid,'amf_troposphere',var2d=self%amf_trop)
+         print*,'amf_troposhere: ',trim(pollutant)
+         call Nc_Getattr(ncid, 'vcd', 'vcd_errvar:multiplication_factor_to_convert_to_molecules_percm2', self%vcd_multiplication_factor)
+         if ( .not. allocated(self%nla)) allocate(self%nla(self%nretr,self%npix))
+         self%nla(:,:)=self%nlayer     
+     else
          print*,'WRONG pollutant: ',trim(pollutant)
       endif
 !Close File

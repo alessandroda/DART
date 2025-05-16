@@ -77,7 +77,7 @@
 &file_info_nml
    s5p_netcdf_file = '$file_path_s5p',
    s5p_out_file = '$file_out',
-   vertical_ref_height = 975.0,
-   which_gas = 'SAT_SO2_TROPOMI'
+   vertical_ref_height = 2580.0,
+   which_gas = '$obs_type'
    /
 /

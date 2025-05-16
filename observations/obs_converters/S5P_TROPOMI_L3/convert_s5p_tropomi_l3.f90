@@ -17,7 +17,7 @@ program convert_s5p_tropomi_L2
       static_init_obs_sequence, init_obs, write_obs_seq, &
       init_obs_sequence, get_num_obs, &
       set_copy_meta_data, set_qc_meta_data
-   use obs_kind_mod, only : SAT_NO2_TROPOMI, SAT_SO2_TROPOMI
+   use obs_kind_mod, only : SAT_NO2_TROPOMI, SAT_SO2_TROPOMI, SAT_HCHO_TROPOMI
    use obs_utilities_mod
    use sort_mod, only : index_sort
    use sat_obs_mod,   only : T_SatObs, ReadSatObs, SatObsDone
@@ -27,6 +27,7 @@ program convert_s5p_tropomi_L2
       nmlfileunit, do_nml_file, do_nml_term
    use obs_def_SAT_NO2_TROPOMI_mod, only : set_obs_def_no2_tropomi
    use obs_def_SAT_SO2_TROPOMI_mod, only : set_obs_def_so2_tropomi
+   use obs_def_SAT_HCHO_TROPOMI_mod, only : set_obs_def_hcho_tropomi
 
    implicit none
 
@@ -61,7 +62,7 @@ program convert_s5p_tropomi_L2
    real                          :: vertical_ref_height = 975.0
    character(len=256)            :: which_gas = "SAT_SO2_TROPOMI"
    real                          :: qa_thres = 0.75
-   character(len=256)            :: pollutant='SO2'
+   character(len=256)            :: pollutant='NO2'
    namelist /file_info_nml/ s5p_netcdf_file, s5p_out_file, vertical_ref_height, which_gas, qa_thres, pollutant
 
 !-----------------------------------------------------------------------
@@ -204,6 +205,10 @@ program convert_s5p_tropomi_L2
 
 
       select case (which_gas)
+       case ('SAT_HCHO_TROPOMI')
+         call set_obs_def_hcho_tropomi(n, avgk_obs_r8(:), REAL(tsat_obs%pressure(:,n), 8), REAL(tsat_obs%amf_trop(1, n), 8))
+         call create_3d_obs(REAL(tsat_obs%lat(n),8),REAL(tsat_obs%lon(n), 8), REAL(vertical_ref_height, 8), VERTISHEIGHT, REAL(tsat_obs%vcd(1, n), 8), &
+            SAT_HCHO_TROPOMI, obs_err, oday, osec, qc, obs, key = n)
        case ('SAT_SO2_TROPOMI')
          call set_obs_def_so2_tropomi(n, avgk_obs_r8(:), REAL(tsat_obs%pressure(:,n), 8), REAL(tsat_obs%amf_trop(1, n), 8))
          call create_3d_obs(REAL(tsat_obs%lat(n),8),REAL(tsat_obs%lon(n), 8), REAL(vertical_ref_height, 8), VERTISHEIGHT, REAL(tsat_obs%vcd(1, n), 8), &

@@ -1,0 +1,52 @@
+#!/bin/bash
+# Load conda environment
+
+#export LD_LIBRARY_PATH=/gporq2/scratch_0/usr/forecast/LIB6_INTEL/lib64:$LD_LIBRARY_PATH
+#export LD_LIBRARY_PATH=/gporq2/scratch_0/usr/forecast/LIB6_INTEL/lib:$LD_LIBRARY_PATH
+#export PATH=/gporq2/scratch_0/usr/forecast/LIB6_INTEL/bin:$PATH
+source /gporq3/minni/FARM-DART/miniconda3/etc/profile.d/conda.sh
+
+
+#Define date parameters
+DATE=$1
+#HOUR=$2
+YEAR=$(echo $DATE | cut -c1-4)
+DATE_WITHOUT_DASH=$(echo $DATE | sed 's/-//g')
+INPUT_FILE="cams_${DATE_WITHOUT_DASH}00_D1_raq.nc"
+INPUT_PATH="/gporq3/minni/FORAIR/C-IFS_CAMS/"
+TMP_DIR="/gporq3/minni/FARM-DART/perturbation_fields/data/bc_base_test/$YEAR/c-ifs/tmp/08/"
+MEM_DIR="/gporq3/minni/FARM-DART/perturbation_fields/c-ifs_mems/"
+RUN_DIR="/gporq3/minni/FARM-DART/RUN/data_no2/INPUT/C-IFS/"
+echo TMP_DIR
+OUTPUT_FILE="${TMP_DIR}/out${DATE_WITHOUT_DASH}.nc"
+MEMS=20
+VAR='c_NO2'
+export BC_PATH_EMISSIONS="/gporq3/minni/FARM-DART/perturbation_fields/"
+export BC_EMISSION_BASE_DIR="/data/bc_base_test/2023/c-ifs/tmp/08/"
+export BC_NAME_NETCDFS=bc_${DATE_WITHOUT_DASH}_int.nc
+export BC_MEMS=$MEMS
+export BC_VAR=$VAR
+export BC_CORR_LENGTH_HZ=200000
+export BC_CORR_LENGTH_VZ=2000
+export BC_SPREAD=1
+export PERTURB_DATE_START=${DATE_WITHOUT_DASH}
+export PERTURB_DATE_END=${DATE_WITHOUT_DASH}
+echo "running perturbation for" ${DATE_WITHOUT_DASH}
+
+# A.D'A 12.05.2025: commenting the replacement part
+/gporq3/minni/FARM-DART/miniconda3/bin/python3.10  -u /gporq3/minni/FARM-DART/perturbation_fields/data/bc_base_test/$YEAR/c-ifs/tmp/replace_perturb_into_original_thread1.py
+for num_mem in $(seq 0 $MEMS); do
+    echo $num_mem
+    #echo 'processing: ' ${num_mem}
+    #nccopy -k classic $MEM_DIR/c-ifs_${num_mem}/bc_${DATE_WITHOUT_DASH}_int.nc $MEM_DIR/c-ifs_${num_mem}/out${DATE_WITHOUT_DASH}c.nc  
+    #ncks -v $VAR $MEM_DIR/c-ifs_${num_mem}/out${DATE_WITHOUT_DASH}c.nc -O $MEM_DIR/c-ifs_${num_mem}/${VAR}_temp.nc
+    #ncks -x -v $VAR ${TMP_DIR}/bc_${DATE_WITHOUT_DASH}_int.nc -O $MEM_DIR/c-ifs_${num_mem}/tmp_out${DATE_WITHOUT_DASH}.nc
+    #ncks -A $MEM_DIR/c-ifs_${num_mem}/${VAR}_temp.nc $MEM_DIR/c-ifs_${num_mem}/tmp_out${DATE_WITHOUT_DASH}.nc
+    # 
+    #mv $MEM_DIR/c-ifs_${num_mem}/tmp_out${DATE_WITHOUT_DASH}$HOUR.nc $MEM_DIR/c-ifs_${num_mem}/out${DATE_WITHOUT_DASH}$HOUR.nc
+    #rm $MEM_DIR/c-ifs_${num_mem}/${VAR}_temp.nc
+    #rm $MEM_DIR/c-ifs_${num_mem}/out_${DATE_WITHOUT_DASH}_int.nc  
+    ./bounder.exe $MEM_DIR/c-ifs_${num_mem}/tmp_out${DATE_WITHOUT_DASH}.nc $RUN_DIR/c-ifs_${num_mem}/bound_g1_${DATE_WITHOUT_DASH} n lat,top, netcdf
+    #rm $MEM_DIR/c-ifs_${num_mem}/out${DATE_WITHOUT_DASH}c.nc
+done
+#rm ${TMP_DIR}/out${DATE_WITHOUT_DASH}$HOUR.nc

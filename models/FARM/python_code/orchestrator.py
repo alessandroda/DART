@@ -72,6 +72,9 @@ class FarmToDartPipeline:
         self.no_mems = self.config['assimilation']['no_mems']
         self.case_dir = self.config['assimilation']['case_dir']
         self.cresco_queue = self.config['cluster']['cresco_queue']
+        self.obs_type = self.config['assimilation']['obs_type']
+        self.state_variable_conc = self.config['assimilation']['ass_var']
+        self.state_variable_qty = self.config['assimilation']['state_variable_qty']
 
     def run_farm(self):
         logger.info(
@@ -146,9 +149,10 @@ class FarmToDartPipeline:
             / "DART/observations/obs_converters/S5P_TROPOMI_L3/work/input_template.nml",
             entries_tbr_dict={
                 "$file_path_s5p": self.path_manager.base_path
-                / f'DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/{orbit_filename}',
+                / f'DART/observations/obs_converters/S5P_TROPOMI_L3/data/NO2/{orbit_filename}',
                 "$file_out": self.path_manager.base_path
-                / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/{obs_seq_name}",
+                / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/NO2/C03dart/{obs_seq_name}",
+                "$obs_type" : self.obs_type,
             },
             output_nml_path=self.path_manager.base_path
             / "DART/observations/obs_converters/S5P_TROPOMI_L3/work/input.nml",
@@ -190,14 +194,17 @@ class FarmToDartPipeline:
             entries_tbr_dict={
                 "$obs_sequence_name": obs_seq_name,
                 "$folder_path": self.output_sim_folder,
-                "$folder_obs_path": self.path_manager.base_path / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/",
+                "$folder_obs_path": self.path_manager.base_path / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/NO2/C03dart/",
                 "$date_assim": self.time_manager.current_time.strftime("%Y%m%d_%H%M%S"),
                 "$template_farm": self.path_manager.path_data / f"to_DART/ic_g1_{self.seconds_model}_{self.days_model}_0.nc",
                 "$init_time_days": str(self.days_model),
                 "$init_time_seconds": str(self.seconds_model),
                 "$first_obs_days": str(self.days_obs),
                 "$first_obs_seconds": str(self.seconds_obs),
-                "$no_mems": str(self.no_mems)
+                "$no_mems": str(self.no_mems),
+                "$obs_type": str(self.obs_type),
+                "$state_variable_conc" : str(self.state_variable_conc),
+                "$state_variable_qty" : str(self.state_variable_qty)
             },
             output_nml_path=self.path_manager.base_path / "DART/models/FARM/work/input.nml",
         )
@@ -227,8 +234,8 @@ class FarmToDartPipeline:
             / "RUN/script/templates/submit_filter.template.bsh",
             entries_tbr_dict={
                 "CURRENT_DATE": self.time_manager.simulated_time.strftime("%Y%m%d%H"),
-                "CORES": str(5),
-                "QUEUE": self.cresco_queue
+                "CORES": str(20),
+                "QUEUE": 'cresco6_h4' #self.cresco_queue
             },
             output_nml_path=self.path_manager.path_submit_bsh / "submit_filter.bsh",
         )
@@ -306,7 +313,7 @@ class FarmToDartPipeline:
             if orbit_filename:  # Only proceed if satellite data is found
             #if False:
                 obs_seq_name = self.run_obs_converter(orbit_filename)
-                if not os.path.exists(self.path_manager.base_path / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/{obs_seq_name}"): 
+                if not os.path.exists(self.path_manager.base_path / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/NO2/C03dart/{obs_seq_name}"): 
                     logger.info(f'{obs_seq_name} does not exists. skip assim cycle')
                     continue
                 prepare_farm_to_dart_nc_par(

@@ -38,7 +38,7 @@
 
 ! BEGIN DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 !   case(SAT_NO2_TROPOMI)
-!       call get_expected_SAT_NO2_TROPOMI(state_handle, ens_size, location, obs_def%key, expected_obs, istatus)
+!       call get_expected_SAT_NO2_TROPOMI(state_handle, ens_size, location, obs_def%key, obs_value, amf_ratio, expected_obs, istatus)
 ! END DART PREPROCESS GET_EXPECTED_OBS_FROM_DEF
 
 ! BEGIN DART PREPROCESS READ_OBS_DEF
@@ -125,7 +125,7 @@ module obs_def_SAT_NO2_TROPOMI_mod
    character(len=126) :: unit_conversion = 'ugm3'
    logical :: amf_correction = .false.
 
-   namelist /obs_def_SAT_NO2_TROPOMI_nml/ unit_conversion, amf_correction, 
+   namelist /obs_def_SAT_NO2_TROPOMI_nml/ unit_conversion, amf_correction
 
 contains
 
@@ -179,13 +179,12 @@ contains
       real(r8)                         :: model_p(ens_size, max_model_p_levs)
       real(r8)                         :: model_conc(ens_size, max_model_levs)
       real(r8)                         :: model_conc_2d_kl(ens_size, tropomi_dim)
-      real(r8)                         :: Sx(ens_size, nretr)
       real(r8)                         :: model_conc_vcd(ens_size)
-      real(r8)                         :: model_conc_vcd_alt(ens_size)
       real(r8)                         :: tropomi_pres_local(ens_size,tropomi_dim +1)
       real(r8)                         :: tropomi_trop_kernel_local(ens_size,tropomi_dim)
       real(r8)                         :: tropomi_amf_local
-      real(r8)                         :: amf_local(ens_size)
+      real(r8)                         :: amf_model(ens_size)
+      real(r8)                         :: amf_mean
       integer                          :: p_col_istatus(ens_size), int_conc_status(ens_size)
       type(location_type)              :: locS
       real(r8)                         :: mloc(3)
@@ -218,8 +217,6 @@ contains
             tropomi_trop_kernel_local(imem, level_ith) = kernel_trop_px(level_ith, key)
          enddo
       enddo
-
-      amf_local = amf(key)
 
       ! Initialize istatus
       istatus = 0
@@ -340,10 +337,9 @@ contains
         else
         val = model_conc_vcd
         amf_ratio = 1.0_r8
-      endif
+        endif
       istatus = 0
-
-   end subroutine get_expected_SAT_NO2_TROPOMI
+      end subroutine get_expected_SAT_NO2_TROPOMI
 
    subroutine read_tropomi_no2(key, ifile, fform)
       integer, intent(out) :: key
@@ -368,7 +364,7 @@ contains
        CASE DEFAULT
          avg_kernels_1(1:tropomi_dim)  = read_tropomi_avg_kernels(ifile, tropomi_dim, fileformat)
          obs_p_1(1:tropomi_dim) = read_tropomi_pressure(ifile, tropomi_dim, fileformat)
-         amf_1 = read_tropomi_amf(ifile, fform=fform)
+         amf_1 = read_tropomi_amf(ifile,fileformat)
       END SELECT
       ! Dummy implementation, replace with actual code to read data from the file
 
@@ -391,11 +387,11 @@ contains
          write(ifile, *) pressure_px(:,key)
 11       format('pressure_px', i8)
          call write_tropomi_amf(ifile, key, fform)
+
       else
          call write_tropomi_avg_kernels(ifile, kernel_trop_px, key, tropomi_dim, fform)
          write(ifile,11) key
          write(ifile, *) pressure_px(:,key)
-         write(ifile, *) amf(key)
       end if
    end subroutine write_tropomi_no2
 
@@ -590,6 +586,34 @@ contains
       end if
    end subroutine FindIndexSurfacePressure
 
+   function read_tropomi_amf(ifile, fform)
+
+      integer,                    intent(in) :: ifile
+      real(r8)        :: read_tropomi_amf
+      character(len=*), intent(in), optional :: fform
+      integer :: keyin
+      character(len=14)   :: header
+      character(len=129) :: errstring
+      character(len=32)  :: fileformat
+
+      read_tropomi_amf = 0.0_r8
+
+      if ( .not. module_initialized ) call initialize_module
+
+      fileformat = "ascii"    ! supply default
+      if(present(fform)) fileformat = trim(adjustl(fform))
+
+
+      read(ifile, FMT='(a7, i8)') header, keyin    ! throw away keyin
+      if(header /= 'amf_tm5') then
+         call error_handler(E_ERR,'read tropomi amf', &
+            'Expected header "amf_tm5" in input file', source, revision, revdate)
+      endif
+      read(ifile, *) read_tropomi_amf
+
+   end function read_tropomi_amf
+
+
    function read_tropomi_avg_kernels(ifile, nlevels, fform)
 
       integer,                    intent(in) :: ifile, nlevels
@@ -648,32 +672,33 @@ contains
 
    end function read_tropomi_pressure
 
-   function read_tropomi_amf(ifile, fform)
+   subroutine write_tropomi_amf(ifile, key, fform)
 
       integer,                    intent(in) :: ifile
-      real(r8)        :: read_tropomi_amf
-      character(len=*), intent(in), optional :: fform
-      integer :: keyin
-      character(len=14)   :: header
+      character(len=32),          intent(in) :: fform
+
+      character(len=5)   :: header
       character(len=129) :: errstring
       character(len=32)  :: fileformat
-
-      read_tropomi_amf = 0.0_r8
+      integer :: key
 
       if ( .not. module_initialized ) call initialize_module
 
-      fileformat = "ascii"    ! supply default
-      if(present(fform)) fileformat = trim(adjustl(fform))
+      fileformat = trim(adjustl(fform))
+
+      if ( .not. module_initialized ) call initialize_module
+      if (ascii_file_format(fform)) then
+         write(ifile,11) key
+         write(ifile, *) amf(key)
+11       format('amf_tm5', i8)
 
 
-      read(ifile, FMT='(a7, i8)') header, keyin    ! throw away keyin
-      if(header /= 'amf_tm5') then
-         call error_handler(E_ERR,'read tropomi amf', &
-            'Expected header "amf_tm5" in input file', source, revision, revdate)
-      endif
-      read(ifile, *) read_tropomi_amf
+      else
+         write(ifile,11) key
+         write(ifile, *) amf(key)
+      end if
 
-   end function read_tropomi_amf
+   end subroutine write_tropomi_amf
 
    subroutine write_tropomi_avg_kernels(ifile, avg_kernels_temp, key, nlevels_temp, fform)
 
@@ -703,35 +728,6 @@ contains
       end if
 
    end subroutine write_tropomi_avg_kernels
-
-   subroutine write_tropomi_amf(ifile, key, fform)
-
-      integer,                    intent(in) :: ifile
-      character(len=32),          intent(in) :: fform
-
-      character(len=5)   :: header
-      character(len=129) :: errstring
-      character(len=32)  :: fileformat
-      integer :: key
-
-      if ( .not. module_initialized ) call initialize_module
-
-      fileformat = trim(adjustl(fform))
-
-      if ( .not. module_initialized ) call initialize_module
-      if (ascii_file_format(fform)) then
-         write(ifile,11) key
-         write(ifile, *) amf(key)
-11       format('amf_tm5', i8)
-
-
-      else
-         write(ifile,11) key
-         write(ifile, *) amf(key)
-      end if
-
-   end subroutine write_tropomi_amf
-
 
 !-----------------------------------------------------------------
    subroutine ApplyWeightedSum(nx,ny,nw,ii, jj, ww, dx, f, g )
@@ -800,12 +796,12 @@ contains
       ! * (mole tr)/(mole * air)/ppb
       implicit none
       ! in/out --------------------------------
-      real     :: varin
+      real(r8)    :: varin
       ! local ----------------------------------
       ! gravity constant:
-      real, parameter     ::  grav   = 9.80665 ! m/s2
+      real(r8), parameter     ::  grav   = 9.80665 ! m/s2
       ! mole mass of air:
-      real, parameter     ::  xm_air = 28.964e-3     ! kg/mol : ~80% N2, ~20% O2
+      real(r8), parameter     ::  xm_air = 28.964e-3     ! kg/mol : ~80% N2, ~20% O2
       ! begin ----------------------------------
 
       ! unit conversion:
@@ -857,262 +853,25 @@ contains
    end subroutine ApplyKernel
 !---------------------------------------------------------
 
-   subroutine PartialColumn(nretr,nlayer,nla,x,Sx)
+!---------------------------------------------------------
+   subroutine AirMassFactorModel(amf_tm5, nlayer, y_data, x_data, amf_model)
+      implicit none
+      real(r8), intent(in)    :: amf_tm5
+      integer,intent(in)      :: nlayer
+      integer                 :: layeri
+      real(r8), intent(in)    :: y_data ! alredy calculated vcd based on tmf
+      real(r8), intent(in)    :: x_data(nlayer) ! model on tm5 layers
+      real(r8), intent(out)   :: amf_model
+      real(r8)                :: x_sum
 
-      !-in/out ----------------
-      integer,intent(in)     :: nlayer
-      integer,intent(in)     :: nretr
-      integer,intent(in)     :: nla(nretr)
-      real(r8),intent(in)        :: x(nlayer)
-      real(r8),intent(out)       :: Sx(nretr)
-      ! local -----------------
-      integer                :: k1,k2,iretr
-      ! begin -----------------
-      ! init index:
-      k2 = 0
-      ! loop over retrieval layers
-      do iretr = 1, nretr
-         ! range of apriori layers
-         k1 = k2 + 1
-         k2 = k2 + nla(iretr)
-         ! fill:
-         Sx(iretr) = sum(x(k1:k2))
-      end do ! iretr
-   end subroutine PartialColumn
-   !---------------------------------------------------------
-   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   !~ airmass factor from local model:
-   !    M_m = M A x / (sum_{l=1,nla} x)
-   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   subroutine AltAirMassFactor(nretr,nlayer,M, A, x, Sx, M_m)
-      implicit none
-      ! in/out -----------------------------------
-      integer,intent(in)    :: nretr
-      integer,intent(in)    :: nlayer
-      real(r8),intent(in)       :: M(nretr)
-      real(r8),intent(in)       :: A(nretr,nlayer)
-      real(r8),intent(in)       :: x(nlayer)
-      real(r8),intent(in)       :: Sx(nretr)
-      real(r8),intent(out)      :: M_m(nretr)
-      ! local -----------------------------------
-      integer    :: iretr
-      ! begin -----------------------------------
-
-      ! loop over retrieval layers
-      do iretr = 1, nretr
-         ! fill, trap divison by zero:
-         if ( Sx(iretr) >= 0.0 ) then
-            M_m(iretr) = M(iretr) *      &
-               sum(A(iretr,:) * x(:) )    &
-               / Sx(iretr)
-         else
-            M_m(iretr) = M(iretr)
-         end if
-      end do ! iretr
-   end subroutine AltAirMassFactor
-   !------------------------------------------------------------
-   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   !~ averaging kernel using airmass factor from local model:
-   !    A_m = M / M_m  A
-   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   subroutine AltKernel(nretr, nlayer, A, M, M_m, A_m)
-      implicit none
-      ! in/out ------------------------
-      integer, intent(in) :: nretr
-      integer, intent(in) :: nlayer
-      real, intent(in)    :: A(nretr,nlayer)
-      real, intent(in)    :: M(nretr)
-      real, intent(in)    :: M_m(nretr)
-      real, intent(out)    :: A_m(nretr,nlayer)
-      ! local -----------------------------------
-      integer    :: iretr
-      ! begin -----------------------------------
-      ! loop over retrieval layers
-      do iretr = 1, nretr
-         if (  M_m(iretr) >= 0.0 )   then
-            A_m(iretr,:) = M(iretr) / M_m(iretr) * A(iretr,:)
-         else
-            A_m(iretr,:) =  A(iretr,:)
-         end if
-      enddo
-   end subroutine AltKernel
-   !------------------------------------------------------------
-   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   !~ retrieval using airmass factor from local model:
-   !    y_m = M / M_m  y
-   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   subroutine AltRetrieval(nretr, y, M, M_m, y_m )
-      implicit none
-      ! in/out ---------------------------
-      integer, intent(in) :: nretr
-      real, intent(in) :: y(nretr)
-      real, intent(in) :: M(nretr)
-      real, intent(in) :: M_m(nretr)
-      real, intent(out) :: y_m(nretr)
-      ! local  ---------------------------
-      integer    :: iretr
-      ! begin ---------------------------
-      ! loop over retrieval layers
-      do iretr = 1, nretr
-         if ( M_m(iretr) >= 0.0 ) then
-            y_m(iretr) = M(iretr) / M_m(iretr) *y(iretr)
-         else
-            y_m(iretr) =  y(iretr)
-         endif
-      end do ! iretr
-   end subroutine AltRetrieval
-   !------------------------------------------------------------
-   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   !~ retrieval error covariance using airmass factor from local
-   !model:
-   !    R_m = M / M_m  R
-   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   subroutine AltRetrievalCovar(nretr0,nretr, R, M, M_m, R_m )
-      implicit none
-      ! in/out -------------------------
-      integer, intent(in) :: nretr0
-      integer, intent(in) :: nretr
-      real, intent(in)    :: R(nretr0,nretr)
-      real, intent(in)    :: M(nretr)
-      real, intent(in)    :: M_m(nretr)
-      real, intent(out)   :: R_m(nretr0,nretr)
-      ! local begin --------------------
-      integer :: k1,k2
-      ! begin --------------------------
-      do k2 = 1, nretr
-         do k1 = 1, nretr0
-            if ( ( M_m(k1) >= 0.0 ) .and. M_m(k2) >= 0 ) then
-               R_m(k1,k2) = M(k1)/M_m(k1) * R(k1,k2) * M(k2)/M_m(k2)
-            else
-               R_m(k1,k2) =   R(k1,k2)
-            endif
-         end do !iretr0
-      end do ! iretr
-   end subroutine AltRetrievalCovar
-   !------------------------------------------------------------
-   real function UnitConversion(varin)
-
-      !if varin = ppb*Pa -> output of ApplyWeightedSum to concentration in ppb then
-      !  (mole tr)/m2 =
-      ! ppb*Pa
-      ! / [g]   :  Pa/[g] = (kg air/m2)
-      ! / ((kg air)/(mole air))
-      ! * (mole tr)/(mole  air)/ppb
-
-      !if varin =  -> output of ApplyWeightedSumAdj to gradient (xo-Hyb)/(HBHT+R) then
-      ! 1/ppb =
-      ! Pa/[(mol tr)/m2]
-      ! / [g]   :  Pa/[g] = (kg air)/m2
-      ! / ((kg air)/(mole air))
-      ! * (mole tr)/(mole * air)/ppb
-      implicit none
-      ! in/out --------------------------------
-      real     :: varin
-      ! local ----------------------------------
-      ! gravity constant:
-      real, parameter     ::  grav   = 9.80665 ! m/s2
-      ! mole mass of air:
-      real, parameter     ::  xm_air = 28.964e-3     ! kg/mol : ~80% N2, ~20% O2
-      ! begin ----------------------------------
-
-      ! unit conversion:
-      UnitConversion         =   &   !  (mole tr)/m2 =
-         varin   &   ! ppb*Pa
-         / grav   &   ! / [g]   :  Pa/[g] = (kg air/m2)
-         / xm_air &   ! / ((kg air)/(mole air))
-         * 1.0e-9      ! * (mole tr)/(mole  air)/ppb
-   end function UnitConversion
-   !------------------------------------------------------------
-   real*8 function distlola(lon1,lat1,lon2,lat2)
-      !horizontal distance (km) from lon,lat
-      implicit none
-      ! in/out ----------------
-      real*8  :: lon1,lat1,lon2,lat2
-      ! local  ----------------
-      real*8,parameter :: RT = 6373.0447000
-      real*8,parameter :: rtd = dasin(dble(1.)/dble(90.))
-      real*8           :: rlat1,rlat2,rlon1,rlon2
-      real*8           :: gam,alpha
-      ! begin --------------------
-      if ( ( lat1 < -90.0 ) .or. ( lat1 > 90.0 )  .or. &
-         ( lat2 < -90.0 ) .or. ( lat2 > 90.0 )  .or. &
-         ( lon1 < -360.0) .or. ( lon1 > 360.0)  .or. &
-         ( lon2 < -360.0) .or. ( lon2 > 360.0)  ) then
-         distlola = -999
-      else if ( ( lat2 .eq. lat1) .and. ( lon2 .eq. lon1) ) then
-         distlola = 0.0
-      else
-         rlat1 = rtd *lat1
-         rlat2 = rtd *lat2
-         rlon1 = rtd *lon1
-         rlon2 = rtd *lon2
-         gam = dcos(rlat1) *dcos(rlat2) *dcos(rlon1 -rlon2) + dsin(rlat1) *dsin(rlat2)
-         alpha = dacos(gam)
-         distlola = RT* alpha
-      endif
-   end function distlola
-   !------------------------------------------------------------
-   subroutine BilinearInt(nz,nxc,nyc,nxf,nyf,           &!dimensions
-      fieldc,idlon,idlat,wlon,wlat, &!input
-      fieldf)                        !output
-      implicit none
-      ! -- i/o var ---
-      integer :: nxc,nyc,nxf,nyf,nz
-      real    :: fieldc(nxc,nyc,nz)
-      real    :: fieldf(nxf,nyf,nz)
-      integer :: idlon(2,nxf),idlat(2,nyf)
-      real    :: wlon(nxf),wlat(nyf)
-      ! -- local ----
-      integer :: i,j,k
-
-      ! -- begin ----
-      fieldf(:,:,:)=0.0
-      !$OMP PARALLEL DO                                     &
-      !$OMP COLLAPSE(3)                                     &
-      !$OMP DEFAULT (NONE)                                  &
-      !$OMP PRIVATE(i,j,k)                                  &
-      !$OMP SHARED(nz,nyf,nxf)                              &
-      !$OMP SHARED(fieldf,fieldc,idlon,idlat,wlon,wlat)
-      do k=1,nz
-         do j=1,nyf
-            do i=1,nxf
-               fieldf(i,j,k)                                          = &
-                  fieldc(idlon(1,i),idlat(1,j),k)*wlon(i)*wlat(j)        + &
-                  fieldc(idlon(2,i),idlat(2,j),k)*(1-wlon(i))*(1-wlat(j))+ &
-                  fieldc(idlon(1,i),idlat(2,j),k)*(wlon(i))*(1-wlat(j))  + &
-                  fieldc(idlon(2,i),idlat(1,j),k)*(1-wlon(i))*(wlat(j))
-            enddo
-         enddo
-      enddo
-      !$OMP END PARALLEL DO
-      !$OMP BARRIER
-
-   end subroutine BilinearInt
-   !------------------------------------------------------------
-   subroutine sorting_dble(n,array,sort_index)
-      implicit none
-      ! --- i/o vars ----
-      integer,intent(in) :: n
-      real*8,intent(in)  :: array(n)
-      integer,intent(out) :: sort_index(n)
-      ! --- local ---
-      integer :: i,j,m,idx
-      real*8  :: mindist
-      real*8  :: array2(n)
-      ! --- begin ----
-      array2 = array
-      mindist =  -999
-      idx=1
-      do i=1,n
-         mindist = minval(array2,mask=(array2>mindist))
-         m = count(array2==mindist)
-         do j = 1,m
-            sort_index(idx) = minloc(array2,dim=1,mask=array2==mindist)
-            array2(sort_index(idx))=-999
-            idx = idx+1
-         enddo
-      enddo
-   end subroutine sorting_dble
+      ! --- begin ----------------------------------
+      x_sum = 0.0_r8
+      do layeri = 1, nlayer
+         x_sum = x_sum + x_data(layeri)
+      end do
+      amf_model = y_data/x_sum*amf_tm5
+   end subroutine AirMassFactorModel
+!---------------------------------------------------------
 
 end module obs_def_SAT_NO2_TROPOMI_mod
 

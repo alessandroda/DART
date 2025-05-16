@@ -159,6 +159,13 @@ class TimeManager:
         self.sat_obs = None
         self.dt = pd.Timedelta(dt_seconds, unit="s")
 
+        self.check_start_ahead_end()
+
+    def check_start_ahead_end(self):
+        """check if end time follows start time"""
+        if self.start_time > self.end_time:
+            logger.warning(f"End time ({self.end_time}) is ahead start time {self.start_time}")
+            
     def increment_time(self):
         """
         Increments the current time by the delta (dt).
@@ -625,7 +632,7 @@ def prepare_dart_to_farm_nc(path_manager, output_sim_folder, time_model, ass_var
                 ds = xr.open_dataset(str(prior_from_farm_file))
                 #ds_result = ds.drop_vars(ass_var)
                 ds_tmp1_posterior = xr.open_dataset(str(tmp1_posterior))
-                ds['c_SO2'].values = ds_tmp1_posterior[ass_var].values 
+                ds[ass_var].values = ds_tmp1_posterior[ass_var].values 
                 ds.to_netcdf(str(result_tmp))
                 # Step 4: Convert FARM concentrations using arconv
                 logger.info("6: convert FARM with arconv")
@@ -922,7 +929,7 @@ def replace_priorinflation(path_manager: PathManager, timestamp_farm: str):
     for input_file, output_file in file_mappings.items():
         try:
             # Resolve full paths
-            src = work_path / input_file
+            src = work_path / input_file # input_file has output_*.ncs
             dest = work_path / output_file
 
             # Rename the file

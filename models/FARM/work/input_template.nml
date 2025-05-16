@@ -72,11 +72,11 @@
    last_obs_days                = -1,
    last_obs_seconds             = -1,
 
-   inf_flavor                  =  2,                       0,
-   inf_initial_from_restart    = .true.,                 .false.,
-   inf_sd_initial_from_restart = .true.,                 .false.,
+   inf_flavor                  =  5,                       0,
+   inf_initial_from_restart    = .true.,                  .true.,
+   inf_sd_initial_from_restart = .true.,                  .true.,
    inf_deterministic           = .true.,                  .true.,
-   inf_initial                 = 1.02,                    1.0,
+   inf_initial                 = 1.05,                    1.0,
    inf_lower_bound             = 1.0,                     1.0,
    inf_upper_bound             = 100.0,                   100.0,
    inf_damping                 = 0.9,                     1.0,
@@ -96,11 +96,11 @@
 
 
 &assim_tools_nml
-   cutoff                          = 0.0025
+   cutoff                          = 0.01
    sort_obs_inc                    = .false.,
    spread_restoration              = .false.,
    sampling_error_correction       = .false.,
-   adaptive_localization_threshold = 50,
+   adaptive_localization_threshold = -1,
    adaptive_cutoff_floor = 0.001,
    distribute_mean                 = .true.
    output_localization_diagnostics = .false.,
@@ -124,13 +124,13 @@
    /
 
 &obs_kind_nml
-   assimilate_these_obs_types = 'SAT_SO2_TROPOMI'
+   assimilate_these_obs_types = $obs_type
    evaluate_these_obs_types   = ''
    /
 
 &location_nml
    horiz_dist_only             = .false.,
-   vert_normalization_height   = 720000.0,
+   vert_normalization_height   = 1032000.0,
    approximate_distance        = .false.,
    nlon                        = 51,
    nlat                        = 51,
@@ -141,7 +141,7 @@
    farm_template_filename = '$template_farm'
    state_variables  = 'P',     'QTY_PRESSURE',0.0, 'NA', 'UPDATE'
                       'SP',     'QTY_SURFACE_PRESSURE',0.0, 'NA', 'UPDATE'
-                      'c_SO2', 'QTY_SO2', 0.0, 'NA', 'UPDATE'
+                      $state_variable_conc, $state_variable_qty, 0.0, 'NA', 'UPDATE'
    time_step_days      = 0,
 !A.D using DA_SATOFFLINE approach
    time_step_seconds   = 5000
@@ -216,9 +216,7 @@
 
 &quality_control_nml
    input_qc_threshold       =  3.0,
-   outlier_threshold        = -1.0,
-   /
-&obs_def_SAT_NO2_TROPOMI_nml
+   outlier_threshold        =  40.0,
    /
 
 &fill_inflation_restart_nml
@@ -237,6 +235,9 @@
 /
 
 &obs_def_SAT_SO2_TROPOMI_nml
+   unit_conversion = 'ppb',
+   /
+&obs_def_SAT_NO2_TROPOMI_nml
    unit_conversion = 'ppb',
    /
 /

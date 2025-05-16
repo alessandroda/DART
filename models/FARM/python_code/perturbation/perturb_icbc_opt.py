@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     tau: int = 6  # Time decorrelation scale in hours
     alpha: float = np.exp(-1 / tau)  # Smoothing coefficient
     var: str = "c_SO2"
+    sub_dir_emi : str = '0000'
     mems: int = 20
     corr_length_hz: float = 20000
     corr_length_vz: float = 500
@@ -47,6 +48,39 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+def constrain_mean_to_target(dict_members, target_field, var_name):
+    """
+    Adjust the ensemble perturbations so that their mean matches the target field.
+
+    Args:
+        dict_members (dict): Dictionary of ensemble members.
+        target_field (np.ndarray): The target perturbed field (F1).
+        var_name (str): Name of the variable being adjusted.
+    """
+    # Calculate current ensemble mean
+    print("7.1: Calculating mean start")
+    ensemble_sum = np.zeros_like(target_field)
+    for imem in dict_members:
+        ensemble_sum += dict_members[imem][var_name].values
+    ensemble_mean = ensemble_sum / len(dict_members)
+    print("7.1: Calculating mean end")
+    # Adjust each member to ensure ensemble mean matches target_field
+    print(f"7.1test: target_field {target_field.shape}")
+    print(f"7.2test: ensemble_mean {ensemble_mean.shape}")
+    epsilon = 1e-6
+    ensemble_mean_safe = np.maximum(ensemble_mean, epsilon)
+    scaling_factor = target_field / ensemble_mean_safe
+    for imem in dict_members:
+        dict_members[imem][var_name].values *= scaling_factor
+
+    # Verify the constraint
+    adjusted_sum = np.zeros_like(target_field)
+    for imem in dict_members:
+        adjusted_sum += dict_members[imem][var_name].values
+    adjusted_mean = adjusted_sum / len(dict_members)
+    assert np.allclose(adjusted_mean, target_field, atol=1e-4), "Ensemble mean does not match target field!"
+
+
 def process_time_step(i, time_step, emission_dataset, weights_dict, nx, ny, nz, A, grid_length, dict_members, chem_fac_pr):
     print(f'-------------------Time: {time_step.values}')
     random_field = box_muller_random_field(nx, ny, nz, settings.mems)
@@ -59,7 +93,7 @@ def process_time_step(i, time_step, emission_dataset, weights_dict, nx, ny, nz, 
         nz,
         settings.corr_length_hz,
         grid_length,
-        *np.meshgrid(emission_dataset, emission_dataset.lon),
+        *np.meshgrid(emission_dataset.y, emission_dataset.x),
     )
     print(f' 4- Apply vertical correlation: corr_vz ={settings.corr_length_vz}')
     chem_fac = apply_vertical_correlation(chem_fac, A)
@@ -265,7 +299,7 @@ def perturb_emission():
                     emission_dataset.x))
         for i, time_step in enumerate(emission_dataset.time):
 
-            print(f'-------------------Time: {time_step.values}')
+            print(f' -------------------Time: {time_step.values}')
             random_field = box_muller_random_field(nx, ny, nz, settings.mems)
             print(f' 3- Apply horizontal correlations: corr_hz ={settings.corr_length_hz}')
             chem_fac = apply_horizontal_correlations(
@@ -292,10 +326,17 @@ def perturb_emission():
                 dict_members[imem][settings.var][i, :, :, :] *= np.exp(chem_fac_t)
             chem_fac_pr = chem_fac
 
+            # After generating perturbations and before saving
+            print(f' 7- Constrain Ensemble Mean to Target Field')
+            constrain_mean_to_target(
+                dict_members=dict_members,
+                target_field=emission_dataset[settings.var].values,
+                var_name=settings.var,
+            )
         try:
             for imem in range(settings.mems):
-                dir_path = Path(settings.path_emissions) / 'c-ifs_mems' / f'c-ifs_{imem}'
-                file_name = f'{os.path.basename(netcdf_emi).strip(".nc")}.nc'
+                dir_path = Path(settings.path_emissions) / 'c-ifs_mems' / f'c-ifs_{imem}' / f'{settings.var}_{settings.sub_dir_emi}'
+                file_name = f'{os.path.basename(netcdf_emi).strip(".nc")}_{imem}.nc'
                 print(file_name) 
                 path_filename = dir_path / file_name
                 if not os.path.exists(dir_path):
