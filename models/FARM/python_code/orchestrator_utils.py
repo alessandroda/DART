@@ -115,6 +115,7 @@ def process_member(mem, path_manager, timestamp_farm, rounded_timestamp, seconds
                 temp_file.unlink(missing_ok=True)
 
 def prepare_farm_to_dart_nc_par(path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model, no_mems):
+    os.makedirs(path_manager.path_data / "/temp", exist_ok=True)
     max_workers = 48
     logger.info("Starting the orchestration of FARM to DART NetCDF conversion")
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -687,6 +688,9 @@ def prepare_farm_to_dart_nc(
     path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model,
     no_mems
 ):
+
+    os.makedirs(path_manager.path_data / "/temp", exist_ok=True)
+
     for mem in range(no_mems):
         try:
             logging.info
@@ -922,7 +926,7 @@ def replace_priorinflation(path_manager: PathManager, timestamp_farm: str):
     }
 
     # Define working directory
-    work_path = Path(path_manager.base_path / 'DART/models/FARM/work/')
+    work_path = Path(path_manager.base_path / path_manager.path_filter)
     
     logger.info(f"Starting renaming of priorinflation files for next run: {timestamp_farm}")
 
