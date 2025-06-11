@@ -145,23 +145,18 @@ class FarmToDartPipeline:
         obs_seq_name = f"obs_seq_{self.seconds_obs}_{self.days_obs}.out"
 
         replace_nml_template(
-            self.path_manager.base_path
-            / "DART/observations/obs_converters/S5P_TROPOMI_L3/work/input_template.nml",
+            self.path_manager.base_path / "DART/observations/obs_converters/S5P_TROPOMI_L3/work/input_template.nml",
             entries_tbr_dict={
-                "$file_path_s5p": self.path_manager.base_path
-                / f'DART/observations/obs_converters/S5P_TROPOMI_L3/data/NO2/{orbit_filename}',
-                "$file_out": self.path_manager.base_path
-                / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/NO2/C03dart/{obs_seq_name}",
+                "$file_path_s5p": self.path_manager.base_path / f'DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/{orbit_filename}',
+                "$file_out": self.path_manager.base_path / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/{obs_seq_name}",
                 "$obs_type" : self.obs_type,
             },
-            output_nml_path=self.path_manager.base_path
-            / "DART/observations/obs_converters/S5P_TROPOMI_L3/work/input.nml",
+            output_nml_path=self.path_manager.base_path / "DART/observations/obs_converters/S5P_TROPOMI_L3/work/input.nml",
         )
         try:
             run_command_in_directory(
                 "convert_s5p_tropomi_l3",
-                self.path_manager.base_path
-                / "DART/observations/obs_converters/S5P_TROPOMI_L3/work/",
+                self.path_manager.base_path / "DART/observations/obs_converters/S5P_TROPOMI_L3/work/",
             )
         except Exception as e:
             logger.error(f"Error running obs converter: {e}")
@@ -190,11 +185,11 @@ class FarmToDartPipeline:
         Path(self.output_sim_folder).mkdir(parents=True, exist_ok=True)
 
         replace_nml_template(
-            self.path_manager.base_path / "DART/models/FARM/work/input_template.nml",
+            self.path_manager.base_path / self.path_manager.path_filter / "input_template.nml",
             entries_tbr_dict={
                 "$obs_sequence_name": obs_seq_name,
                 "$folder_path": self.output_sim_folder,
-                "$folder_obs_path": self.path_manager.base_path / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/NO2/C03dart/",
+                "$folder_obs_path": self.path_manager.base_path / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/",
                 "$date_assim": self.time_manager.current_time.strftime("%Y%m%d_%H%M%S"),
                 "$template_farm": self.path_manager.path_data / f"to_DART/ic_g1_{self.seconds_model}_{self.days_model}_0.nc",
                 "$init_time_days": str(self.days_model),
@@ -206,38 +201,46 @@ class FarmToDartPipeline:
                 "$state_variable_conc" : str(self.state_variable_conc),
                 "$state_variable_qty" : str(self.state_variable_qty)
             },
-            output_nml_path=self.path_manager.base_path / "DART/models/FARM/work/input.nml",
+            output_nml_path=self.path_manager.base_path / self.path_manager.path_filter / "input.nml",
         )
         # FILTER_INPUT_LIST.TXT
         replace_nml_template(
-            self.path_manager.base_path / "DART/models/FARM/work/filter_input_list_template.txt",
+            self.path_manager.base_path / self.path_manager.path_filter / "filter_input_list_template.txt",
             entries_tbr_dict = {
                 "$folder_path": self.path_manager.path_data / f"to_DART/",
                 "$days": str(self.seconds_model),
                 "$seconds": str(self.days_model),
             },
-            output_nml_path=self.path_manager.base_path / "DART/models/FARM/work/filter_input_list.txt",
+            output_nml_path=self.path_manager.base_path / self.path_manager.path_filter / "filter_input_list.txt",
         )
 
         # FILTER_OUTPUT_LIST.TXT
         replace_nml_template(
-            self.path_manager.base_path / "DART/models/FARM/work/filter_output_list_template.txt",
+            self.path_manager.base_path / self.path_manager.path_filter / "filter_output_list_template.txt",
             entries_tbr_dict={
                 "$folder_path": self.output_sim_folder,
                 "$date": self.time_manager.simulated_time.strftime("%Y%m%d%H"),
             },
-            output_nml_path=self.path_manager.base_path / "DART/models/FARM/work/filter_output_list.txt",
+            output_nml_path=self.path_manager.base_path / self.path_manager.path_filter / "filter_output_list.txt",
         )
-
+	# SUBMIT_FILTER.BSH
         replace_nml_template(
-            self.path_manager.base_path
-            / "RUN/script/templates/submit_filter.template.bsh",
+            self.path_manager.base_path / "RUN/script/templates/submit_filter.template.bsh",
             entries_tbr_dict={
                 "CURRENT_DATE": self.time_manager.simulated_time.strftime("%Y%m%d%H"),
                 "CORES": str(20),
                 "QUEUE": 'cresco6_h4' #self.cresco_queue
             },
             output_nml_path=self.path_manager.path_submit_bsh / "submit_filter.bsh",
+        )
+        # RUN_FILTER.BSH
+        replace_nml_template(
+            self.path_manager.base_path / "RUN/script/templates/run_filter.template.bsh",
+            entries_tbr_dict={
+            "CORES": str(20),
+            "@ABS_FILTER_PATH": self.path_manager.base_path / self.path_manager.path_filter
+            },
+            output_nml_path=self.path_manager.path_submit_bsh / "run_filter.bsh",
         )
 
         job_id = run_command_in_directory_bsub(
@@ -281,7 +284,7 @@ class FarmToDartPipeline:
                                 self.path_manager.path_filter,
                                 filename,
                             ),
-                            analysis_sim_folder,
+                            os.path.join(analysis_sim_folder, filename),
                         )
                     except shutil.Error:
                         print(
@@ -307,13 +310,12 @@ class FarmToDartPipeline:
         while self.time_manager.current_time <= self.time_manager.end_time:
             self.run_farm()  # Run FARM executable
             self.time_manager.simulated_time = self.time_manager.current_time + timedelta(hours=1)
-            modify_yaml_date(CONFIG_PATH, self.time_manager.simulated_time.strftime("%Y-%m-%d %H:00:00")) 
             self.set_days_seconds_model() 
             orbit_filename = self.process_satellite_data()  # Process satellite data
             if orbit_filename:  # Only proceed if satellite data is found
             #if False:
                 obs_seq_name = self.run_obs_converter(orbit_filename)
-                if not os.path.exists(self.path_manager.base_path / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/NO2/C03dart/{obs_seq_name}"): 
+                if not os.path.exists(self.path_manager.base_path / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/{obs_seq_name}"): 
                     logger.info(f'{obs_seq_name} does not exists. skip assim cycle')
                     continue
                 prepare_farm_to_dart_nc_par(
@@ -335,6 +337,8 @@ class FarmToDartPipeline:
             logger.info(
                 f"Completed processing for {self.time_manager.current_time.strftime('%Y-%m-%d %H:%M')}"
             )
+            modify_yaml_date(CONFIG_PATH, self.time_manager.simulated_time.strftime("%Y-%m-%d %H:00:00")) 
+
 #            if self.time_manager.simulated_time.hour == 0:
 #                cleanup_days(self.time_manager.simulated_time, 2, path_manager)
         logger.info("Pipeline execution completed.")
