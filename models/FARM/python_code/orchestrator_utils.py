@@ -115,7 +115,7 @@ def process_member(mem, path_manager, timestamp_farm, rounded_timestamp, seconds
                 temp_file.unlink(missing_ok=True)
 
 def prepare_farm_to_dart_nc_par(path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model, no_mems):
-    os.makedirs(path_manager.path_data / "/temp", exist_ok=True)
+    os.makedirs(path_manager.path_data / "temp", exist_ok=True)
     max_workers = 48
     logger.info("Starting the orchestration of FARM to DART NetCDF conversion")
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -554,7 +554,7 @@ def modify_nc_file(ds, pol, time_list):
 def prepare_dart_to_farm_nc(path_manager, output_sim_folder, time_model, ass_var, no_mems):
     """
     Prepares posterior NetCDF files to a FARM standard by adjusting reference time,
-    calendar format, and appending the 'c_SO2' variable to the FARM prior file.
+    calendar format, and appending the ass_var variable to the FARM prior file.
     """
     for mem in range(no_mems):
         try:
@@ -574,7 +574,7 @@ def prepare_dart_to_farm_nc(path_manager, output_sim_folder, time_model, ass_var
                 prior_farm_folder / f'ic_g1_{time_model}.nc'
             )
 
-            # first to delete variable c_SO2
+            # first to delete variable ass_var
             result_tmp = Path(
                 f'{path_manager.path_data}/OUTPUT_{mem}/OUT/ic_g1_{time_model}_tmp.nc'
             )
@@ -647,6 +647,13 @@ def prepare_dart_to_farm_nc(path_manager, output_sim_folder, time_model, ass_var
                     stdout=log_file,
                     stderr=log_file,
                 )
+                # Step 5: put in list files in to_DART dir to be deleted at the
+                # end of the execution
+                to_dart_path = Path(
+                    f'{path_manager.path_data}/to_DART/'
+                )
+                to_dart_files = list(to_dart_path.rglob("ic_g1*.nc")) 
+                
 
                 #logger.info("4: delete var from FARM prior")
                 #subprocess.run(
@@ -679,10 +686,10 @@ def prepare_dart_to_farm_nc(path_manager, output_sim_folder, time_model, ass_var
             raise
         finally:
             # Cleanup: Remove temporary files
-            temp_files = [tmp0_posterior, tmp1_posterior]
+            temp_files = [tmp0_posterior, tmp1_posterior, result_tmp, prior_from_farm_file] + to_dart_files 
             for temp_file in temp_files:
                 temp_file.unlink(missing_ok=True)
-            
+           
 
 def prepare_farm_to_dart_nc(
     path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model,
