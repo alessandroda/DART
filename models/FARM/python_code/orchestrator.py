@@ -52,6 +52,7 @@ class FarmToDartPipeline:
             path_submit_bsh=self.config['paths']['path_submit_bsh'],
             path_filter=self.config['paths']['path_filter'],
             path_data=self.config['paths']['path_data'],
+            run_submit_replace_perturbations=self.config['paths']['run_submit_replace_perturbations'],
             log_paths=True,
         )
 
@@ -69,6 +70,7 @@ class FarmToDartPipeline:
         self.seconds_model = 0
         self.output_sim_folder = None
         self.ass_var = self.config['assimilation']['ass_var']
+        self.emi_var=self.config['assimilation']['emi_var']
         self.no_mems = self.config['assimilation']['no_mems']
         self.case_dir = self.config['assimilation']['case_dir']
         self.cresco_queue = self.config['cluster']['cresco_queue']
@@ -76,6 +78,58 @@ class FarmToDartPipeline:
         self.state_variable_conc = self.config['assimilation']['ass_var']
         self.state_variable_qty = self.config['assimilation']['state_variable_qty']
         self.run_assimilation_flag=self.config['assimilation']['run_assimilation_flag']
+        self.case_emi_dir=self.config['assimilation']['case_emi_dir']
+    
+    def replace_perturb_into_original_emissions(self):
+        """
+            This step assumes that the emission have been successfully perturbated.
+            The goal is to replace the perturbed emissions in the original HERMES file
+            to avoid disk space issues.
+        """
+        logger.warning('This step assumes that the emission have been successfully created')
+        #./submit_replace_perturb_into_original_emission_arg.sh
+        date_start_end = self.time_manager.current_time.strftime("%Y%m%d00")
+        original_path = self.path_manager.base_path / self.path_manager.run_submit_replace_perturbations 
+        output_nml_path = str(original_path.with_name(f"{original_path.stem}{date_start_end}{original_path.suffix}"))
+        replace_nml_template(
+            input_nml_path=original_path,
+            entries_tbr_dict={
+                "@date_start": date_start_end,
+                "@date_end": date_start_end,
+                "@case_dir": self.case_dir,
+                "@emission_var_to_replace": self.emi_var,
+                "@sub_dir_name":  self.case_emi_dir,
+                "@cresco_queue" : self.cresco_queue
+            },
+            output_nml_path=output_nml_path
+        )
+        job_ids = run_command_in_directory_bsub(
+            output_nml_path.name, output_nml_path.parent, farm =False, replace_emissions=True
+        )
+        time.sleep(10)
+
+        while True:
+            running_jobs = []
+            for jobid in job_ids:
+                if not check_job_status_cresco(jobid):
+                    running_jobs.append(jobid)
+
+            if not running_jobs:
+                logger.info(f"{job_ids} have finished")
+                for mem in range(self.no_mems):
+                    path_emi_mem = self.path_manager.base_path / self.path_manager.path_data / f'INPUT/HERMES/emi_{mem}/HERMESv3_{date_start_end}.nc'
+                    if not path_emi_mem.exists():
+                        logger.error(f"Emission input for mem does not exist: {path_emi_mem}")
+                        return False
+                    logger.info(f"{path_emi_mem} exists. File size in bytes: {os.path.getsize(path_emi_mem)}") 
+                return True
+            else:
+                logger.info(
+                    f"Jobs still running: {running_jobs}. Waiting for them to finish..."
+                )
+                time.sleep(30)
+        
+    
     def run_farm(self):
         logger.info(
             f"1.----------Running FARM for hour {self.time_manager.current_time}"
@@ -249,9 +303,9 @@ class FarmToDartPipeline:
             False
         )
         time.sleep(10)
-        self.monitor_job(job_id)
+        self.monitor_job_dart(job_id)
 
-    def monitor_job(self, job_id):
+    def monitor_job_dart(self, job_id):
         logger.info(f"Monitoring job {job_id}")
         job_id = job_id.strip()[1:-1]
 
@@ -307,8 +361,41 @@ class FarmToDartPipeline:
 
 
     def run_pipeline(self):
-        logger.info("TIME LOOP BEGINS")
+        
+        logger.info("[ORCHESTRATOR] ---------- TIME LOOP BEGINS")
+
+        last_perturbed_day = None
         while self.time_manager.current_time <= self.time_manager.end_time:
+            current_day = self.time_manager.current_time.day
+
+            if current_day != last_perturbed_day:
+                if not self.replace_perturb_into_original_emissions(self.time_manager.current_time):
+                    logger.error("replace_perturb_into_original_emissions failed. Perturbated files do not exist. \nExiting pipeline.")
+                    return
+                two_days_back = self.time_manager.current_time - timedelta(days=2)
+                
+                for mem in range(self.no_mems):
+                    path_emi_mem = self.path_manager.base_path / self.path_manager.path_data / f'INPUT/HERMES/emi_{mem}/HERMESv3_{two_days_back.strftime("%Y%m%d00")}.nc'
+                    if not path_emi_mem.exists():
+                        logger.info(f"Emission input for mem does not exist: {path_emi_mem}")
+                        
+                    logger.info(f"{path_emi_mem} exists. File size in bytes: {os.path.getsize(path_emi_mem)}") 
+                    logger.info(f"Remove: {path_emi_mem}") 
+                    path_emi_mem.unlink(missing_ok=True)
+
+
+                date_str = two_days_back.strftime("%Y%m%d")
+                for mem in range(self.no_mems):
+                    list_ic_g1_times_paths = [
+                    self.path_manager.base_path / self.path_manager.path_data / f'OUTPUT_{mem}/OUT/ic_g1_{date_str}{hour:02d}.nc'
+                    for hour in range(1, 24) 
+                    ]
+                    for file_ic_g1_hourly in list_ic_g1_times_paths:
+                        file_ic_g1_hourly.unlink(missing_ok=True)
+
+                last_perturbed_day = current_day
+
+            
             self.run_farm()  # Run FARM executable
             self.time_manager.simulated_time = self.time_manager.current_time + timedelta(hours=1)
             self.set_days_seconds_model() 

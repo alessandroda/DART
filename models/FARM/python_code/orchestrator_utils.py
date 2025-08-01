@@ -13,7 +13,7 @@ import logging
 import pandas as pd
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
+import re
 logger = logging.getLogger(__name__)
 
 def process_member(mem, path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model):
@@ -228,6 +228,7 @@ class PathManager:
         path_submit_bsh,
         path_filter,
         path_data,
+        run_submit_replace_perturbations,
         log_paths=True,
     ):
         """
@@ -242,7 +243,7 @@ class PathManager:
         self.path_filter = self.base_path / path_filter
         self.log_paths = log_paths
         self.path_data = Path(self.base_path / path_data).resolve()
-
+        self.run_submit_replace_perturbations = Path(self.base_path) / run_submit_replace_perturbations
         self.check_paths_exist()
 
     def check_paths_exist(self):
@@ -256,6 +257,7 @@ class PathManager:
             "Farm submission path": self.path_submit_bsh,
             "Submit filter path": self.path_filter,
             "Path data": self.path_data,
+            "Replace perturbation bash path" : self.run_submit_replace_perturbations
         }
 
         for path_name, path_value in paths_to_check.items():
@@ -441,7 +443,11 @@ def run_command_in_directory(command, directory):
         os.chdir(original_directory)
 
 
-def run_command_in_directory_bsub(command, directory, farm=True):
+def run_command_in_directory_bsub(command, directory, farm=True, replace_emissions=False):
+    
+    if farm and replace_emissions:
+        raise ValueError("Only one of 'farm' or 'replace_emissions' can be True.")
+    
     #breakpoint()
     original_directory = os.getcwd()
     try:
@@ -458,7 +464,10 @@ def run_command_in_directory_bsub(command, directory, farm=True):
             lines = output.stdout.strip().splitlines()
             jobid = [line.split('id:')[1] for line in lines if 'id:' in line]
             print(f"Job submitted for {command} with job IDs : {jobid}")
-
+        elif replace_emissions:
+            lines = output.stdout.strip().splitlines()
+            jobid = [re.search(r'Job <(\d+)>', line).group(1) for line in lines if re.search(r'Job <(\d+)>', line)]
+            print(f"Job submitted for {command} with job IDs: {jobid}")
         else:
             jobid = output.stdout.strip().split()[1]
             print(f"Job submitted for {command} with job ID : {jobid}")
