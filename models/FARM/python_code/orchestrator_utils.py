@@ -116,6 +116,7 @@ def process_member(mem, path_manager, timestamp_farm, rounded_timestamp, seconds
 
 def prepare_farm_to_dart_nc_par(path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model, no_mems):
     os.makedirs(path_manager.path_data / "temp", exist_ok=True)
+    os.makedirs(path_manager.path_data / "to_DART", exist_ok=True)
     max_workers = 48
     logger.info("Starting the orchestration of FARM to DART NetCDF conversion")
     with ThreadPoolExecutor(max_workers=max_workers) as executor:

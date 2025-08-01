@@ -75,7 +75,7 @@ class FarmToDartPipeline:
         self.obs_type = self.config['assimilation']['obs_type']
         self.state_variable_conc = self.config['assimilation']['ass_var']
         self.state_variable_qty = self.config['assimilation']['state_variable_qty']
-
+        self.run_assimilation_flag=self.config['assimilation']['run_assimilation_flag']
     def run_farm(self):
         logger.info(
             f"1.----------Running FARM for hour {self.time_manager.current_time}"
@@ -229,7 +229,8 @@ class FarmToDartPipeline:
             entries_tbr_dict={
                 "CURRENT_DATE": self.time_manager.simulated_time.strftime("%Y%m%d%H"),
                 "CORES": str(20),
-                "QUEUE": 'cresco6_h4' #self.cresco_queue
+                "QUEUE": self.cresco_queue,
+                "DEST_LOG_PATH": self.output_sim_folder
             },
             output_nml_path=self.path_manager.path_submit_bsh / "submit_filter.bsh",
         )
@@ -312,8 +313,7 @@ class FarmToDartPipeline:
             self.time_manager.simulated_time = self.time_manager.current_time + timedelta(hours=1)
             self.set_days_seconds_model() 
             orbit_filename = self.process_satellite_data()  # Process satellite data
-            if orbit_filename:  # Only proceed if satellite data is found
-            #if False:
+            if self.run_assimilation_flag and orbit_filename:  
                 obs_seq_name = self.run_obs_converter(orbit_filename)
                 if not os.path.exists(self.path_manager.base_path / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/{obs_seq_name}"): 
                     logger.info(f'{obs_seq_name} does not exists. skip assim cycle')
@@ -338,9 +338,11 @@ class FarmToDartPipeline:
                 f"Completed processing for {self.time_manager.current_time.strftime('%Y-%m-%d %H:%M')}"
             )
             modify_yaml_date(CONFIG_PATH, self.time_manager.simulated_time.strftime("%Y-%m-%d %H:00:00")) 
-
+		
 #            if self.time_manager.simulated_time.hour == 0:
 #                cleanup_days(self.time_manager.simulated_time, 2, path_manager)
+#	     self.time_manager.update_control_times()
+#	     cleanup_days(self.time_manager.list_of_days_to_remove)
         logger.info("Pipeline execution completed.")
 
 #def cleanup_days(current_time : datetime, days_before : int, path_manager)
