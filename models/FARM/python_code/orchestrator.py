@@ -90,7 +90,7 @@ class FarmToDartPipeline:
         #./submit_replace_perturb_into_original_emission_arg.sh
         date_start_end = self.time_manager.current_time.strftime("%Y%m%d00")
         original_path = self.path_manager.base_path / self.path_manager.run_submit_replace_perturbations 
-        output_nml_path = str(original_path.with_name(f"{original_path.stem}{date_start_end}{original_path.suffix}"))
+        output_nml_path = original_path.with_name(f"{original_path.stem}{date_start_end}{original_path.suffix}")
         replace_nml_template(
             input_nml_path=original_path,
             entries_tbr_dict={
@@ -101,7 +101,7 @@ class FarmToDartPipeline:
                 "@sub_dir_name":  self.case_emi_dir,
                 "@cresco_queue" : self.cresco_queue
             },
-            output_nml_path=output_nml_path
+            output_nml_path=str(output_nml_path)
         )
         job_ids = run_command_in_directory_bsub(
             output_nml_path.name, output_nml_path.parent, farm =False, replace_emissions=True
@@ -369,7 +369,7 @@ class FarmToDartPipeline:
             current_day = self.time_manager.current_time.day
 
             if current_day != last_perturbed_day:
-                if not self.replace_perturb_into_original_emissions(self.time_manager.current_time):
+                if not self.replace_perturb_into_original_emissions():
                     logger.error("replace_perturb_into_original_emissions failed. Perturbated files do not exist. \nExiting pipeline.")
                     return
                 two_days_back = self.time_manager.current_time - timedelta(days=2)
