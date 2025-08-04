@@ -298,22 +298,23 @@ def check_job_status(job_id):
 
 
 # Define a function to check the status of the submitted job
-def check_job_status_cresco(job_id):
+def check_job_status_cresco(job_id, **kwargs):
     """Check if the job is still running."""
     command = f"bjobs {job_id}"
+    which_run = kwargs.get("which_run", None)
     try:
         output = subprocess.check_output(command, shell=True).decode("utf-8").strip()
         if "DONE" in output:
-            logger.info(f'{job_id}: status DONE')
+            logger.info(f'{which_run} {job_id}: status DONE')
             return True
         elif "EXIT" in output: 
-            logger.info(f'{job_id}: status EXIT')
+            logger.info(f'{which_run} {job_id}: status EXIT')
             return True
         elif "RUN" in output:
-            logger.info(f'{job_id}: status RUN')
+            logger.info(f'{which_run} {job_id}: status RUN')
             return False
         elif "PEND" in output:
-            logger.info(f'{job_id}: status PEND')
+            logger.info(f'{which_run} {job_id}: status PEND')
             return False
         else:
             logger.warning(f'{job_id}: Unknown status')
