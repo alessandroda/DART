@@ -1,5 +1,7 @@
 assimilation:
   ass_var: c_SO2
+  emi_var: veSO2
+  case_emi_dir: veSO2_0000
   case_dir: data_3days_0000
   no_mems: 20
   obs_type: SAT_SO2_TROPOMI
@@ -28,6 +30,7 @@ paths:
   path_filter: DART/models/FARM/work_freerun/
   path_submit_bsh: RUN/script/auto_runs/
   run_submit_farm_template: RUN/script/templates/run_submit_ens.template.bsh
+  run_submit_replace_perturbations: DART/models/FARM/python_code/perturbation/bash_emissions/submit_replace_perturb_into_original_emission_arg.sh
 satellite_data:
   search_window_seconds: 1800
 time:
