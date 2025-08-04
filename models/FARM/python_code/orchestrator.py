@@ -79,6 +79,7 @@ class FarmToDartPipeline:
         self.state_variable_qty = self.config['assimilation']['state_variable_qty']
         self.run_assimilation_flag=self.config['assimilation']['run_assimilation_flag']
         self.case_emi_dir=self.config['assimilation']['case_emi_dir']
+        self.backup_days = self.config['time']['backup_days']
     
     def replace_perturb_into_original_emissions(self):
         """
@@ -370,20 +371,17 @@ class FarmToDartPipeline:
             current_day = self.time_manager.current_time.day
 
             if current_day != last_perturbed_day:
+                ### inizio funzione da chiamare in utils 
                 date_start_end = self.time_manager.current_time.strftime("%Y%m%d00")
-                for mem in range(self.no_mems):
-                    path_emi_mem = self.path_manager.base_path / self.path_manager.path_data / f'INPUT/HERMES/emi_{mem}/HERMESv3_{date_start_end}.nc'
-                    if path_emi_mem.exists():
-                        logger.info(f"{path_emi_mem} already exists")
-                        continue                                         
+                if not all([(self.path_manager.base_path / self.path_manager.path_data / f'INPUT/HERMES/emi_{mem}/HERMESv3_{date_start_end}.nc').exists() for mem in range(self.no_mems)]):
+                    logger.info(f"Not all HERMES files exist for {date_start_end}")
                     if not self.replace_perturb_into_original_emissions():
                         logger.error("replace_perturb_into_original_emissions failed. Perturbated files do not exist. \nExiting pipeline.")
-                        return
-                    break
-                    
-                two_days_back = self.time_manager.current_time - timedelta(days=2) 
+                        return #last_perturbed_day
+                   
+                days_back = self.time_manager.current_time - timedelta(days=self.backup_days) 
                 for mem in range(self.no_mems):
-                    path_emi_mem = self.path_manager.base_path / self.path_manager.path_data / f'INPUT/HERMES/emi_{mem}/HERMESv3_{two_days_back.strftime("%Y%m%d00")}.nc'
+                    path_emi_mem = self.path_manager.base_path / self.path_manager.path_data / f'INPUT/HERMES/emi_{mem}/HERMESv3_{days_back.strftime("%Y%m%d00")}.nc'
                     if not path_emi_mem.exists():
                         logger.info(f"Emission input of two days back for mem does not exist: {path_emi_mem}; no files are removed")
                         break
@@ -392,7 +390,7 @@ class FarmToDartPipeline:
                         logger.info(f"Remove: {path_emi_mem}") 
                         path_emi_mem.unlink(missing_ok=True)
 
-                date_str = two_days_back.strftime("%Y%m%d")
+                date_str = days_back.strftime("%Y%m%d")
                 for mem in range(self.no_mems):
                     list_ic_g1_times_paths = [
                     self.path_manager.base_path / self.path_manager.path_data / f'OUTPUT_{mem}/OUT/ic_g1_{date_str}{hour:02d}.nc'
@@ -407,7 +405,7 @@ class FarmToDartPipeline:
                             file_ic_g1_hourly.unlink(missing_ok=True)
 
                 last_perturbed_day = current_day
-
+                ### return last_perturbed_day 
             
             self.run_farm()  # Run FARM executable
             self.time_manager.simulated_time = self.time_manager.current_time + timedelta(hours=1)
