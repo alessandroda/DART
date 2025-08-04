@@ -111,7 +111,7 @@ class FarmToDartPipeline:
         while True:
             running_jobs = []
             for jobid in job_ids:
-                if not check_job_status_cresco(jobid):
+                if not check_job_status_cresco(jobid, which_run = f"{original_path.name}"):
                     running_jobs.append(jobid)
 
             if not running_jobs:
@@ -310,7 +310,7 @@ class FarmToDartPipeline:
         job_id = job_id.strip()[1:-1]
 
         while True:
-            if check_job_status_cresco(job_id):
+            if check_job_status_cresco(job_id, which_run = 'FARM'):
                 print("Job completed successfully.")
                 # Handle successful job completion: move files
                 self.move_analysis_files()
