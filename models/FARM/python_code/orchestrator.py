@@ -86,6 +86,7 @@ class FarmToDartPipeline:
             The goal is to replace the perturbed emissions in the original HERMES file
             to avoid disk space issues.
         """
+        logger.info(f"Replacing perturbated emissions into original HERMES file in {self.path_manager.base_path / self.path_manager.path_data / 'INPUT/HERMES/'}")
         logger.warning('This step assumes that the emission have been successfully created')
         #./submit_replace_perturb_into_original_emission_arg.sh
         date_start_end = self.time_manager.current_time.strftime("%Y%m%d00")
@@ -369,20 +370,27 @@ class FarmToDartPipeline:
             current_day = self.time_manager.current_time.day
 
             if current_day != last_perturbed_day:
-                if not self.replace_perturb_into_original_emissions():
-                    logger.error("replace_perturb_into_original_emissions failed. Perturbated files do not exist. \nExiting pipeline.")
-                    return
-                two_days_back = self.time_manager.current_time - timedelta(days=2)
-                
+                date_start_end = self.time_manager.current_time.strftime("%Y%m%d00")
+                for mem in range(self.no_mems):
+                    path_emi_mem = self.path_manager.base_path / self.path_manager.path_data / f'INPUT/HERMES/emi_{mem}/HERMESv3_{date_start_end}.nc'
+                    if path_emi_mem.exists():
+                        logger.info(f"{path_emi_mem} already exists")
+                        continue                                         
+                    if not self.replace_perturb_into_original_emissions():
+                        logger.error("replace_perturb_into_original_emissions failed. Perturbated files do not exist. \nExiting pipeline.")
+                        return
+                    break
+                    
+                two_days_back = self.time_manager.current_time - timedelta(days=2) 
                 for mem in range(self.no_mems):
                     path_emi_mem = self.path_manager.base_path / self.path_manager.path_data / f'INPUT/HERMES/emi_{mem}/HERMESv3_{two_days_back.strftime("%Y%m%d00")}.nc'
                     if not path_emi_mem.exists():
-                        logger.info(f"Emission input for mem does not exist: {path_emi_mem}")
-                        
-                    logger.info(f"{path_emi_mem} exists. File size in bytes: {os.path.getsize(path_emi_mem)}") 
-                    logger.info(f"Remove: {path_emi_mem}") 
-                    path_emi_mem.unlink(missing_ok=True)
-
+                        logger.info(f"Emission input of two days back for mem does not exist: {path_emi_mem}; no files are removed")
+                        break
+                    else:
+                        logger.info(f"{path_emi_mem} exists. File size in bytes: {os.path.getsize(path_emi_mem)}") 
+                        logger.info(f"Remove: {path_emi_mem}") 
+                        path_emi_mem.unlink(missing_ok=True)
 
                 date_str = two_days_back.strftime("%Y%m%d")
                 for mem in range(self.no_mems):
@@ -390,8 +398,13 @@ class FarmToDartPipeline:
                     self.path_manager.base_path / self.path_manager.path_data / f'OUTPUT_{mem}/OUT/ic_g1_{date_str}{hour:02d}.nc'
                     for hour in range(1, 24) 
                     ]
-                    for file_ic_g1_hourly in list_ic_g1_times_paths:
-                        file_ic_g1_hourly.unlink(missing_ok=True)
+                    if len(list_ic_g1_times_paths) == 0:
+                        logger.info(f"Initial conditions of two days back for mem does not exist: no files were removed")
+                    else:
+                        for file_ic_g1_hourly in list_ic_g1_times_paths:
+                            logger.info(f"{file_ic_g1_hourly} exists. File size in bytes: {os.path.getsize(file_ic_g1_hourly)}")
+                            logger.info(f"Remove: {file_ic_g1_hourly}")
+                            file_ic_g1_hourly.unlink(missing_ok=True)
 
                 last_perturbed_day = current_day
 
