@@ -407,8 +407,7 @@ class FarmToDartPipeline:
 
                         for file_ic_g1_hourly in list_ic_g1_times_paths:
                             try:
-                                size = os.path.getsize(file_ic_g1_hourly)
-                                logger.info(f"{file_ic_g1_hourly} exists. File size in bytes: {size}")
+                                logger.info(f"{file_ic_g1_hourly} exists. File size in bytes: {os.path.getsize(file_ic_g1_hourly)}")
                                 logger.info(f"Removing file: {file_ic_g1_hourly}")
                                 file_ic_g1_hourly.unlink(missing_ok=True)
                             except FileNotFoundError:
