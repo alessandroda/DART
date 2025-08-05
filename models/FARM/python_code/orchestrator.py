@@ -389,21 +389,37 @@ class FarmToDartPipeline:
                         logger.info(f"{path_emi_mem} exists. File size in bytes: {os.path.getsize(path_emi_mem)}") 
                         logger.info(f"Remove: {path_emi_mem}") 
                         path_emi_mem.unlink(missing_ok=True)
-
+                
                 date_str = days_back.strftime("%Y%m%d")
-                for mem in range(self.no_mems):
-                    list_ic_g1_times_paths = [
-                    self.path_manager.base_path / self.path_manager.path_data / f'OUTPUT_{mem}/OUT/ic_g1_{date_str}{hour:02d}.nc'
-                    for hour in range(1, 24) 
-                    ]
-                    if len(list_ic_g1_times_paths) == 0:
-                        logger.info(f"Initial conditions of two days back for mem does not exist: no files were removed")
-                    else:
-                        for file_ic_g1_hourly in list_ic_g1_times_paths:
-                            logger.info(f"{file_ic_g1_hourly} exists. File size in bytes: {os.path.getsize(file_ic_g1_hourly)}")
-                            logger.info(f"Remove: {file_ic_g1_hourly}")
-                            file_ic_g1_hourly.unlink(missing_ok=True)
 
+                for mem in range(self.no_mems):
+                    try:
+                        mem_path = self.path_manager.base_path / self.path_manager.path_data / f'OUTPUT_{mem}/OUT'
+                        list_ic_g1_times_paths = []
+                        for hour in range(1, 24):
+                            file_path = mem_path / f'ic_g1_{date_str}{hour:02d}.nc'
+                            if file_path.exists():
+                                list_ic_g1_times_paths.append(file_path)
+
+                        if not list_ic_g1_times_paths:
+                            logger.info(f"No IC files found for member {mem} on {date_str}. Nothing to remove.")
+                            continue
+
+                        for file_ic_g1_hourly in list_ic_g1_times_paths:
+                            try:
+                                size = os.path.getsize(file_ic_g1_hourly)
+                                logger.info(f"{file_ic_g1_hourly} exists. File size in bytes: {size}")
+                                logger.info(f"Removing file: {file_ic_g1_hourly}")
+                                file_ic_g1_hourly.unlink(missing_ok=True)
+                            except FileNotFoundError:
+                                logger.warning(f"File not found when attempting to remove: {file_ic_g1_hourly}")
+                            except PermissionError:
+                                logger.error(f"Permission denied when trying to remove: {file_ic_g1_hourly}")
+                            except Exception as e:
+                                logger.error(f"Unexpected error removing file {file_ic_g1_hourly}: {e}")
+                    except Exception as e:
+                        logger.error(f"Unexpected error processing member {mem}: {e}")
+                
                 last_perturbed_day = current_day
                 ### return last_perturbed_day 
             
