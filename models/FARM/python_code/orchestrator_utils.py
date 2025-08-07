@@ -904,7 +904,7 @@ def get_list_mems_to_rerun(job_ids : list, path_manager : PathManager, timestamp
     while True:
         running_jobs = []
         for jobid in job_ids:
-            if not check_job_status_cresco(jobid):
+            if not check_job_status_cresco(jobid, which_run='FARM'):
                 running_jobs.append(jobid)
 
         if not running_jobs:
