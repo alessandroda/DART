@@ -37,4 +37,9 @@ time:
   dt_seconds: 3600
   end_time: '2023-08-15 03:00:00'
   start_time: '2023-08-15 01:00:00'
-  backup_days: 2
+  backup_perturb_days: 1
+  backup_ic_hours: 2
+  # options: 'daily', '5daily', 'hourly'
+  backup_ic_option: 'daily'
+
+  

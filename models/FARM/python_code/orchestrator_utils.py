@@ -160,6 +160,7 @@ class TimeManager:
         self.timestamp_farm_run = None
         self.sat_obs = None
         self.dt = pd.Timedelta(dt_seconds, unit="s")
+        self.last_perturbed_day = None
 
         self.check_start_ahead_end()
 
@@ -869,7 +870,7 @@ def modify_yaml_date(file_path, new_date):
         with open(file_path, 'w') as file:
             yaml.safe_dump(data, file)
 
-        logger.info(f'Next run starts from {date}')
+        logger.info(f'Next run starts from {new_date}')
 
     except Exception as e:
         logger.error(f"An error occurred: {e}")
@@ -964,4 +965,29 @@ def replace_priorinflation(path_manager: PathManager, timestamp_farm: str):
             logger.error(f"Failed to rename {input_file} to {output_file}: {e}")
 
     logger.info(f"Finished renaming priorinflation files for run: {timestamp_farm}")
+
+
+def filter_dates(dates, mode):
+    """Filter hourly dates according to backup mode."""
+    mode = str(mode).strip().lower()
+
+    if mode == '5daily':
+        logger.info('Saving ic_g1 at 00:00 for days: [1, 5, 10, 15, 20, 25, 30]')
+        keep_days = [1, 5, 10, 15, 20, 25, 30]
+        return dates[(dates.hour != 0) | (~dates.day.isin(keep_days))]
+
+    elif mode == 'daily':
+        logger.info('Saving ic_g1 at 00:00 for each day')
+        return dates[dates.hour != 0]
+
+    elif mode == 'hourly':
+        logger.info('Saving ic_g1 for every hour (no exclusions)')
+        return dates
+
+    else:
+        logger.warning(
+            f"Unknown days_backup option '{mode}'. Defaulting to 'daily'. "
+            f"Accepted values: ['daily', '5daily', 'hourly']"
+        )
+        return dates[dates.hour != 0]
 

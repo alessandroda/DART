@@ -9,6 +9,7 @@ import logging
 import yaml
 from orchestrator_utils import (
     check_job_status_cresco,
+    filter_dates,
     replace_nml_template,
     run_command_in_directory,
     run_command_in_directory_bsub,
@@ -79,8 +80,78 @@ class FarmToDartPipeline:
         self.state_variable_qty = self.config['assimilation']['state_variable_qty']
         self.run_assimilation_flag=self.config['assimilation']['run_assimilation_flag']
         self.case_emi_dir=self.config['assimilation']['case_emi_dir']
-        self.backup_days = self.config['time']['backup_days']
+        self.backup_perturb_days = self.config['time']['backup_perturb_days']
+        self.backup_ic_hours = self.config['time']['backup_ic_hours']
+        self.backup_ic_option = self.config['time']['backup_ic_option']
     
+    def update_perturbations(self):
+        current_day = self.time_manager.current_time.day
+        if current_day != self.time_manager.last_perturbed_day:
+            date_start_end = self.time_manager.current_time.strftime("%Y%m%d00")
+            if not all([(self.path_manager.base_path / self.path_manager.path_data / f'INPUT/HERMES/emi_{mem}/HERMESv3_{date_start_end}.nc').exists() for mem in range(self.no_mems)]):
+                logger.info(f"Not all HERMES files exist for {date_start_end}")
+                if not self.replace_perturb_into_original_emissions():
+                    return False
+            self.time_manager.last_perturbed_day = current_day
+        return True
+
+    def cleanup_perturbations(self):
+        current_day = self.time_manager.current_time.day
+        if current_day != self.time_manager.last_perturbed_day:
+            days_back = self.time_manager.current_time - timedelta(days=self.backup_perturb_days) 
+            for mem in range(self.no_mems):
+                path_emi_mem = self.path_manager.base_path / self.path_manager.path_data / f'INPUT/HERMES/emi_{mem}/HERMESv3_{days_back.strftime("%Y%m%d00")}.nc'
+                if not path_emi_mem.exists():
+                    logger.info(f"Emission input of two days back for mem does not exist: {path_emi_mem}; no files are removed")
+                    break
+                else:
+                    logger.info(f"{path_emi_mem} exists. File size in bytes: {os.path.getsize(path_emi_mem)}") 
+                    logger.info(f"Remove: {path_emi_mem}") 
+                    path_emi_mem.unlink(missing_ok=True)
+                
+    def cleanup_FARM(self):
+
+        """Remove old ic_g1 files based on backup settings."""
+        logger.warning(f"Preventing removal of latest ic_g1 not yet used: {self.time_manager.simulated_time}")
+        start_date_backward = self.time_manager.simulated_time - timedelta(hours=self.backup_ic_hours)
+        end_date_backward = self.time_manager.simulated_time - timedelta(hours=1)
+
+        dates_backward = pd.date_range(start_date_backward, end_date_backward, freq ='H')
+        date_backward = filter_dates(dates_backward, self.backup_ic_option)
+
+        # Iterate over ensemble members
+        for mem in range(self.no_mems):
+            try:
+                mem_path = self.path_manager.base_path / self.path_manager.path_data / f'OUTPUT_{mem}/OUT'
+                files_to_remove = []
+                
+                for date_backward in dates_backward:
+                    file_path = mem_path / f'ic_g1_{date_backward.strftime("%Y%m%d%H")}.nc'
+                    if file_path.exists():
+                        files_to_remove.append(file_path)
+
+                if not files_to_remove:
+                    logger.info(
+                        f"No IC files to remove for member {mem} in time range "
+                        f"{start_date_backward:%Y-%m-%d %H:%M} to {end_date_backward:%Y-%m-%d %H:%M}"
+                    )
+                    continue
+
+                for file_ic_g1_hourly in files_to_remove:
+                    try:
+                        logger.info(f"{file_ic_g1_hourly} exists. File size in bytes: {os.path.getsize(file_ic_g1_hourly)}")
+                        logger.info(f"Removing file: {file_ic_g1_hourly}")
+                        file_ic_g1_hourly.unlink(missing_ok=True)
+                    except FileNotFoundError:
+                        logger.warning(f"File not found when attempting to remove: {file_ic_g1_hourly}")
+                    except PermissionError:
+                        logger.error(f"Permission denied when trying to remove: {file_ic_g1_hourly}")
+                    except Exception as e:
+                        logger.error(f"Unexpected error removing file {file_ic_g1_hourly}: {e}")
+            except Exception as e:
+                logger.error(f"Unexpected error processing member {mem}: {e}")
+    
+ 
     def replace_perturb_into_original_emissions(self):
         """
             This step assumes that the emission have been successfully perturbated.
@@ -365,63 +436,12 @@ class FarmToDartPipeline:
     def run_pipeline(self):
         
         logger.info("[ORCHESTRATOR] ---------- TIME LOOP BEGINS")
-
-        last_perturbed_day = None
+       
         while self.time_manager.current_time <= self.time_manager.end_time:
-            current_day = self.time_manager.current_time.day
+            if not self.update_perturbations():
+                logger.error("replace_perturb_into_original_emissions failed. Perturbated files do not exist. \nExiting pipeline.")
+            self.cleanup_perturbations()
 
-            if current_day != last_perturbed_day:
-                ### inizio funzione da chiamare in utils 
-                date_start_end = self.time_manager.current_time.strftime("%Y%m%d00")
-                if not all([(self.path_manager.base_path / self.path_manager.path_data / f'INPUT/HERMES/emi_{mem}/HERMESv3_{date_start_end}.nc').exists() for mem in range(self.no_mems)]):
-                    logger.info(f"Not all HERMES files exist for {date_start_end}")
-                    if not self.replace_perturb_into_original_emissions():
-                        logger.error("replace_perturb_into_original_emissions failed. Perturbated files do not exist. \nExiting pipeline.")
-                        return #last_perturbed_day
-                   
-                days_back = self.time_manager.current_time - timedelta(days=self.backup_days) 
-                for mem in range(self.no_mems):
-                    path_emi_mem = self.path_manager.base_path / self.path_manager.path_data / f'INPUT/HERMES/emi_{mem}/HERMESv3_{days_back.strftime("%Y%m%d00")}.nc'
-                    if not path_emi_mem.exists():
-                        logger.info(f"Emission input of two days back for mem does not exist: {path_emi_mem}; no files are removed")
-                        break
-                    else:
-                        logger.info(f"{path_emi_mem} exists. File size in bytes: {os.path.getsize(path_emi_mem)}") 
-                        logger.info(f"Remove: {path_emi_mem}") 
-                        path_emi_mem.unlink(missing_ok=True)
-                
-                date_str = days_back.strftime("%Y%m%d")
-
-                for mem in range(self.no_mems):
-                    try:
-                        mem_path = self.path_manager.base_path / self.path_manager.path_data / f'OUTPUT_{mem}/OUT'
-                        list_ic_g1_times_paths = []
-                        for hour in range(1, 24):
-                            file_path = mem_path / f'ic_g1_{date_str}{hour:02d}.nc'
-                            if file_path.exists():
-                                list_ic_g1_times_paths.append(file_path)
-
-                        if not list_ic_g1_times_paths:
-                            logger.info(f"No IC files found for member {mem} on {date_str}. Nothing to remove.")
-                            continue
-
-                        for file_ic_g1_hourly in list_ic_g1_times_paths:
-                            try:
-                                logger.info(f"{file_ic_g1_hourly} exists. File size in bytes: {os.path.getsize(file_ic_g1_hourly)}")
-                                logger.info(f"Removing file: {file_ic_g1_hourly}")
-                                file_ic_g1_hourly.unlink(missing_ok=True)
-                            except FileNotFoundError:
-                                logger.warning(f"File not found when attempting to remove: {file_ic_g1_hourly}")
-                            except PermissionError:
-                                logger.error(f"Permission denied when trying to remove: {file_ic_g1_hourly}")
-                            except Exception as e:
-                                logger.error(f"Unexpected error removing file {file_ic_g1_hourly}: {e}")
-                    except Exception as e:
-                        logger.error(f"Unexpected error processing member {mem}: {e}")
-                
-                last_perturbed_day = current_day
-                ### return last_perturbed_day 
-            
             self.run_farm()  # Run FARM executable
             self.time_manager.simulated_time = self.time_manager.current_time + timedelta(hours=1)
             self.set_days_seconds_model() 
@@ -451,22 +471,9 @@ class FarmToDartPipeline:
                 f"Completed processing for {self.time_manager.current_time.strftime('%Y-%m-%d %H:%M')}"
             )
             modify_yaml_date(CONFIG_PATH, self.time_manager.simulated_time.strftime("%Y-%m-%d %H:00:00")) 
+            self.cleanup_FARM()
 		
-#            if self.time_manager.simulated_time.hour == 0:
-#                cleanup_days(self.time_manager.simulated_time, 2, path_manager)
-#	     self.time_manager.update_control_times()
-#	     cleanup_days(self.time_manager.list_of_days_to_remove)
         logger.info("Pipeline execution completed.")
-
-#def cleanup_days(current_time : datetime, days_before : int, path_manager)
-#        #current_time shift two days back
-#        try:
-#            for hour in range(1,23):
-#            # os.remove(path_manager.ic_g1_{date_str}{hour}.nc)
-#            logger.info(f'removed ic_g1: ic_g1{date_str}{hour}.nc')
-#        except:
-#            logger.warning(f'{date_str}{hour} does not exist')
     
-# Instantiate and run the pipeline
 pipeline = FarmToDartPipeline()
 pipeline.run_pipeline()
