@@ -885,12 +885,11 @@ def submit_and_wait(path_manager : PathManager, commands_with_directories:
 
     if mems_to_rerun:
         list_mems = [str(mem) for mem in mems_to_rerun]
-        timestamp_farm_min1 = pd.to_datetime(timestamp_farm) - timedelta(hours=1)
         replace_nml_template(
             input_nml_path=path_manager.run_submit_farm_template,
             entries_tbr_dict={
-                "da_date_start": timestamp_farm_min1.strftime('%Y%m%d%H'),
-                "da_date_end": timestamp_farm_min1.strftime('%Y%m%d%H'),
+                "da_date_start": timestamp_farm.strftime('%Y%m%d%H'),
+                "da_date_end": timestamp_farm.strftime('%Y%m%d%H'),
                 "@no_mems_list": str(tuple(list_mems)).replace(',',''),
                 "@case_dir" : case_dir,
                 "@cresco_queue" : cresco_queue
@@ -918,16 +917,17 @@ def get_list_mems_to_rerun(job_ids : list, path_manager : PathManager, timestamp
             time.sleep(30)
 
 def ic_g1_not_existing(path_manager : PathManager, timestamp_farm : str, no_mems : int):
-    file_name = f'ic_g1_{timestamp_farm}.nc'
-    mems_not_existing = []
+    timestamp_ic_g1 = pd.to_datetime(timestamp_farm) + timedelta(hours = 1)
+    file_name = f'ic_g1_{timestamp_ic_g1}.nc'
+    mems_to_rerun = []
     for mem in range(no_mems):
         file_path  = Path(path_manager.path_data / f'OUTPUT_{mem}/OUT/{file_name}')
         if os.path.exists(file_path):
             logger.info(f"The core {file_name} for mem {mem} exists in the directory {os.path.getsize(file_path)} bytes")
         else:
             logger.info(f"The core {file_name} for mem {mem} does not exist in the directory")
-            mems_not_existing.append(mem)
-    return mems_not_existing
+            mems_to_rerun.append(mem)
+    return mems_to_rerun
 
 
 def replace_priorinflation(path_manager: PathManager, timestamp_farm: str):
