@@ -84,7 +84,7 @@ class FarmToDartPipeline:
         self.backup_ic_hours = self.config['time']['backup_ic_hours']
         self.backup_ic_option = self.config['time']['backup_ic_option']
     
-    def update_perturbations(self):
+    def update_and_cleanup_perturbations(self):
         current_day = self.time_manager.current_time.day
         if current_day != self.time_manager.last_perturbed_day:
             date_start_end = self.time_manager.current_time.strftime("%Y%m%d00")
@@ -92,12 +92,7 @@ class FarmToDartPipeline:
                 logger.info(f"Not all HERMES files exist for {date_start_end}")
                 if not self.replace_perturb_into_original_emissions():
                     return False
-            self.time_manager.last_perturbed_day = current_day
-        return True
-
-    def cleanup_perturbations(self):
-        current_day = self.time_manager.current_time.day
-        if current_day != self.time_manager.last_perturbed_day:
+            
             days_back = self.time_manager.current_time - timedelta(days=self.backup_perturb_days) 
             for mem in range(self.no_mems):
                 path_emi_mem = self.path_manager.base_path / self.path_manager.path_data / f'INPUT/HERMES/emi_{mem}/HERMESv3_{days_back.strftime("%Y%m%d00")}.nc'
@@ -108,6 +103,10 @@ class FarmToDartPipeline:
                     logger.info(f"{path_emi_mem} exists. File size in bytes: {os.path.getsize(path_emi_mem)}") 
                     logger.info(f"Remove: {path_emi_mem}") 
                     path_emi_mem.unlink(missing_ok=True)
+
+            self.time_manager.last_perturbed_day = current_day
+        return True
+
                 
     def cleanup_FARM(self):
 
@@ -438,9 +437,8 @@ class FarmToDartPipeline:
         logger.info("[ORCHESTRATOR] ---------- TIME LOOP BEGINS")
        
         while self.time_manager.current_time <= self.time_manager.end_time:
-            if not self.update_perturbations():
+            if not self.update_and_cleanup_perturbations():
                 logger.error("replace_perturb_into_original_emissions failed. Perturbated files do not exist. \nExiting pipeline.")
-            self.cleanup_perturbations()
 
             self.run_farm()  # Run FARM executable
             self.time_manager.simulated_time = self.time_manager.current_time + timedelta(hours=1)
