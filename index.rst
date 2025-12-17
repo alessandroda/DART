@@ -4,7 +4,7 @@ Welcome to the Data Assimilation Research Testbed
 =================================================
 
 The Data Assimilation Research Testbed (DART) is an open-source, freely
-available community facility for ensemble data assimilation (DA). [1]_ DART is
+available community facility for ensemble data assimilation (DA) [1]_ [5]_. DART is
 developed and maintained by the `Data Assimilation Research Section
 (DAReS) <https://dart.ucar.edu/about/>`_ at the NSF `National Center
 for Atmospheric Research (NSF NCAR) <https://ncar.ucar.edu>`_.
@@ -183,71 +183,29 @@ If any of these steps fail or you don’t know how to do them, go to the DART
 project web page listed above for very detailed instructions that should get you
 over any bumps in the process.
 
-Quick-start for developers
-^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-To create a fork of DART for your own development you will need
-a `GitHub <https://github.com/>`__ account. 
-
-1. fork the NCAR/DART repo on GitHub
-2. clone your (new) fork to your machine - this will set up a remote named
-   ‘origin’.
-
-.. code::
-
-   git clone https://github.com/USERNAME/DART.git
-
-where `USERNAME` is your GitHub username. 
-
-3. create a remote to point back to the NCAR/DART repo. Convention dictates
-   that this remote should be called ‘upstream’
-
-.. code::
-
-   git remote add upstream https://github.com/NCAR/DART.git
-
-Use ‘upstream’ to keep your fork up to date with NCAR/DART. GitHub has documentation
-on `working with forks <https://docs.github.com/en/github/collaborating-with-issues-and-pull-requests/working-with-forks>`__.
-
-4. Download one of the tar files (listed below) of ‘large’ files so you can test
-   your DART installation.
-5. If you want to contribute your work back to the DART community, create a feature
-   branch with your work, then issue a `pull request <https://docs.github.com/en/github/collaborating-with-issues-and-pull-requests/creating-a-pull-request-from-a-fork>`__
-   to propose changes to NCAR/DART.
-
-There are several large files that are needed to run some of the tests and
-examples but are not included in order to keep the repository as small as
-possible. If you are interested in running *bgrid_solo*, *cam-fv*, or testing
-the *NCEP/prep_bufr* observation converter, you will need these files. These
-files are available at:
-
-+-------------------+------+----------------------------------------------------------------------------------------------------------------------------------+
-| Release           | Size | Filename                                                                                                                         |
-+===================+======+==================================================================================================================================+
-| “Manhattan”       | 189M | `Manhattan_large_files.tar.gz <https://www.image.ucar.edu/pub/DART/Release_datasets/Manhattan_large_files.tar.gz>`__             |
-+-------------------+------+----------------------------------------------------------------------------------------------------------------------------------+
-| “wrf-chem.r13172” | 141M | `wrf-chem.r13172_large_files.tar.gz <https://www.image.ucar.edu/pub/DART/Release_datasets/wrf-chem.r13172_large_files.tar.gz>`__ |
-+-------------------+------+----------------------------------------------------------------------------------------------------------------------------------+
-| “Lanai”           | 158M | `Lanai_large_files.tar.gz <https://www.image.ucar.edu/pub/DART/Release_datasets/Lanai_large_files.tar.gz>`__                     |
-+-------------------+------+----------------------------------------------------------------------------------------------------------------------------------+
-| “Kodiak”          | 158M | `Kodiak_large_files.tar.gz <https://www.image.ucar.edu/pub/DART/Release_datasets/Kodiak_large_files.tar.gz>`__                   |
-+-------------------+------+----------------------------------------------------------------------------------------------------------------------------------+
-| “Jamaica”         | 32M  | `Jamaica_large_files.tar.gz <https://www.image.ucar.edu/pub/DART/Release_datasets/Jamaica_large_files.tar.gz>`__                 |
-+-------------------+------+----------------------------------------------------------------------------------------------------------------------------------+
-| “Hawaii”          | 32M  | `Hawaii_large_files.tar.gz <https://www.image.ucar.edu/pub/DART/Release_datasets/Hawaii_large_files.tar.gz>`__                   |
-+-------------------+------+----------------------------------------------------------------------------------------------------------------------------------+
-
-Download the appropriate tar file and untar it into your DART repository. Ignore
-any warnings about ``tar: Ignoring unknown extended header keyword``.
-
+.. _citeDART:
 
 Citing DART
 -----------
+If you use DART in research, publications, presentations, or software, 
+please cite the following paper as the **primary reference**: 
 
-Cite DART using the following text:
+   **El Gharamti, M., H. Kershaw, K. Raeder, B. Raczka, B. Johnson, M. Smith, 
+   J. L. Anderson, D. Amrhein, N. Collins, I. Grooms, and L. Kugler (2025):**
+   *The Data Assimilation Research Testbed: A Robust, Scalable Software Facility
+   with Groundbreaking Capabilities for Model-Data Integration.* 
+   Bulletin of the American Meteorological Society, **106** (11), E2328-E2345.
+   `doi.org/10.1175/BAMS-D-24-0214.1 <https://doi.org/10.1175/BAMS-D-24-0214.1>`_
 
-   The Data Assimilation Research Testbed (Version X.Y.Z) [Software]. (2024).
-   Boulder, Colorado: UCAR/NSF NCAR/CISL/DAReS. http://doi.org/10.5065/D6WQ0202
+The paper describes the current state of DART, including supported models, 
+observation types, modern ensemble and hybrid algorithms, software infrastructure, 
+and its role as a community facility.  
+
+To cite the DART code (GitHub repository), use the following text:
+
+   The Data Assimilation Research Testbed (Version X.Y.Z) [Software]. (2025).
+   Boulder, Colorado: UCAR/NSF NCAR/CISL/DAReS. 
+   https://doi.org/10.5065/D6WQ0202
 
 Update the DART version and year as appropriate.
 
@@ -255,7 +213,7 @@ References
 ----------
 
 .. [1] Anderson, J. L., T. Hoar, K. Raeder, H. Liu, N. Collins, R. Torn and A.
-       Arellano, 2009 The Data Assimilation Research Testbed: A Community 
+       Arellano, 2009: The Data Assimilation Research Testbed: A Community 
        Facility. *Bulletin of the American Meteorological Society*, **90**,
        1283-1296, `doi:10.1175/2009BAMS2618.1
        <http://dx.doi.org/10.1175/2009BAMS2618.1>`_
@@ -266,11 +224,18 @@ References
        Part II: Regression of Observation Increments in a Probit and
        Probability Integral Transformed Space. *Monthly Weather Review*,
        **151**, 2759–2777, `doi:10.1175/MWR-D-23-0065.1 <http://n2t.net/ark:/85065/d7nv9pbt>`_ 
-.. [4] Anderson, J. L., Riedel, C., Wieringa, M., Ishraque, F., Smith, M., Kershaw, H.
+.. [4] Anderson, J., C. Riedel, M. Wieringa, F. Ishraque, M. Smith, and H. Kershaw, 2024: 
        2023: A Quantile-Conserving
        Ensemble Filter Framework. Part III: Data Assimilation for Mixed Distributions
        with Application to a Low-Order Tracer Advection Model. *Monthly Weather Review*
-       `[Manuscript submitted for publication] <_static/papers/QCEFF_3_submitted.pdf>`_
+       **152**, 2111–2127, `doi:10.1175/MWR-D-23-0255.1 <https://doi.org/10.1175/MWR-D-23-0255.1>`_
+.. [5] El Gharamti, M., H. Kershaw, K. Raeder, B. Raczka, B. Johnson, M. Smith, 
+       J. L. Anderson, D. Amrhein, N. Collins, I. Grooms, and L. Kugler (2025):
+       The Data Assimilation Research Testbed: A Robust, Scalable Software Facility
+       with Groundbreaking Capabilities for Model-Data Integration. 
+       *Bulletin of the American Meteorological Society*, **106** (11), E2328-E2345.
+       `doi.org/10.1175/BAMS-D-24-0214.1 <https://doi.org/10.1175/BAMS-D-24-0214.1>`_   
+
 
 .. |spaghetti_square| image:: ./guide/images/DARTspaghettiSquare.gif
    :width: 100%
@@ -288,6 +253,13 @@ References
    guide/downloading-dart
    guide/compiling-dart
    guide/verifying-installation
+
+.. toctree::
+   :hidden:
+   :caption: DART Python tools
+
+   guide/pytools
+
 
 .. toctree::
    :maxdepth: 2
@@ -318,7 +290,6 @@ References
    DART build system <guide/quickbuild.rst>
    guide/assimilation-complex-model
    guide/mpi_intro
-   guide/filters
    guide/inflation
    guide/required-model-mod-routines
    guide/suggestions-for-a-simple-model
@@ -362,20 +333,23 @@ References
    observations/obs_converters/Ameriflux/fluxnetfull_to_obs
    observations/obs_converters/Ameriflux/level4_to_obs
    observations/obs_converters/CHAMP/work/README
+   observations/obs_converters/BATS/readme
    observations/obs_converters/cice/cice_to_obs
    observations/obs_converters/CONAGUA/README
    observations/obs_converters/COSMOS/COSMOS_to_obs
    observations/obs_converters/COSMOS/COSMOS_development
+   observations/obs_converters/CrocoLake/readme
    observations/obs_converters/DWL/dwl_to_obs
    observations/obs_converters/GMI/README
    observations/obs_converters/GOES/README
    observations/obs_converters/GPSPW/README
    observations/obs_converters/GSI2DART/readme
    observations/obs_converters/GTSPP/GTSPP
+   observations/obs_converters/HFradar/readme
    observations/obs_converters/MADIS/MADIS
    observations/obs_converters/MIDAS/MIDAS_to_obs
-   observations/obs_converters/MODIS/readme
    observations/obs_converters/MODIS/MOD15A2_to_obs
+   observations/obs_converters/MODIS/MOD29E1D_to_obs
    observations/obs_converters/MPD/README
    observations/obs_converters/NASA_Earthdata/README
    observations/obs_converters/NCEP/prep_bufr/prep_bufr
@@ -420,12 +394,12 @@ References
    :maxdepth: 2
    :caption: Theory
 
-   theory/readme
    theory/conditional-probability-bayes-theorem
    guide/DART_LAB/DART_LAB
+   theory/readme
+   guide/qceff-examples.rst
    CLM-DART Tutorial <models/clm/tutorial/README>
    WRF-DART Tutorial <models/wrf/tutorial/README>
-   guide/qceff-examples.rst
    
 .. toctree::
    :maxdepth: 2
@@ -440,6 +414,7 @@ References
 
    models/9var/readme
    models/aether_lat-lon/readme
+   models/aether_cube_sphere/readme
    models/am2/readme
    models/bgrid_solo/readme
    models/cam-fv/readme
@@ -467,6 +442,7 @@ References
    models/lorenz_96_tracer_advection/readme
    models/forced_lorenz_96/readme
    models/MITgcm_ocean/readme
+   models/MARBL_column/readme
    models/MOM6/readme
    models/mpas_atm/readme
    models/mpas_atm/mpas_dart_obs_preprocess
@@ -475,22 +451,22 @@ References
    models/NCOMMAS/readme
    models/noah/readme
    models/null_model/readme
+   models/pangu/readme
    models/PBL_1d/readme
    models/pe2lyr/readme
    models/POP/readme
    models/POP/dart_pop_mod
-   models/ROMS/readme
+   models/ROMS_rutgers/readme
+   models/ROMS_ucla/readme
    models/rose/readme
    models/seir/readme
    models/simple_advection/readme
    models/sqg/readme
-   models/template/new_model
    models/tiegcm/readme
    models/wrf_hydro/readme
    models/wrf/readme
    models/wrf/WRF_DART_utilities/replace_wrf_fields
    models/wrf/WRF_DART_utilities/wrf_dart_obs_preprocess
-   models/template/readme
    models/utilities/default_model_mod
 
 
@@ -499,7 +475,6 @@ References
    :caption: Contributing and Community
 
    guide/contributors-guide
-   guide/requesting-features-reporting-bugs
    guide/mailing-list
 
 .. toctree::
@@ -508,7 +483,6 @@ References
 
    guide/Manhattan_diffs_from_Lanai
    guide/forward_operator
-   guide/netcdf_inflation_files
    guide/state_structure
    guide/filter_async_modes
    guide/distributed_state
@@ -576,7 +550,6 @@ References
    :caption: Developer tests
    :hidden:
 
-   developer_tests/location/location_mod
    developer_tests/forward_operators/readme
    developer_tests/utilities/PrecisionCheck
 
@@ -621,3 +594,4 @@ References
    :hidden:
 
    guide/404
+   guide/references

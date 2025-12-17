@@ -10,7 +10,7 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
+import os
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 
@@ -21,7 +21,7 @@ copyright = '2023, University Corporation for Atmospheric Research'
 author = 'Data Assimilation Research Section'
 
 # The full version, including alpha/beta/rc tags
-release = '11.5.0'
+release = '11.19.1'
 root_doc = 'index'
 
 # -- General configuration ---------------------------------------------------
@@ -30,6 +30,7 @@ root_doc = 'index'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
+     'sphinx_copybutton',
      'sphinx_rtd_theme',
      'sphinx.ext.autodoc',
      'sphinx.ext.mathjax'
@@ -38,29 +39,7 @@ extensions = [
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'models/gitm/testdata1/*',
-        'guide/Manhattan_release.rst',
-        'guide/Lanai_release.rst',
-        'guide/history/Kodiak_release.rst',
-        'guide/history/Jamaica_release.rst',
-        'guide/history/Iceland_release.rst',
-        'guide/history/hawaii_release.rst',
-        'guide/history/Guam_release.rst',
-        'guide/history/Fiji_release.rst',
-        'guide/Lanai_diffs_from_Kodiak.rst',
-        'guide/history/Jamaica_diffs_from_I.rst',
-        'guide/history/pre_j_release.rst',
-        'guide/history/PostI_diffs_from_I.rst',
-        'guide/history/Post_Iceland_release.rst',
-        'guide/history/I_diffs_from_workshop.rst',
-        'guide/history/pre_hawaii_release.rst',
-        'guide/history/pre_guam_release.rst',
-        'guide/bitwise_considerations.rst',
-        'guide/rma.rst',
-        'guide/vertical_conversion.rst',
-        'guide/boilerplate/boilerplate.rst',
-        'guide/boilerplate/template.rst'
-
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'models/gitm/testdata1/*', 'models/template/new_model.rst',
 ]
 
 
@@ -86,3 +65,9 @@ templates_path = ['guide/_templates']
 html_static_path = ['guide/_static']
 
 html_css_files = ['css/custom.css']
+
+# include references
+with open(os.path.join(os.path.dirname(__file__), 'guide/references.rst')) as f:
+    references_content = f.read()
+
+rst_prolog = references_content

@@ -451,6 +451,7 @@ while ( 1 == 1 )
 
       set ensstring = `echo $n + 10000 | bc | cut -b2-5`
       set keep_trying = true
+      set max_retry = 1
 
       while ( $keep_trying == 'true' )
 
@@ -473,24 +474,23 @@ while ( 1 == 1 )
 
             else if ( $SUPER_PLATFORM == 'derecho' ) then
 
-               # Prevent double submission for member 1 only               
-               if ( $n == 1) then
-               sleep 5
-               endif
 
                if ( `qstat -wa | grep assim_advance_${n} | wc -l` == 0 ) then
 
-                  echo "assim_advance_${n} is missing from the queue"
-                  qsub assim_advance_mem${n}.csh
+                  echo "Warning, detected that assim_advance_${n} is missing from the queue"
+                  echo "If this warning leads to  missing output from ensemble ${n}" 
+                  echo "consider enabling the qsub command within keep_trying while statement in driver.csh"
+
+                  #qsub assim_advance_mem${n}.csh
                endif
 
             endif
-            sleep 15
+            sleep 5
 
          end
          set start_time = `head -1 start_member_${n}`
          echo "Member $n has started.  Start time $start_time"
-
+        
          #  Wait for the output file
          while ( 1 == 1 )
 
@@ -504,10 +504,26 @@ while ( 1 == 1 )
                break
 
             else if ( $length_time > $advance_thresh ) then
+            
+               #  If WRF member has failed 2 resubmission attempts, immediately stop driver.csh
+               if ($max_retry > 2) then
+               
+               echo "Stopping the driver.csh script! The WRF ensemble member ${n}" 
+               echo "has exceeded the maximum resubmission attempts (2) without completing."
+               echo "This typically means the WRF integration has failed."
+               echo "Check your BASE_DIR/rundir/advance_temp${n} directory and locate"
+               echo "the WRF rsl.out.0000 or rsl.error.0000 log files for further information."
+               echo "If applicable, check the DART analysis_increment.nc from previous assimilation step"
+               exit 7
 
-      	       #  Obviously, the job crashed.  Resubmit to queue
-      	       ${REMOVE} start_member_${n}
-               echo "didn't find the member done file"
+               endif
+
+      	       # The WRF job did not complete. Resubmit to queue
+      	       ${REMOVE} start_member_${n}  
+               echo "Did not find the member done file, WRF run did not complete"
+               echo "Attempting resubmission $max_retry"
+               @ max_retry++
+
                if ( $SUPER_PLATFORM == 'LSF queuing system' ) then
 
                   if ( $?reservation ) then

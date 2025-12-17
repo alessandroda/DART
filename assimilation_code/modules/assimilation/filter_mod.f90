@@ -438,6 +438,12 @@ if (do_output()) then
                                       inf_damping(POSTERIOR_INF), ' will be used'
       call error_handler(E_MSG,'filter_main:', msgstring)
    endif
+   if (do_rtps_inflate(post_inflate)) then
+      write(msgstring, *) 'Posterior inflation is RTPS, QCEFF ', &
+                              'inflation options will be ignored for posterior inflation'
+      call error_handler(E_MSG,'filter_main:', msgstring)
+   endif
+
 endif
 
 call trace_message('After  initializing inflation')
@@ -901,7 +907,7 @@ AdvanceTime : do
    ! Already transformed, so compute mean and spread for state diag as needed
    call compute_copy_mean_sd(state_ens_handle, 1, ens_size, ENS_MEAN_COPY, ENS_SD_COPY)
 
-   ! This block applies posterior inflation
+   ! This block damps the posterior inflation
 
    if(do_ss_inflate(post_inflate)) then
 
@@ -1561,7 +1567,7 @@ type(distribution_params_type) :: dist_params
 real(r8) :: probit_ens(ens_size), probit_ens_mean
 logical  :: bounded_below, bounded_above
 real(r8) :: lower_bound,   upper_bound
-integer  :: dist_type
+integer  :: dist_type, ierr
 
 ! Inflate each group separately;  Divide ensemble into num_groups groups
 grp_size = ens_size / num_groups
@@ -1603,16 +1609,20 @@ do group = 1, num_groups
 
          call transform_to_probit(grp_size, ens_handle%copies(grp_bot:grp_top, j), &
             dist_type, dist_params, probit_ens(1:grp_size), .false., &
-               bounded_below, bounded_above, lower_bound, upper_bound)
+               bounded_below, bounded_above, lower_bound, upper_bound, ierr)
 
-         ! Compute the ensemble mean in transformed space
-         probit_ens_mean = sum(probit_ens(1:grp_size)) / grp_size
-         ! Inflate in probit space
-         call inflate_ens(inflate, probit_ens(1:grp_size), probit_ens_mean, &
-            ens_handle%copies(inflate_copy, j))
-         ! Transform back from probit space
-         call transform_from_probit(grp_size, probit_ens(1:grp_size), &
-            dist_params, ens_handle%copies(grp_bot:grp_top, j))
+         ! Only inflate if successful return from the probit transform
+         if(ierr == 0) then
+            ! Compute the ensemble mean in transformed space
+            probit_ens_mean = sum(probit_ens(1:grp_size)) / grp_size
+            ! Inflate in probit space
+            call inflate_ens(inflate, probit_ens(1:grp_size), probit_ens_mean, &
+               ens_handle%copies(inflate_copy, j))
+            ! Transform back from probit space
+            call transform_from_probit(grp_size, probit_ens(1:grp_size), &
+               dist_params, ens_handle%copies(grp_bot:grp_top, j))
+         endif
+
       end do
    endif
 end do
@@ -2275,7 +2285,7 @@ end subroutine store_copies
 !------------------------------------------------------------------
 !> Count the number of copies to be allocated for the ensemble manager
 
-function count_state_ens_copies(ens_size, post_inflate, prior_inflate) result(num_copies)
+function count_state_ens_copies(ens_size, prior_inflate, post_inflate) result(num_copies)
 
 integer,                     intent(in) :: ens_size
 type(adaptive_inflate_type), intent(in) :: prior_inflate
