@@ -698,7 +698,7 @@ def prepare_dart_to_farm_nc(path_manager, output_sim_folder, time_model, ass_var
             raise
         finally:
             # Cleanup: Remove temporary files
-            temp_files = [tmp0_posterior, tmp1_posterior, result_tmp, prior_from_farm_file] + to_dart_files 
+            temp_files = [tmp0_posterior, tmp1_posterior, result_tmp, prior_from_farm_file] #+ to_dart_files 
             for temp_file in temp_files:
                 temp_file.unlink(missing_ok=True)
            
@@ -881,26 +881,27 @@ def submit_and_wait(path_manager : PathManager, commands_with_directories:
     for command, directory in commands_with_directories:
         job_ids = run_command_in_directory_bsub(command, directory)
         time.sleep(10)
-    mems_to_rerun = get_list_mems_to_rerun(job_ids, path_manager,timestamp_farm, no_mems)
+    mems_to_rerun = get_list_mems_to_rerun(job_ids, path_manager, timestamp_farm, no_mems)
 
     if mems_to_rerun:
         list_mems = [str(mem) for mem in mems_to_rerun]
         replace_nml_template(
             input_nml_path=path_manager.run_submit_farm_template,
             entries_tbr_dict={
-                "da_date_start": timestamp_farm.strftime('%Y%m%d%H'),
-                "da_date_end": timestamp_farm.strftime('%Y%m%d%H'),
+                "da_date_start": timestamp_farm,#.strftime('%Y%m%d%H'),
+                "da_date_end": timestamp_farm,#.strftime('%Y%m%d%H'),
                 "@no_mems_list": str(tuple(list_mems)).replace(',',''),
                 "@case_dir" : case_dir,
                 "@cresco_queue" : cresco_queue
             },
             output_nml_path= directory / command,
         )
-        return submit_and_wait(path_manager, [(command, directory)],timestamp_farm,no_mems)
+        return submit_and_wait(path_manager, [(command, directory)], timestamp_farm, no_mems, case_dir, cresco_queue) #added case_dir and cresco_queue 
     return True
 
 def get_list_mems_to_rerun(job_ids : list, path_manager : PathManager, timestamp_farm : str, no_mems : int) -> bool:
     # breakpoint()
+    datetime_farm_p1 = pd.to_datetime(timestamp_farm, format="%Y%m%d%H") + timedelta(hours = 1)
     while True:
         running_jobs = []
         for jobid in job_ids:
@@ -909,16 +910,16 @@ def get_list_mems_to_rerun(job_ids : list, path_manager : PathManager, timestamp
 
         if not running_jobs:
             logger.info(f"{job_ids} have finished")
-            return ic_g1_not_existing(path_manager, timestamp_farm, no_mems)
+            return ic_g1_not_existing(path_manager, datetime_farm_p1, no_mems)
         else:
             logger.info(
                 f"Jobs still running: {running_jobs}. Waiting for them to finish..."
             )
             time.sleep(30)
 
-def ic_g1_not_existing(path_manager : PathManager, timestamp_farm : str, no_mems : int):
-    timestamp_ic_g1 = pd.to_datetime(timestamp_farm) + timedelta(hours = 1)
-    file_name = f'ic_g1_{timestamp_ic_g1}.nc'
+def ic_g1_not_existing(path_manager : PathManager, datetime_farm : pd.Timestamp, no_mems : int):
+    timestamp_farm_p1 = datetime_farm.strftime("%Y%m%d%H")
+    file_name = f'ic_g1_{timestamp_farm_p1}.nc'
     mems_to_rerun = []
     for mem in range(no_mems):
         file_path  = Path(path_manager.path_data / f'OUTPUT_{mem}/OUT/{file_name}')

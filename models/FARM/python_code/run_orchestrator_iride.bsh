@@ -1,0 +1,1 @@
+bsub -q cameo_h144 -e err_3000_no2.log -o out_3000_no2.log  ../../../../miniconda3/bin/python3.10 orchestrator.py -c config/config_orchestrator_no2_iride.yaml

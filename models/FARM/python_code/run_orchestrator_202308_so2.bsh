@@ -1,0 +1,1 @@
+bsub -q cameo_h144 -e data_202308_so2_%J.err -o data_202308_so2_%J.out ../../../../miniconda3/bin/python3.10 orchestrator.py -c config/config_orchestrator_202308_so2.yaml

@@ -1,0 +1,1 @@
+bsub -q cameo_h144 -e err_3days_0000_check_fo.log -o out_3days_0000_check_fo.log ../../../../miniconda3/bin/python3.10 orchestrator.py -c config/config_orchestrator_so2_3days_0000.yaml

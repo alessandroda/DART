@@ -101,7 +101,7 @@ class FarmToDartPipeline:
                     break
                 else:
                     logger.info(f"{path_emi_mem} exists. File size in bytes: {os.path.getsize(path_emi_mem)}") 
-                    logger.info(f"Remove: {path_emi_mem}") 
+                    logger.info(f"NOT Remove: {path_emi_mem}") 
                     path_emi_mem.unlink(missing_ok=True)
 
             self.time_manager.last_perturbed_day = current_day
@@ -116,7 +116,7 @@ class FarmToDartPipeline:
         end_date_backward = self.time_manager.simulated_time - timedelta(hours=1)
 
         dates_backward = pd.date_range(start_date_backward, end_date_backward, freq ='H')
-        date_backward = filter_dates(dates_backward, self.backup_ic_option)
+        dates_backward = filter_dates(dates_backward, self.backup_ic_option)
 
         # Iterate over ensemble members
         for mem in range(self.no_mems):

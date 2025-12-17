@@ -1,3 +1,10 @@
+*.save
+*run_pertub_*.bsh
+*perturb_fields_emission*.bsh
+*submit_replace*.sh
+*.log
+*.err
+*.out
 *.mod
 *.o
 *.nc.gz
@@ -10,6 +17,11 @@
 *.png
 *.gif
 *.log
+*.csv
+*.swl
+*.swm
+*.swn
+*.swo
 *__pycache__*
 *obscount.txt
 *region?.ps
@@ -260,3 +272,11 @@ models/FARM/CAMEO/FARM/select_only.sh
 models/FARM/work/obs_seq_no2.final
 models/FARM/work/obs_seq.final
 observations/obs_converters/S5P_TROPOMI_L3/work/core
+observations/forward_operators/obs_def_mod.f90ba
+models/FARM/work/obs_seq_34247_154191.final
+models/FARM/work/obs_seq_20230830_140000.final
+log.temp
+log
+models/FARM/work/localization_diagnostics
+models/FARM/python_code/post_processing/sandbox/
+models/FARM/python_code/post_processing/sandbox/
