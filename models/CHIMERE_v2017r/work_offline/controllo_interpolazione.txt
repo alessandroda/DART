@@ -1,0 +1,23 @@
+loc_of_interest      = 9.00000000  47.39000000, 3
+DART ritorna indici: 204, 52 - lat, lon
+>>> ds.isel(bottom_top=2).isel(south_north=203).isel(west_east=51).isel(Time=2)['NO2'].values
+value = array(0.17058858, dtype=float32)
+
+loc_of_interest      = 9.00000000  47.39000000, 1
+DART ritorna indici: 204, 52 - lat, lon
+>>> ds.isel(bottom_top=2).isel(south_north=203).isel(west_east=51).isel(Time=2)['NO2'].values
+value = array(0.6358348, dtype=float32)
+>>> ds.isel(bottom_top=0).isel(south_north=203).isel(west_east=51).isel(Time=2)['NO2'].values
+
+C'e' solo la differenza di indixi (204, 52) (203,51) ma i valori sono gli stessi
+
+
+loc_of_interest      = 9.00000000  47.39000000, 3
+DART: 0.6358348
+xarray: corrisponde a 0,203,51,2 che sarebbe livello 0, 8.95, 47.38,2
+DART: corrisponde a 1,204,52,2 
+
+Il test di punto piu' vicino a quello assegnato e' invece 203,52 che sarebbe 9.04,47.38
+
+
+0.21428287029
