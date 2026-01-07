@@ -63,7 +63,8 @@ program convert_s5p_tropomi_L2
    character(len=256)            :: which_gas = "SAT_SO2_TROPOMI"
    real                          :: qa_thres = 0.75
    character(len=256)            :: pollutant='NO2'
-   namelist /file_info_nml/ s5p_netcdf_file, s5p_out_file, vertical_ref_height, which_gas, qa_thres, pollutant
+   logical                       :: superobs=.false.
+   namelist /file_info_nml/ s5p_netcdf_file, s5p_out_file, vertical_ref_height, which_gas, qa_thres, pollutant, superobs
 
 !-----------------------------------------------------------------------
 ! Namelist with default values
@@ -118,7 +119,7 @@ program convert_s5p_tropomi_L2
       call read_obs_seq(s5p_out_file, 0, 0, 2*nobs, obs_seq)
 
    else
-      call tsat_obs%Read(s5p_netcdf_file, pollutant)
+      call tsat_obs%Read(s5p_netcdf_file, pollutant, superobs)
       nobs = SIZE(tsat_obs%vcd)
       allocate(used(nobs))
       allocate(tused(nobs))

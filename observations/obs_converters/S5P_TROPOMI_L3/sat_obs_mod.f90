@@ -43,7 +43,7 @@ module sat_obs_mod
 
 contains
 
-   subroutine ReadSatObs(self,filename,pollutant)
+   subroutine ReadSatObs(self, filename, pollutant, superobs)
 
       use nc_interface_mod , only : Nc_open,Nc_GetDim,  &
          Nc_GetVar,Nc_close, &
@@ -54,6 +54,7 @@ contains
 
       character(len=*),intent(in)       :: pollutant
       character(len=*),intent(in)       :: filename
+      logical,intent(in)                :: superobs
       class(T_SatObs), intent(out)      :: self
       type(DateTime) :: reference_time, dt
 
@@ -78,10 +79,24 @@ contains
       call Nc_GetUnits(ncid, 'time', self%time_units)
       allocate(self%date_time(self%npix))
       do i = 1, size(self%time)
-         ! A.D'A we should then add the time expressed in millisecond
-         ! for the purposes of the assimilation in FARM the timestamp in the units is sufficient
-         ! because data acquired within an hour belong to the same timestep.
-         call extractDateTime(self%time_units, self%date_time(i))
+         if (superobs) then
+            ! NOTE:
+            ! For super-observations, the time variable is provided as a vector
+            ! (one value per pixel). In principle, each pixel can have a slightly
+            ! different acquisition time.
+            !
+            ! For the purposes of this implementation, we assume that the reference
+            ! time of the first element applies to all pixels. This approximation is
+            ! acceptable because:
+            !   - time differences within a super-observation footprint are small
+            !   - the assimilation window is much larger than pixel-level offsets
+            !
+            ! This avoids redundant DateTime conversions and ensures consistency
+            ! across all pixels within the same super-observation.
+            call extractDateTime_from_units(int(self%time(i), kind=8), self%time_units, self%date_time(i))
+         else
+            call extractDateTime_from_timestr(self%time_units, self%date_time(i))
+         endif
          write(*, '(A, I4, A, I2, A, I2, A, I2, A, I2, A, I2, A, I2, A, I6)') &
             "Datetime: ", self%date_time(i)%year, "-", self%date_time(i)%month, "-", self%date_time(i)%day, " ", self%date_time(i)%hour, ":", self%date_time(i)%minute, ":", self%date_time(i)%second, ".", self%date_time(i)%millisecond
       end do
@@ -114,8 +129,8 @@ contains
          print*,'amf_troposhere: ',trim(pollutant)
          call Nc_Getattr(ncid, 'vcd', 'vcd_errvar:multiplication_factor_to_convert_to_molecules_percm2', self%vcd_multiplication_factor)
          if ( .not. allocated(self%nla)) allocate(self%nla(self%nretr,self%npix))
-         self%nla(:,:)=self%nlayer     
-     else
+         self%nla(:,:)=self%nlayer
+      else
          print*,'WRONG pollutant: ',trim(pollutant)
       endif
 !Close File

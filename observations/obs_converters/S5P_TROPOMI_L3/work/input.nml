@@ -7,9 +7,8 @@
    quantity_files          = '../../../../assimilation_code/modules/observations/atmosphere_quantities_mod.f90'
    obs_type_files          = '../../../../observations/forward_operators/obs_def_reanalysis_bufr_mod.f90',
                               '../../../../observations/forward_operators/obs_def_SAT_NO2_TROPOMI_mod.f90',
-                              '../../../../observations/forward_operators/obs_def_SAT_SO2_TROPOMI_mod.f90',
-                              '../../../../observations/forward_operators/obs_def_TROPOMI_NO2_TOTAL_COL_mod.f90',
-                             '../../../../observations/forward_operators/obs_def_TROPOMI_NO2_TROP_COL_mod.f90',
+                              '../../../../observations/forward_operators/obs_def_SAT_SO2_TROPOMI_mod.f90'
+                              '../../../../observations/forward_operators/obs_def_SAT_HCHO_TROPOMI_mod.f90'
    /
 
 &obs_kind_nml
@@ -60,14 +59,15 @@
    verbose    = .false.
    /
 
+
 &model_grid_nml
-   dom_west  = 5.325,  !-25.075  
-   dom_east  = 19.20,  !45.125    
-   dom_south = 35.380, !29.95 
-   dom_north = 47.81  !72.05  
-   nz = 16,
-   dlon = 0.15,
-   dlat = 0.104 !0.1,
+   dom_west  = 4.36, 
+   dom_east  = 19.93,
+   dom_south = 35.20,
+   dom_north = 48.88,
+   nz = 8,
+   dlon = 0.09,
+   dlat = 0.06,
    filter_on_model_grid = .true.,
    /
 &obs_def_SAT_NO2_TROPOMI_nml
@@ -77,14 +77,10 @@
    /
 
 &file_info_nml
-<<<<<<< HEAD
-   s5p_netcdf_file = '/mnt/mumbai_n4r5/sat_data_assim/IRIDE/SAT_CSO_QA/CSO-data/QUALEARIA/S5p/NO2/C03/2021/01/S5p_NO2_16885.nc',
-   s5p_out_file = 'obs_seq_48255_153416.out',
-=======
-   s5p_netcdf_file = '/mnt/mumbai_n4r5/sat_data_assim/IRIDE/SAT_CSO_QA/CSO-data/QUALEARIA/S5p/NO2/C03/2021/01/S5p_NO2_16827.nc',
+   s5p_netcdf_file = '/mnt/mumbai_n3r6/25-12676_MIMESI/SAT_OBS/MIMESI/CSO-superobs/kAiros/S5p/no2/C03__qa075/2025/12/S5p_no2_42394.nc',
    s5p_out_file = 'obs_seq_40681_153412.out',
->>>>>>> upstream/main
-   vertical_ref_height = 975.0,
-   which_gas = 'SAT_NO2_TROPOMI'
+   vertical_ref_height = 3,
+   which_gas = 'SAT_NO2_TROPOMI',
+   superobs = .true.
    /
 /

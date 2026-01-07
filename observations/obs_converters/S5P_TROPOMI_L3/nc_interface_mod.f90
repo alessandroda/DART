@@ -272,7 +272,7 @@ module DateTimeModule
 
 contains
 
-   subroutine extractDateTime(timestamp_str, dt)
+   subroutine extractDateTime_from_timestr(timestamp_str, dt)
       character(len=*), intent(in) :: timestamp_str
       type(DateTime), intent(out) :: dt
 
@@ -298,7 +298,118 @@ contains
       read(second_str, *) dt%second
       read(millisec_str, *) dt%millisecond
 
-   end subroutine extractDateTime
+   end subroutine extractDateTime_from_timestr
+
+   subroutine extractDateTime_from_units(time, time_units, dt)
+      implicit none
+
+      ! Inputs
+      integer(kind=8), intent(in) :: time
+      character(len=*), intent(in) :: time_units
+
+      ! Output
+      type(DateTime), intent(out) :: dt
+
+      ! Local
+      integer :: ref_year, ref_month, ref_day
+      integer :: ref_hour, ref_minute, ref_second
+      integer :: days_in_month(12)
+      integer(kind=8) :: remaining_seconds
+      integer :: i
+      integer :: ios
+
+      character(len=32) :: dummy
+
+      ! --------------------------------------------------
+      ! Parse reference time from units string
+      ! Expected: "seconds since YYYY-MM-DD HH:MM:SS"
+      ! --------------------------------------------------
+
+      ! Defaults if time part is missing
+      ref_hour   = 0
+      ref_minute = 0
+      ref_second = 0
+      dt%millisecond = 0
+
+      ! NetCDF time units are assumed to follow the CF convention:
+      !   "seconds since YYYY-MM-DD [HH:MM:SS[.mmm]]"
+      !
+      ! Date fields (Y-M-D) are mandatory.
+      ! Time fields (H:M:S) are optional and default to zero if not present.
+      ! Parsing is done via fixed-position slicing with iostat protection
+      ! to avoid failures due to formatting variations.
+
+      read(time_units(15:18), *, iostat=ios) ref_year
+      if (ios /= 0) return
+
+      read(time_units(20:21), *, iostat=ios) ref_month
+      if (ios /= 0) return
+
+      read(time_units(23:24), *, iostat=ios) ref_day
+      if (ios /= 0) return
+
+      read(time_units(48:49), *, iostat=ios) ref_hour
+      if (ios /= 0) ref_hour = 0
+
+      read(time_units(34:35), *, iostat=ios) ref_minute
+      if (ios /= 0) ref_minute = 0
+
+      read(time_units(37:38), *, iostat=ios) ref_second
+      if (ios /= 0) ref_second = 0
+
+      ! ---- INITIALIZE dt FROM REFERENCE ----
+      dt%year        = ref_year
+      dt%month       = ref_month
+      dt%day         = ref_day
+      dt%hour        = ref_hour
+      dt%minute      = ref_minute
+      dt%second      = ref_second
+
+      remaining_seconds = time
+
+      ! --------------------------------------------------
+      ! Add seconds → hh:mm:ss
+      ! --------------------------------------------------
+      dt%second = dt%second + mod(remaining_seconds, 60)
+      remaining_seconds = remaining_seconds / 60
+
+      dt%minute = dt%minute + mod(remaining_seconds, 60)
+      remaining_seconds = remaining_seconds / 60
+
+      dt%hour = dt%hour + mod(remaining_seconds, 24)
+      remaining_seconds = remaining_seconds / 24
+
+      ! Normalize seconds/minutes/hours
+      call normalize_hms(dt)
+
+      ! --------------------------------------------------
+      ! Add remaining days
+      ! --------------------------------------------------
+      do while (remaining_seconds > 0)
+
+         if (is_leap_year(dt%year)) then
+            days_in_month = (/31,29,31,30,31,30,31,31,30,31,30,31/)
+         else
+            days_in_month = (/31,28,31,30,31,30,31,31,30,31,30,31/)
+         end if
+
+         if (dt%day < days_in_month(dt%month)) then
+            dt%day = dt%day + 1
+         else
+            dt%day = 1
+            if (dt%month < 12) then
+               dt%month = dt%month + 1
+            else
+               dt%month = 1
+               dt%year = dt%year + 1
+            end if
+         end if
+
+         remaining_seconds = remaining_seconds - 1
+      end do
+
+   end subroutine extractDateTime_from_units
+
 
    subroutine DateTimeInSeconds(dt)
       type(DateTime), intent(out) :: dt
@@ -308,5 +419,32 @@ contains
       seconds = dt%year * 365*24*3600 + dt%month * 30*24*3600 + dt%day * 24*3600 + &
          dt%hour * 3600 + dt%minute * 60 + dt%second
    end subroutine DateTimeInSeconds
+
+
+   logical function is_leap_year(year)
+      integer, intent(in) :: year
+      is_leap_year = (mod(year,4) == 0 .and. mod(year,100) /= 0) .or. &
+         (mod(year,400) == 0)
+   end function is_leap_year
+
+   subroutine normalize_hms(dt)
+      type(DateTime), intent(inout) :: dt
+
+      if (dt%second >= 60) then
+         dt%minute = dt%minute + dt%second / 60
+         dt%second = mod(dt%second, 60)
+      end if
+
+      if (dt%minute >= 60) then
+         dt%hour = dt%hour + dt%minute / 60
+         dt%minute = mod(dt%minute, 60)
+      end if
+
+      if (dt%hour >= 24) then
+         dt%hour = mod(dt%hour, 24)
+         ! days handled in main loop
+      end if
+   end subroutine normalize_hms
+
 
 end module DateTimeModule
