@@ -1,0 +1,9 @@
+Se una funzione chiama subprocess per SLURM → scheduler/
+
+Se costruisce path → PathManager
+
+Se decide cosa rerunnare → orchestrator_utils
+
+Se tocca NetCDF → io_utils
+
+Se gestisce tempo → TimeManager

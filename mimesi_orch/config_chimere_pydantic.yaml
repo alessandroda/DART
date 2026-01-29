@@ -1,0 +1,58 @@
+paths:
+  base_path: /gporq3/minni/FARM-DART
+  env_python: miniconda3/bin/python3.10
+
+  listing_file: DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03__listing.csv
+
+  chimere_catena_dir : /mnt/mumbai_n3r6/25-12676_MIMESI/kAiros/catena_aria_mimesi2017
+  run_submit_farm_template: RUN/script/templates/run_submit_ens.template.bsh
+  path_submit_bsh: RUN/script/auto_runs
+  path_filter: DART/models/FARM/work_freerun
+  path_data: RUN/data_freerun
+
+  run_submit_replace_perturbations: RUN/script/templates/submit_replace_perturb_into_original_emission_arg.sh
+  log_directory: logs_orchestrator
+
+
+time:
+  start_time: "2023-08-06 19:00:00"
+  end_time: "2023-08-31 23:00:00"
+  dt_seconds: 3600
+
+  backup_perturb_days: 2
+  backup_ic_hours: 48
+  backup_ic_option: hourly
+
+
+assimilation:
+  ass_var: c_SO2
+  state_variable_qty: QTY_SO2
+  obs_type: SAT_SO2_TROPOMI
+
+  case_dir: data_freerun
+  case_emi_dir: emi
+  emi_var: SO2
+
+  no_mems: 20
+  run_assimilation_flag: true
+
+
+cluster:
+  cresco_queue: cresco6_48h24
+
+
+dart:
+  work_dir: DART/models/FARM/work_freerun
+  analysis_dir: RUN/data_freerun/analysis
+  preassim_dir: RUN/data_freerun/preassim
+  posteriors_dir: RUN/data_freerun/posteriors
+  obs_converters_dir: DART/observations/obs_converters/S5P_TROPOMI_L3
+
+
+logging:
+  level: INFO
+  format: "%(asctime)s [%(processName)s/%(threadName)s] %(levelname)s: %(message)s"
+
+
+satellite_data:
+  search_window_seconds: 1800

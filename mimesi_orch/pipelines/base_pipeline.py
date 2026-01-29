@@ -4,7 +4,7 @@
 Base Assimilation Pipeline
 ==========================
 
-This module defines the abstract base class for all model–data assimilation
+This module defines the abstract base class for all model-data assimilation
 pipelines used within the MIMESI framework.
 
 The class implements a **Template Method pattern**, providing a common
@@ -69,7 +69,7 @@ class BaseAssimilationPipeline(ABC):
         exceeds `time_manager.end_time`.
         """
 
-        logger.info("[PIPELINE] ---- TIME LOOP START ----")
+        logger.info("[MIMESI] ---- TIME LOOP START ----")
 
         while self.time_manager.current_time <= self.time_manager.end_time:
             # Optional hook: e.g. emission perturbations, cleanup

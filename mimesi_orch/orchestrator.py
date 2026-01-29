@@ -1,17 +1,12 @@
 import argparse
 import time
 import logging
-import yaml
-from mimesi_orch.orchestrator_utils import PathManager, TimeManager
-from mimesi_orch.pipelines.farm_pipeline import FarmToDartPipeline
+from pathlib import Path
+from orchestrator_utils import TimeManager
+from pipelines.chimere_pipeline import Chimere2017DartPipeline
+from config_models import AppConfig
+from paths import PathManager
 
-logging.basicConfig(
-    filename=f'logs_orchestrator/farm_to_dart_{time.strftime("%Y%m%d_%H%M%S")}.log',
-    format="%(asctime)s [%(processName)s/%(threadName)s] %(levelname)s: %(message)s",
-    level=logging.INFO,
-)
-
-logger = logging.getLogger(__name__)
 
 parser = argparse.ArgumentParser(description="Python orchestrator for FARM-DART")
 parser.add_argument(
@@ -21,35 +16,34 @@ args = parser.parse_args()
 
 CONFIG_PATH = args.conf
 
+config = AppConfig.from_yaml(CONFIG_PATH)
 
-def load_config(file_path):
-    print(f"Using config file: {file_path}")
-    with open(file_path, "r") as file:
-        return yaml.safe_load(file)
+LOG_DIR = Path(config.paths.run_dir) / "mimesi_orchestrator_logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
 
+logfile = LOG_DIR / f"farm_to_dart_{time.strftime('%Y%m%d_%H%M%S')}.log"
 
-config = load_config(CONFIG_PATH)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(processName)s/%(threadName)s] %(levelname)s: %(message)s",
+    handlers=[
+        logging.FileHandler(logfile),
+        logging.StreamHandler(),
+    ],
+)
+
+logger = logging.getLogger(__name__)
+
+logger.info(f"Starting {config.assimilation.model_type.value}–DART orchestrator")
+logger.info(f"Config file: {CONFIG_PATH}")
+logger.info(f"Run dir: {config.paths.run_dir}")
+logger.info(f"Log file: {logfile}")
 
 time_manager = TimeManager(
-    start_time=config["time"]["start_time"],
-    end_time=config["time"]["end_time"],
-    dt_seconds=config["time"]["dt_seconds"],
+    start_time=config.time.start_time,
+    end_time=config.time.end_time,
+    dt_seconds=config.time.dt_seconds,
 )
-
-path_manager = PathManager(
-    base_path=config["paths"]["base_path"],
-    env_python=config["paths"]["env_python"],
-    listing_file=config["paths"]["listing_file"],
-    run_submit_farm_template=config["paths"]["run_submit_farm_template"],
-    path_submit_bsh=config["paths"]["path_submit_bsh"],
-    path_filter=config["paths"]["path_filter"],
-    path_data=config["paths"]["path_data"],
-    run_submit_replace_perturbations=config["paths"][
-        "run_submit_replace_perturbations"
-    ],
-    log_paths=True,
-)
-
-
-pipeline = FarmToDartPipeline(time_manager, path_manager, config)
+path_manager = PathManager(config.paths)
+pipeline = Chimere2017DartPipeline(time_manager, path_manager, config)
 pipeline.run_pipeline()

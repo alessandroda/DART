@@ -2,8 +2,9 @@ from datetime import timedelta
 from pathlib import Path
 import shutil
 import time
+
+from mimesi_orch.scheduler.scheduler import Scheduler
 from mimesi_orch.config_models import AppConfig
-from mimesi_orch.io_utils import prepare_dart_to_farm_nc
 from mimesi_orch.paths import PathManager
 from pipelines.base_pipeline import BaseAssimilationPipeline
 import logging
@@ -22,13 +23,14 @@ from mimesi_orch.orchestrator_utils import (
     submit_and_wait,
     run_command_in_directory,
     run_command_in_directory_bsub,
+    submit_and_wait_slurm,
 )
 
 
 logger = logging.getLogger(__name__)
 
 
-class FarmDartPipeline(BaseAssimilationPipeline):
+class Chimere2017DartPipeline(BaseAssimilationPipeline):
     def __init__(
         self,
         time_manager: TimeManager,
@@ -48,6 +50,10 @@ class FarmDartPipeline(BaseAssimilationPipeline):
         self.seconds_model = 0
         self.output_sim_folder = None
         a = self.config.assimilation
+
+        self.model_type = a.model_type
+        logger.info(f"Running assimilation with model_type={self.model_type}")
+
         self.ass_var = a.ass_var
         self.emi_var = a.emi_var
         self.no_mems = a.no_mems
@@ -58,176 +64,24 @@ class FarmDartPipeline(BaseAssimilationPipeline):
         self.run_assimilation_flag = a.run_assimilation_flag
         self.case_emi_dir = a.case_emi_dir
 
-        self.cresco_queue = self.config.cluster.cluster_queue
+        self.cineca_queue = self.config.cluster.cluster_queue
 
         self.backup_perturb_days = self.config.time.backup_perturb_days
         self.backup_ic_hours = self.config.time.backup_ic_hours
         self.backup_ic_option = self.config.time.backup_ic_option
 
-    # former update and cleanup perturbations
+        logger.info(f"Using scheduler={self.scheduler}, queue={self.cineca_queue}")
+
+        self.scheduler = self.config.cluster.scheduler
+
     def before_step(self):
-        """
-        Emission perturbations + cleanup before FARM run.
-        """
-        current_day = self.time_manager.current_time.day
-        if current_day != self.time_manager.last_perturbed_day:
-            date_start_end = self.time_manager.current_time.strftime("%Y%m%d00")
-            if not all(
-                [
-                    self.path_manager.hermes_emission(mem, date_start_end).exists()
-                    for mem in range(self.no_mems)
-                ]
-            ):
-                logger.info(f"Not all HERMES files exist for {date_start_end}")
-                if not self.replace_perturb_into_original_emissions():
-                    raise RuntimeError(
-                        "replace_perturb_into_original_emissions failed. "
-                        "Perturbated files do not exist."
-                    )
+        pass
 
-            days_back = self.time_manager.current_time - timedelta(
-                days=self.backup_perturb_days
-            )
-            for mem in range(self.no_mems):
-                path_emi_mem = self.path_manager.hermes_emission(
-                    mem, days_back.strftime("%Y%m%d00")
-                )
-
-                if not path_emi_mem.exists():
-                    logger.info(
-                        f"Emission input of two days back for mem does not exist: {path_emi_mem}; no files are removed"
-                    )
-                    break
-                else:
-                    logger.info(
-                        f"{path_emi_mem} exists. File size in bytes: {os.path.getsize(path_emi_mem)}"
-                    )
-                    logger.info(f"NOT Remove: {path_emi_mem}")
-                    path_emi_mem.unlink(missing_ok=True)
-
-            self.time_manager.last_perturbed_day = current_day
-
-    def cleanup_FARM(self):
-        """Remove old ic_g1 files based on backup settings."""
-        logger.warning(
-            f"Preventing removal of latest ic_g1 not yet used: {self.time_manager.simulated_time}"
-        )
-        start_date_backward = self.time_manager.simulated_time - timedelta(
-            hours=self.backup_ic_hours
-        )
-        end_date_backward = self.time_manager.simulated_time - timedelta(hours=1)
-
-        dates_backward = pd.date_range(start_date_backward, end_date_backward, freq="H")
-        dates_backward = filter_dates(dates_backward, self.backup_ic_option)
-
-        # Iterate over ensemble members
-        for mem in range(self.no_mems):
-            try:
-                files_to_remove = []
-
-                for date_backward in dates_backward:
-                    file_path = self.path_manager.farm_ic(
-                        mem, date_backward.strftime("%Y%m%d%H")
-                    )
-                    if file_path.exists():
-                        files_to_remove.append(file_path)
-
-                if not files_to_remove:
-                    logger.info(
-                        f"No IC files to remove for member {mem} in time range "
-                        f"{start_date_backward:%Y-%m-%d %H:%M} to {end_date_backward:%Y-%m-%d %H:%M}"
-                    )
-                    continue
-
-                for file_ic_g1_hourly in files_to_remove:
-                    try:
-                        logger.info(
-                            f"{file_ic_g1_hourly} exists. File size in bytes: {os.path.getsize(file_ic_g1_hourly)}"
-                        )
-                        logger.info(f"Removing file: {file_ic_g1_hourly}")
-                        file_ic_g1_hourly.unlink(missing_ok=True)
-                    except FileNotFoundError:
-                        logger.warning(
-                            f"File not found when attempting to remove: {file_ic_g1_hourly}"
-                        )
-                    except PermissionError:
-                        logger.error(
-                            f"Permission denied when trying to remove: {file_ic_g1_hourly}"
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"Unexpected error removing file {file_ic_g1_hourly}: {e}"
-                        )
-            except Exception as e:
-                logger.error(f"Unexpected error processing member {mem}: {e}")
+    def cleanup_CHIMERE2017(self):
+        pass
 
     def replace_perturb_into_original_emissions(self):
-        """
-        This step assumes that the emission have been successfully perturbated.
-        The goal is to replace the perturbed emissions in the original HERMES file
-        to avoid disk space issues.
-        """
-        logger.info(
-            f"Replacing perturbated emissions into original HERMES file in {self.path_manager.hermes_emission_dir()}"
-        )
-        logger.warning(
-            "This step assumes that the emission have been successfully created"
-        )
-        # ./submit_replace_perturb_into_original_emission_arg.sh
-        date_start_end = self.time_manager.current_time.strftime("%Y%m%d00")
-
-        template = self.path_manager.run_submit_replace_perturbations
-        output_nml_path = template.with_name(
-            f"{template.stem}{date_start_end}{template.suffix}"
-        )
-        replace_nml_template(
-            input_nml_path=template,
-            entries_tbr_dict={
-                "@date_start": date_start_end,
-                "@date_end": date_start_end,
-                "@case_dir": self.case_dir,
-                "@emission_var_to_replace": self.emi_var,
-                "@sub_dir_name": self.case_emi_dir,
-                "@cresco_queue": self.cresco_queue,
-            },
-            output_nml_path=str(output_nml_path),
-        )
-        job_ids = run_command_in_directory_bsub(
-            output_nml_path.name,
-            output_nml_path.parent,
-            farm=False,
-            replace_emissions=True,
-        )
-        time.sleep(10)
-
-        while True:
-            running_jobs = []
-            for jobid in job_ids:
-                if not check_job_status_cresco(jobid, which_run=f"{template.name}"):
-                    running_jobs.append(jobid)
-
-            if not running_jobs:
-                logger.info(f"{job_ids} have finished")
-                for mem in range(self.no_mems):
-                    path_emi_mem = (
-                        self.path_manager.base_path
-                        / self.path_manager.path_data
-                        / f"INPUT/HERMES/emi_{mem}/HERMESv3_{date_start_end}.nc"
-                    )
-                    if not path_emi_mem.exists():
-                        logger.error(
-                            f"Emission input for mem does not exist: {path_emi_mem}"
-                        )
-                        return False
-                    logger.info(
-                        f"{path_emi_mem} exists. File size in bytes: {os.path.getsize(path_emi_mem)}"
-                    )
-                return True
-            else:
-                logger.info(
-                    f"Jobs still running: {running_jobs}. Waiting for them to finish..."
-                )
-                time.sleep(30)
+        pass
 
     def finalize_step(self):
         """
@@ -243,41 +97,68 @@ class FarmDartPipeline(BaseAssimilationPipeline):
     # former run_farm
     def run_model(self):
         """
-        Run FARM for the current time step.
+        Run CHIMERE for the current time step.
         """
-        logger.info(f"[FARM] Running model at {self.time_manager.current_time}")
-        timestamp_farm = TimeManager.round_to_closest_hour(
+        logger.info(f"CHIMERE running model at {self.time_manager.current_time}")
+        timestamp_arg_run_chimere = self.time_manager.current_time.strftime(
+            "%Y-%m-%d %H:00"
+        )
+        # to be understood time_emi, date_emi
+        timestamp_chimere = TimeManager.round_to_closest_hour(
             self.time_manager.current_time
         ).strftime("%Y%m%d%H")
-        string_to_replace_template = f"{timestamp_farm}.bsh"
-
-        command_farm_run = "run_submit_ens" + string_to_replace_template
-        path_run = self.path_manager.farm_name_run_sub_ens_bash(
-            string_to_replace_template
-        )
-        list_mems = [str(mem) for mem in range(self.no_mems)]
-        replace_nml_template(
-            input_nml_path=self.path_manager.run_submit_model_template,
-            entries_tbr_dict={
-                "da_date_start": timestamp_farm,
-                "da_date_end": timestamp_farm,
-                "@no_mems_list": str(tuple(list_mems)).replace(",", ""),
-                "@case_dir": self.case_dir,
-                "@cresco_queue": self.cresco_queue,
-            },
-            output_nml_path=path_run,
-        )
-        commands_with_directories = [
-            (command_farm_run, self.path_manager.path_submit_bsh)
-        ]
-        submit_and_wait(
+        commands_with_directories = []
+        for mem in self.no_mems:
+            string_to_replace_template = f"{timestamp_chimere}_mem_{mem}.sh"
+            command_chimere_run = (
+                "run_mimesi-ITA7_"
+                + string_to_replace_template
+                + f" '{timestamp_arg_run_chimere}'"
+            )
+            path_run = self.path_manager.chimere_name_run_sub_ens_bash(
+                string_to_replace_template
+            )
+            replace_nml_template(
+                input_nml_path=self.path_manager.base_path
+                / self.path_manager.run_submit_model_template,
+                entries_tbr_dict={
+                    "@mimesi_dh_inizio": "1",
+                    "@mimesi_nhours_list": "1",
+                },
+                output_nml_path=path_run,
+            )
+            commands_with_directories.append(
+                (command_chimere_run, self.path_manager.chimere_base_dir)
+            )
+        submit_and_wait_slurm(
+            self.model_type,
             self.path_manager,
+            self.scheduler,
             commands_with_directories,
-            timestamp_farm,
+            timestamp_chimere,
             self.no_mems,
             self.case_dir,
-            self.cluster_queue,
+            self.cineca_queue,
         )
+
+        # ./run_mimesi-ITA7.sh '2026-01-26 0:00'
+        # il bash esegue un altro bash lancia_chimere_m_nh.sh
+        # dentro a questo bash si esegue chimere.sh
+        # chimere .sh esegue finalmente lo slurm
+        #         export NP
+
+        # sbatch --wait --job-name=${dom}.${idatestart}.${simclab} \
+        #         --account=arpae_aqm \
+        #         --output=${job_o_log} --error=${job_e_log}    ${chimere_root}/scripts/run_chimere.job
+        # exitstato_run=$?
+        # set +x
+
+        # else
+        # echo "No such file ${chimere_tmp}/chimere.e ! Bye."
+        # exit 1
+        # fi
+
+        pass
 
     def process_satellite_data(self):
 
@@ -499,13 +380,13 @@ class FarmDartPipeline(BaseAssimilationPipeline):
         - assimilation is enabled
         - satellite observations are available
         """
+        if not self.run_assimilation_flag:
+            logger.info("[DART] Assimilation disabled by config")
+            return
+
         orbit_filename = self.process_satellite_data()
         if not orbit_filename:
             logger.info("[DART] No satellite data found, skipping assimilation")
-            return
-
-        if not self.run_assimilation_flag:
-            logger.info("[DART] Assimilation disabled by config")
             return
 
         obs_seq_name = self.run_obs_converter(orbit_filename)
@@ -519,12 +400,3 @@ class FarmDartPipeline(BaseAssimilationPipeline):
             return
 
         self.run_dart(obs_seq_name)
-
-    def after_assimilation(self):
-        prepare_dart_to_farm_nc(
-            self.path_manager,
-            self.output_sim_folder,
-            self.time_manager.simulated_time.strftime("%Y%m%d%H"),
-            self.ass_var,
-            self.no_mems,
-        )

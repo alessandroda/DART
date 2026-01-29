@@ -1,0 +1,108 @@
+#!/bin/bash
+module unload pgi/pgi_20.4
+module unload mpi_flavour/openmpi_intel17-3.1.2
+module unload intel/intel17
+module load intel/intel19
+module load mpi_flavour/openmpi_intel19-4.0.3
+export LD_LIBRARY_PATH=/gporq2/scratch_0/usr/forecast/LIB6_INTEL/lib:$LD_LIBRARY_PATH
+export PATH=/gporq2/scratch_0/usr/forecast/LIB6_INTEL/bin:$PATH
+export CMAKE_ROOT=/gporq2/scratch_0/usr/forecast/LIB6_INTEL/lib
+
+ulimit -s unlimited
+
+export date_start=da_date_start    #date begin experiment
+export date=${date_start}
+#export date=20200101
+export date_end=da_date_end      #date end experiment
+
+#-------Define Paths-------------....------------------------
+export DATA_ROOT=/gporq3/minni/CAMEO/RUN/data/INPUT/
+export BOUNDARY=${DATA_ROOT}/C-IFS
+export EMISSION=${DATA_ROOT}/HERMES
+export FIRE=${DATA_ROOT}/GFAS
+export METEO=${DATA_ROOT}/METEO
+export SURFPRO=${DATA_ROOT}/SURFPRO
+#export POLLEN=${DATA_ROOT}/POLLEN
+#export IC=${DATA_ROOT}/C-IFS
+#export OBS=${DATA_ROOT}/OBS
+
+export SCRATCH=/gporq3/minni/FARM-DART/RUN/data/OUTPUT/
+
+# case dir
+export CASEDIR_ROOT=/gporq3/minni/FARM-DART/RUN/
+export EXE=${CASEDIR_ROOT}/bin/
+export NAMELIST=${CASEDIR_ROOT}/namelist/
+export SUBMIT=${PWD}
+
+mkdir -p ${SCRATCH}/OUT
+mkdir -p ${SCRATCH}/INI
+
+cp -f ${NAMELIST}/farm_template.ini ${SCRATCH}/farm_template.tpl
+
+cd $SCRATCH
+export step=1
+
+#echo $date
+#echo $date_end
+
+#prev_id=""
+
+while [  $date -le $date_end ] ; do # data fine run
+
+#--------------------------------------------
+nodes=336
+queue=cresco6_48h24
+#queue=forair_48h24
+
+duration=3
+
+
+year1=`echo $date | cut -b"1-4"`
+month1=`echo $date | cut -b"5 6"`
+day1=`echo $date | cut -b"7 8"`
+hour1=`echo $date | cut -b"9 10"`
+
+#dd1="${year1}-${month1}-${day1} ${hour1}:00"
+dd1="${year1}-${month1}-${day1} ${hour1}"
+
+date_stp=`date -d "$dd1 +${step} hour" +%Y%m%d%H`
+year2=`echo $date_stp | cut -b"1-4"`
+month2=`echo $date_stp | cut -b"5 6"`
+day2=`echo $date_stp | cut -b"7 8"`
+hour2=`echo $date_stp | cut -b"9 10"`
+
+
+echo $date
+
+sed -e "s/year1/${year1}/g" \
+  -e "s/year2/${year2}/g" \
+  -e "s/month1/${month1}/g" \
+  -e "s/month2/${month2}/g" \
+  -e "s/day1/${day1}/g" \
+  -e "s/day2/${day2}/g" \
+  -e "s/hour1/${hour1}/g" \
+  -e "s/hour2/${hour2}/g" \
+  -e "s/flag_farmda/no/g" \
+  farm_template.tpl > farm_${date}.ini
+
+
+cp -f farm_${date}.ini ./INI/.
+
+   DEPEND=`echo "done($prev_id)"`
+   if [ "$prev_id" = "" ]; then
+#decommentare linea sotto se intelmpiTEST
+  actual_id=`bsub  -J H$date -W $duration -n $nodes -q $queue -o otmp$date.txt -e etmp$date.txt $SUBMIT/submit.sh $date farm_${date}.ini  | awk -F'<' '{print $2}' | awk -F'>' '{print $1}'` # questo ti prende il numerino in $actual_id e lancia job
+   echo $actual_id
+  else
+#decommentare linea sotto se intelmpi
+  actual_id=`bsub -J H$date  -W $duration -w "$DEPEND" -n $nodes -q $queue -o otmp$date.txt -e etmp$date.txt $SUBMIT/submit.sh $date farm_${date}.ini  | awk -F'<' '{print $2}' | awk -F'>' '{print $1}'`
+   echo $actual_id
+  fi
+ prev_id=$actual_id
+#--------------------------------------------
+
+
+#date=`date -d "$date +${step} day" +%Y%m%d`
+date=`date -d "$dd1 +${step} hour" +%Y%m%d%H`
+done
+

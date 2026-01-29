@@ -4,231 +4,18 @@ import math
 import numpy as np
 import yaml
 import subprocess
-from datetime import datetime, timedelta
+from datetime import timedelta
 import os
 from pathlib import Path
 import time
 import logging
 import pandas as pd
-from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
 
+from paths import ModelType, PathManager
+from scheduler.scheduler import Scheduler, submit_job, wait_for_slurm_jobs
+
 logger = logging.getLogger(__name__)
-
-
-def process_member(
-    mem, path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model
-):
-    try:
-        meteo_file = f'/gporq3/minni/CAMEO/RUN/data/INPUT/METEO/ifsecmwf_d0_g1_{timestamp_farm.strftime("%Y%m%d")}.nc'
-        temp_output_meteo = path_manager.path_data / f"temp/output_meteo_{mem}.nc"
-        temp_output_meteo_plus1 = (
-            path_manager.path_data / f"temp/output_meteo_plus1_{mem}.nc"
-        )
-        temp_output_meteo_selected = (
-            path_manager.path_data / f"temp/output_meteo_selected_{mem}.nc"
-        )
-        arconv_input_file = (
-            path_manager.path_data
-            / f'OUTPUT_{mem}/OUT/ic_g1_{rounded_timestamp.strftime("%Y%m%d%H")}.nc'
-        )
-        arconv_output_file = path_manager.path_data / f"temp/arconv_output_{mem}.nc"
-
-        final_concentration_file = (
-            path_manager.path_data
-            / f"to_DART/ic_g1_{seconds_model}_{days_model}_{mem}.nc"
-        )
-        temp_concentration_file = path_manager.path_data / f"to_DART/temp_conc_{mem}.nc"
-        temp1_concentration_file = (
-            path_manager.path_data / f"to_DART/temp1_conc_{mem}.nc"
-        )
-
-        # Ensure the output directory exists
-        # final_concentration_file.parent.mkdir(parents=True, exist_ok=True)
-        with open(
-            f'logs_orchestrator/farm_to_dart_full_logs/subprocess_out_{mem}_{rounded_timestamp.strftime("%Y%m%d%H")}.log',
-            "a",
-        ) as log_file:  # Append log file
-            logging.info(f"Processing member {mem}")
-
-            # Step 1: Select SP, P, and T from the input meteo file
-            subprocess.run(
-                ["cdo", "selname,SP,P,T", meteo_file, temp_output_meteo],
-                stdout=log_file,
-                stderr=log_file,
-                check=True,
-            )
-
-            # Step 2: Select the timestep from the rounded timestamp
-            subprocess.run(
-                [
-                    "cdo",
-                    f"seltimestep,{rounded_timestamp.hour}",
-                    temp_output_meteo,
-                    temp_output_meteo_selected,
-                ],
-                stdout=log_file,
-                stderr=log_file,
-                check=True,
-            )
-
-            # Step 3: Shift time by 1 hour
-            subprocess.run(
-                [
-                    "cdo",
-                    "shifttime,1hour",
-                    temp_output_meteo_selected,
-                    temp_output_meteo_plus1,
-                ],
-                stdout=log_file,
-                stderr=log_file,
-                check=True,
-            )
-
-            # Step 4: Convert FARM concentrations using arconv
-            subprocess.run(
-                [
-                    "/gporq3/minni/FARM-DART/arconv-2.5.10",
-                    arconv_input_file,
-                    arconv_output_file,
-                    "1",
-                ],
-                stdout=log_file,
-                stderr=log_file,
-                check=True,
-            )
-
-            # Step 5: Use ncks to append SP, P, and T variables to the FARM concentration file
-            subprocess.run(
-                [
-                    "ncks",
-                    "-A",
-                    "-v",
-                    "P,SP,T",
-                    temp_output_meteo_plus1,
-                    arconv_output_file,
-                ],
-                stdout=log_file,
-                stderr=log_file,
-                check=True,
-            )
-
-            # Step 6: Copy the result to the final concentration file
-            subprocess.run(
-                ["cp", arconv_output_file, final_concentration_file], check=True
-            )
-
-            # Step 7: Set reference time in the concentration file
-            subprocess.run(
-                [
-                    "cdo",
-                    "-setreftime,1900-01-01,00:00:00,days",
-                    final_concentration_file,
-                    temp_concentration_file,
-                ],
-                check=True,
-            )
-
-            # Step 8: Set calendar to Gregorian
-            subprocess.run(
-                [
-                    "cdo",
-                    "-setcalendar,gregorian",
-                    temp_concentration_file,
-                    temp1_concentration_file,
-                ],
-                check=True,
-            )
-
-            # Step 9: Remove unnecessary attributes from the concentration file
-            subprocess.run(
-                ["ncatted", "-a", "add_offset,,d,,", temp1_concentration_file],
-                check=True,
-            )
-            subprocess.run(
-                ["ncatted", "-a", "scale_factor,,d,,", temp1_concentration_file],
-                check=True,
-            )
-            subprocess.run(
-                ["ncatted", "-a", "_FillValue,,d,,", temp1_concentration_file],
-                check=True,
-            )
-            subprocess.run(
-                ["ncatted", "-a", "missing_value,,d,,", temp1_concentration_file],
-                check=True,
-            )
-
-            # Step 10: Copy the cleaned file to the final concentration file location
-            subprocess.run(
-                ["cp", temp1_concentration_file, final_concentration_file], check=True
-            )
-
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Command failed for member {mem}: {e.cmd}")
-        logging.error(f"Error output: {e.output}")
-        raise
-    finally:
-        # Cleanup: Remove temporary files
-        temp_files = [
-            temp_output_meteo,
-            temp_output_meteo_plus1,
-            temp_output_meteo_selected,
-            arconv_output_file,
-            temp_concentration_file,
-            temp1_concentration_file,
-        ]
-        for temp_file in temp_files:
-            if temp_file.exists():
-                temp_file.unlink(missing_ok=True)
-
-
-def prepare_farm_to_dart_nc_par(
-    path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model, no_mems
-):
-    os.makedirs(path_manager.path_data / "temp", exist_ok=True)
-    os.makedirs(path_manager.path_data / "to_DART", exist_ok=True)
-    max_workers = 48
-    logger.info("Starting the orchestration of FARM to DART NetCDF conversion")
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {
-            executor.submit(
-                process_member,
-                mem,
-                path_manager,
-                timestamp_farm,
-                rounded_timestamp,
-                seconds_model,
-                days_model,
-            ): mem
-            for mem in range(no_mems)
-        }
-        for future in as_completed(futures):
-            mem = futures[future]
-            try:
-                future.result()  # Check if there were exceptions
-                logger.info(f"Member {mem} processed successfully.")
-            except Exception as e:
-                logging.error(
-                    f"An error occurred during processing of member {mem}: {e}"
-                )
-
-
-class CleanupContext:
-    def __init__(self, temp_preproc_farm_folder: Path):
-        self.temp_folder = temp_preproc_farm_folder
-
-    def __enter__(self):
-        os.makedirs(self.temp_folder, exist_ok=True)
-        return self
-
-    def __exit__(self):
-        breakpoint()
-        if os.path.exists(self.temp_folder):
-            for filename in os.listdir(self.temp_folder):
-                file_path = self.temp_folder / filename
-                logger.info("I WILL DELETE IF NEEEEEDED")
-                # file_path.unlink(missing_ok=True)
 
 
 class TimeManager:
@@ -292,80 +79,6 @@ class TimeManager:
         self.simulated_time = new_time
 
 
-class PathManager:
-    """
-    Class to handle the paths and prevent errors along the execution.
-
-    Attributes:
-        base_path: The base path used for constructing all other paths.
-        env_path: Path to the environment executable.
-        listing_path: Path to the CSO listing file.
-        run_submit_farm_template: Path to the submit farm template.
-        path_submit_bsh: Path to the farm and dart submission directory.
-        path_filter: Path to the filter executable.
-    """
-
-    def __init__(
-        self,
-        base_path,
-        env_python,
-        listing_file,
-        run_submit_farm_template,
-        path_submit_bsh,
-        path_filter,
-        path_data,
-        run_submit_replace_perturbations,
-        log_paths=True,
-    ):
-        """
-        Initializes the PathManager with a base path and relative paths, and checks if they exist.
-
-        """
-        self.base_path = Path(base_path).resolve()
-        self.env_dir = self.base_path / env_python
-        self.listing_file = self.base_path / listing_file
-        self.run_submit_farm_template = self.base_path / run_submit_farm_template
-        self.path_submit_bsh = self.base_path / path_submit_bsh
-        self.path_filter = self.base_path / path_filter
-        self.log_paths = log_paths
-        self.path_data = Path(self.base_path / path_data).resolve()
-        self.run_submit_replace_perturbations = (
-            Path(self.base_path) / run_submit_replace_perturbations
-        )
-        self.check_paths_exist()
-
-    def check_paths_exist(self):
-        """Checks if the base, environment, and listing paths exist."""
-        logger.info("Checking paths")
-        paths_to_check = {
-            "Base path": self.base_path,
-            "Environment directory": self.env_dir,
-            "Listing file": self.listing_file,
-            "Submit farm template": self.run_submit_farm_template,
-            "Farm submission path": self.path_submit_bsh,
-            "Submit filter path": self.path_filter,
-            "Path data": self.path_data,
-            "Replace perturbation bash path": self.run_submit_replace_perturbations,
-        }
-
-        for path_name, path_value in paths_to_check.items():
-            if not path_value.exists():
-                raise FileNotFoundError(f"{path_name} does not exist: {path_value}")
-            if self.log_paths:
-                logger.info(f"{path_name} exists: {path_value}")
-
-    def get_paths(self):
-        """Returns all paths as a tuple."""
-        return (
-            self.base_path,
-            self.env_dir,
-            self.listing_file,
-            self.run_submit_farm_template,
-            self.path_submit_farm,
-            self.path_submit_filter,
-        )
-
-
 # def round_to_closest_hour(timestamp):
 #     if timestamp.minute >= 30:
 #         # Round up to the next hour
@@ -374,15 +87,6 @@ class PathManager:
 #         # Round down to the current hour
 #         rounded_timestamp = timestamp.replace(minute=0, second=0)
 #     return rounded_timestamp
-
-
-# Define a function to check the status of the submitted job
-def check_job_status(job_id):
-    try:
-        output = subprocess.check_output(["squeue", "-j", job_id])
-        return True if job_id in output.decode() else False
-    except subprocess.CalledProcessError:
-        return False
 
 
 # Define a function to check the status of the submitted job
@@ -569,6 +273,75 @@ def run_command_in_directory_bsub(
     finally:
         os.chdir(original_directory)
     return jobid
+
+
+def submit_and_wait_slurm(
+    model_type: ModelType,
+    path_manager: PathManager,
+    scheduler: Scheduler,
+    commands_with_directories: list[tuple[Path, Path]],
+    timestamp_model: str,
+    no_mems: int,
+    case_dir: str,
+    queue: str,
+    max_retries: int = 2,
+) -> bool:
+
+    attempt = 0
+
+    while attempt <= max_retries:
+        attempt += 1
+        logger.info(f"SLURM submission attempt {attempt}")
+
+        # --- submit ---
+        all_job_ids = []
+        for command, directory in commands_with_directories:
+            job_ids = submit_job(scheduler, command, directory)
+            all_job_ids.extend(job_ids)
+            time.sleep(2)
+
+        # --- wait until finished ---
+        wait_for_slurm_jobs(all_job_ids)
+
+        # --- inspect outputs ---
+        mems_to_rerun = get_list_mems_to_rerun(
+            all_job_ids,
+            path_manager,
+            timestamp_model,
+            no_mems,
+        )
+
+        if not mems_to_rerun:
+            logger.info("All ensemble members completed successfully")
+            return True
+
+        logger.warning(f"Members to rerun: {mems_to_rerun}")
+
+        if attempt >= max_retries:
+            raise RuntimeError(
+                f"SLURM retries exceeded. Failed members: {mems_to_rerun}"
+            )
+
+        # --- prepare rerun script ---
+        list_mems = [str(mem) for mem in mems_to_rerun]
+
+        replace_nml_template(
+            input_nml_path=path_manager.base_path.run_submit_model_template,
+            entries_tbr_dict={
+                "da_date_start": timestamp_model,
+                "da_date_end": timestamp_model,
+                "@no_mems_list": str(tuple(list_mems)).replace(",", ""),
+                "@case_dir": case_dir,
+                "@cresco_queue": queue,
+            },
+            output_nml_path=commands_with_directories[0][1]
+            / commands_with_directories[0][0],
+        )
+
+        # Only rerun failed members
+        commands_with_directories = [commands_with_directories[0]]
+
+    return False
 
 
 def searchFile(t1, t2, listing):
@@ -1015,26 +788,73 @@ def submit_and_wait(
 
 
 def get_list_mems_to_rerun(
-    job_ids: list, path_manager: PathManager, timestamp_farm: str, no_mems: int
-) -> bool:
-    # breakpoint()
-    datetime_farm_p1 = pd.to_datetime(timestamp_farm, format="%Y%m%d%H") + timedelta(
+    job_ids: list[str],
+    path_manager: PathManager,
+    timestamp_model: str,
+    no_mems: int,
+    scheduler: Scheduler,
+    model_type: ModelType,
+) -> list[int]:
+
+    datetime_model_p1 = pd.to_datetime(timestamp_model, format="%Y%m%d%H") + timedelta(
         hours=1
     )
+
     while True:
         running_jobs = []
+
         for jobid in job_ids:
-            if not check_job_status_cresco(jobid, which_run="FARM"):
+            if scheduler == Scheduler.SLURM:
+                finished = check_job_status_slurm(
+                    jobid, which_run=model_type.value.upper()
+                )
+            else:
+                finished = check_job_status_cresco(
+                    jobid, which_run=model_type.value.upper()
+                )
+
+            if not finished:
                 running_jobs.append(jobid)
 
         if not running_jobs:
-            logger.info(f"{job_ids} have finished")
-            return ic_g1_not_existing(path_manager, datetime_farm_p1, no_mems)
-        else:
-            logger.info(
-                f"Jobs still running: {running_jobs}. Waiting for them to finish..."
+            logger.info(f"Jobs {job_ids} have finished")
+            return check_ic_g1_existing(
+                path_manager=path_manager,
+                model=model_type,
+                datetime_model=datetime_model_p1,
+                no_mems=no_mems,
             )
-            time.sleep(30)
+
+        logger.info(f"Jobs still running: {running_jobs}. Waiting...")
+        time.sleep(30)
+
+
+def check_ic_g1_existing(
+    path_manager: PathManager,
+    model: ModelType,
+    datetime_farm: pd.Timestamp,
+    no_mems: int,
+) -> list[int]:
+
+    mems_to_rerun = []
+
+    for mem in range(no_mems):
+        ic_path = path_manager.get_ic_g1_path(
+            model=model,
+            mem=mem,
+            timestamp=datetime_farm,
+        )
+
+        if ic_path.exists() and ic_path.stat().st_size > 0:
+            logger.info(
+                f"{model} | ic_g1 exists for mem {mem} "
+                f"({ic_path.stat().st_size} bytes)"
+            )
+        else:
+            logger.warning(f"{model} | ic_g1 missing for mem {mem}")
+            mems_to_rerun.append(mem)
+
+    return mems_to_rerun
 
 
 def ic_g1_not_existing(
@@ -1044,7 +864,7 @@ def ic_g1_not_existing(
     file_name = f"ic_g1_{timestamp_farm_p1}.nc"
     mems_to_rerun = []
     for mem in range(no_mems):
-        file_path = Path(path_manager.path_data / f"OUTPUT_{mem}/OUT/{file_name}")
+        file_path = path_manager.chimere_output_runs_dir(mem)
         if os.path.exists(file_path):
             logger.info(
                 f"The core {file_name} for mem {mem} exists in the directory {os.path.getsize(file_path)} bytes"
@@ -1119,3 +939,61 @@ def filter_dates(dates, mode):
             f"Accepted values: ['daily', '5daily', 'hourly']"
         )
         return dates[dates.hour != 0]
+
+
+def check_job_status_slurm(job_id, **kwargs):
+    """
+    Returns True if the job has finished (COMPLETED, FAILED, CANCELLED, etc.)
+    Returns False if the job is still RUNNING or PENDING
+    """
+    which_run = kwargs.get("which_run", None)
+
+    try:
+        result = subprocess.check_output(
+            ["squeue", "-j", str(job_id), "-h"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+
+        if result.strip():
+            logger.info(f"{which_run} {job_id}: status RUNNING/PENDING")
+            return False  # still in queue
+        else:
+            logger.info(f"{which_run} {job_id}: status FINISHED")
+            return True  # finished
+
+    except subprocess.CalledProcessError:
+        # squeue error or job disappeared → finished
+        logger.info(f"{which_run} {job_id}: status FINISHED (not in squeue)")
+        return True
+
+
+def get_list_mems_to_rerun_slurm(
+    job_ids: list[str],
+    path_manager: PathManager,
+    timestamp_model: str,
+    no_mems: int,
+) -> list[int]:
+
+    datetime_farm_p1 = pd.to_datetime(timestamp_model, format="%Y%m%d%H") + timedelta(
+        hours=1
+    )
+
+    while True:
+        running_jobs = []
+
+        for jobid in job_ids:
+            # SLURM: job still in squeue → still running
+            if not check_job_status_slurm(jobid):
+                running_jobs.append(jobid)
+
+        if not running_jobs:
+            logger.info(f"SLURM jobs {job_ids} have finished")
+            return ic_g1_not_existing(
+                path_manager,
+                datetime_farm_p1,
+                no_mems,
+            )
+
+        logger.info(f"SLURM jobs still running: {running_jobs}. Waiting...")
+        time.sleep(30)

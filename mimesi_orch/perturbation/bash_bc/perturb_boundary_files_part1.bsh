@@ -1,0 +1,42 @@
+#!/bin/bash
+# Load conda environment
+# The bsh run_templates_for_dates_.bsh sets the date and submit this job
+# INPUT_FILE : the original bc
+# INPUT_PATH : path where the INPUT_FILE is
+# TMP_DIR : is the folder where the intermediate result is going to be saved
+# MEM_DIR : directory where the perturb field (containing only the specie) is stored
+# RUN_DIR : the folder where the simulation DART-MINNI is going to be run
+# OUTPUT_FILE : 
+
+source /gporq3/minni/FARM-DART/miniconda3/etc/profile.d/conda.sh
+
+
+#Define date parameters
+DATE=$1
+#HOUR=$2
+YEAR=$(echo $DATE | cut -c1-4)
+DATE_WITHOUT_DASH=$(echo $DATE | sed 's/-//g')
+INPUT_FILE="cams_${DATE_WITHOUT_DASH}00_D1_raq.nc"
+INPUT_PATH="/gporq3/minni/FORAIR/C-IFS_CAMS/"
+TMP_DIR="/gporq3/minni/FARM-DART/perturbation_fields/data/bc_base_test/$YEAR/c-ifs/tmp/08/"
+MEM_DIR="/gporq3/minni/FARM-DART/perturbation_fields/c-ifs_mems/"
+RUN_DIR="/gporq3/minni/FARM-DART/RUN/data_no2/INPUT/C-IFS/"
+echo TMP_DIR
+OUTPUT_FILE="${TMP_DIR}/out${DATE_WITHOUT_DASH}.nc"
+MEMS=20
+VAR='c_NO2'
+export BC_PATH_EMISSIONS="/gporq3/minni/FARM-DART/perturbation_fields/"
+export BC_EMISSION_BASE_DIR="/data/bc_base_test/2023/c-ifs/tmp/08/"
+export BC_NAME_NETCDFS=bc_${DATE_WITHOUT_DASH}_int.nc
+export BC_MEMS=$MEMS
+export BC_VAR=$VAR
+export BC_CORR_LENGTH_HZ=50000
+export BC_CORR_LENGTH_VZ=500
+export BC_SPREAD=2
+export PERTURB_DATE_START=${DATE_WITHOUT_DASH}
+export PERTURB_DATE_END=${DATE_WITHOUT_DASH}
+
+echo "running perturbation for" ${DATE_WITHOUT_DASH}
+
+/gporq3/minni/FARM-DART/miniconda3/bin/python3.10  -u /gporq3/minni/FARM-DART/DART/models/FARM/python_code/perturbation/perturb_icbc_opt.py
+

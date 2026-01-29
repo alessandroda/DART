@@ -1,0 +1,45 @@
+assimilation:
+  ass_var: c_SO2
+  case_dir: data_3days_0000
+  case_emi_dir: veSO2_0000
+  emi_var: veSO2
+  no_mems: 20
+  obs_type: SAT_SO2_TROPOMI
+  run_assimilation_flag: false
+  state_variable_qty: QTY_SO2
+cluster:
+  cresco_queue: cameo_h144
+dart:
+  analysis_dir: RUN/data_3days_0000/analysis/
+  obs_converters_dir: DART/observations/obs_converters/S5P_TROPOMI_L3/
+  posteriors_dir: RUN/data_3days_0000/posteriors/
+  preassim_dir: RUN/data_3days_0000/preassim/
+  work_dir: DART/models/FARM/work_freerun/
+logging:
+  format: '%(asctime)s %(message)s'
+  level: INFO
+monitoring:
+  cores: 20
+  job_check_interval: 7
+paths:
+  base_path: /gporq3/minni/FARM-DART/
+  env_python: miniconda3/bin/python3.10
+  listing_file: DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03__listing.csv
+  log_directory: logs_orchestrator/
+  path_data: RUN/data_3days_0000/
+  path_filter: DART/models/FARM/work_freerun/
+  path_submit_bsh: RUN/script/auto_runs/
+  run_submit_farm_template: RUN/script/templates/run_submit_ens.template.bsh
+  run_submit_replace_perturbations: DART/models/FARM/python_code/perturbation/bash_emissions/submit_replace_perturb_into_original_emission_arg.sh
+satellite_data:
+  search_window_seconds: 1800
+time:
+  dt_seconds: 3600
+  end_time: '2023-08-15 03:00:00'
+  start_time: '2023-08-15 01:00:00'
+  backup_perturb_days: 1
+  backup_ic_hours: 2
+  # options: 'daily', '5daily', 'hourly'
+  backup_ic_option: 'daily'
+
+  
