@@ -14,8 +14,8 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
 
-from mimesi_orch.paths import ModelType, PathManager
-from mimesi_orch.scheduler.scheduler import Scheduler, submit_job, wait_for_slurm_jobs
+from paths import PathManager
+from scheduler import Scheduler, submit_job, wait_for_slurm_jobs
 
 
 logger = logging.getLogger(__name__)

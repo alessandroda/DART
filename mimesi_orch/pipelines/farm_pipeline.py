@@ -2,14 +2,14 @@ from datetime import timedelta
 from pathlib import Path
 import shutil
 import time
-from mimesi_orch.config_models import AppConfig
-from mimesi_orch.io_utils import prepare_dart_to_farm_nc
-from mimesi_orch.paths import PathManager
+from config_models import AppConfig
+from io_utils import prepare_dart_to_farm_nc
+from paths import PathManager
 from pipelines.base_pipeline import BaseAssimilationPipeline
 import logging
 import os
 import pandas as pd
-from mimesi_orch.orchestrator_utils import (
+from orchestrator_utils import (
     check_job_status_cresco,
     modify_yaml_date,
     filter_dates,

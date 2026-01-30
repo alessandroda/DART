@@ -22,7 +22,7 @@ Key design principles
 from abc import ABC, abstractmethod
 from datetime import timedelta
 import logging
-from mimesi_orch.orchestrator_utils import set_date_gregorian
+from orchestrator_utils import set_date_gregorian
 
 logger = logging.getLogger(__name__)
 

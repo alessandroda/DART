@@ -11,9 +11,9 @@ import time
 import logging
 import pandas as pd
 import re
-
-from paths import ModelType, PathManager
-from scheduler.scheduler import Scheduler, submit_job, wait_for_slurm_jobs
+from mimesi_types import ModelType, Scheduler
+from paths import PathManager
+from scheduler import submit_job, wait_for_slurm_jobs
 
 logger = logging.getLogger(__name__)
 

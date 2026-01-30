@@ -1,6 +1,8 @@
 import argparse
 import time
 import logging
+import yaml
+
 from pathlib import Path
 from orchestrator_utils import TimeManager
 from pipelines.chimere_pipeline import Chimere2017DartPipeline
@@ -8,7 +10,7 @@ from config_models import AppConfig
 from paths import PathManager
 
 
-parser = argparse.ArgumentParser(description="Python orchestrator for FARM-DART")
+parser = argparse.ArgumentParser(description="Python orchestrator")
 parser.add_argument(
     "-c", "--conf", type=str, required=True, help="Path to the YAML config file"
 )
@@ -16,12 +18,15 @@ args = parser.parse_args()
 
 CONFIG_PATH = args.conf
 
-config = AppConfig.from_yaml(CONFIG_PATH)
+with open(CONFIG_PATH, "r") as f:
+    cfg = yaml.safe_load(f)
 
-LOG_DIR = Path(config.paths.run_dir) / "mimesi_orchestrator_logs"
+config = AppConfig.model_validate(cfg)
+
+LOG_DIR = Path(config.paths.path_data) / "mimesi_orchestrator_logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-logfile = LOG_DIR / f"farm_to_dart_{time.strftime('%Y%m%d_%H%M%S')}.log"
+logfile = LOG_DIR / f"{config.assimilation.model_type.value}_DART_{time.strftime('%Y%m%d_%H%M%S')}.log"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 logger.info(f"Starting {config.assimilation.model_type.value}–DART orchestrator")
 logger.info(f"Config file: {CONFIG_PATH}")
-logger.info(f"Run dir: {config.paths.run_dir}")
+logger.info(f"Run dir: {config.paths.path_data}")
 logger.info(f"Log file: {logfile}")
 
 time_manager = TimeManager(

@@ -1,14 +1,13 @@
 paths:
   base_path: /g100_work/ARPAE_AQM/MIMESI/
-  env_python: miniconda3/bin/python3.10
+  env_python: miniconda3/bin/python3.13
 
   listing_file: assim_mimesi/DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03__listing.csv
-  run_submit_model_template: /catena_aria_test/Chimere/run_mimesi-ITA7_template.sh
-  path_submit_bsh: /catena_aria_test/Chimere/auto_runs
-  path_filter: DART/models/FARM/work_freerun
+  run_submit_model_template: catena_aria_test/Chimere/run_mimesi-ITA7_template.sh
+  path_submit_bsh: catena_aria_test/Chimere/auto_runs
+  path_filter: assim_mimesi/DART/models/CHIMERE_v2017r/work_offline
   path_data: runs_chimere/ITA7
-
-  run_submit_replace_perturbations: RUN/script/templates/submit_replace_perturb_into_original_emission_arg.sh
+  run_submit_replace_perturbations: assim_mimesi/DART/mimesi_orch/perturbation/bash_emissions/submit_replace_perturb_into_original_emission_arg.sh
   log_directory: logs_orchestrator
 
 
@@ -24,7 +23,7 @@ time:
 
 assimilation:
   run_assimilation_flag: false
-  model_type: chimere
+  model_type: CHIMERE
   ass_var: c_NO2
   state_variable_qty: QTY_NO2
   obs_type: SAT_NO2_TROPOMI

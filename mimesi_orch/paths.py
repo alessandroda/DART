@@ -1,17 +1,10 @@
 from pathlib import Path
 import logging
-
 import pandas as pd
 from config_models import PathsConfig
-from enum import Enum
+from mimesi_types import ModelType
 
 logger = logging.getLogger(__name__)
-
-
-class ModelType(str, Enum):
-    FARM = "farm"
-    CHIMERE = "chimere"
-
 
 class PathManager:
     """
