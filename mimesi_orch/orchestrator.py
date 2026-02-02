@@ -22,8 +22,9 @@ with open(CONFIG_PATH, "r") as f:
     cfg = yaml.safe_load(f)
 
 config = AppConfig.model_validate(cfg)
+path_manager = PathManager(config.paths)
 
-LOG_DIR = Path(config.paths.path_data) / "mimesi_orchestrator_logs"
+LOG_DIR = Path(path_manager.path_data) / "mimesi_orchestrator_logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 logfile = LOG_DIR / f"{config.assimilation.model_type.value}_DART_{time.strftime('%Y%m%d_%H%M%S')}.log"
@@ -49,6 +50,6 @@ time_manager = TimeManager(
     end_time=config.time.end_time,
     dt_seconds=config.time.dt_seconds,
 )
-path_manager = PathManager(config.paths)
+
 pipeline = Chimere2017DartPipeline(time_manager, path_manager, config)
 pipeline.run_pipeline()

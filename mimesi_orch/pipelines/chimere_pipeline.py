@@ -69,9 +69,9 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         self.backup_ic_hours = self.config.time.backup_ic_hours
         self.backup_ic_option = self.config.time.backup_ic_option
 
-        logger.info(f"Using scheduler={self.scheduler}, queue={self.cineca_queue}")
 
         self.scheduler = self.config.cluster.scheduler
+        logger.info(f"Using scheduler={self.scheduler}, queue={self.cineca_queue}")
 
     def before_step(self):
         pass
@@ -93,27 +93,28 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         )
         self.cleanup_FARM()
 
-    # former run_farm
+
+
+
     def run_model(self):
         """
         Run CHIMERE for the current time step.
         """
-        logger.info(f"CHIMERE running model at {self.time_manager.current_time}")
+        logger.info(f"[STEP] Running CHIMERE model at {self.time_manager.current_time}")
+        
         timestamp_arg_run_chimere = self.time_manager.current_time.strftime(
             "%Y-%m-%d %H:00"
         )
+        
         # to be understood time_emi, date_emi
         timestamp_chimere = TimeManager.round_to_closest_hour(
             self.time_manager.current_time
         ).strftime("%Y%m%d%H")
+        
         commands_with_directories = []
-        for mem in self.no_mems:
+        for mem in range(self.no_mems):
             string_to_replace_template = f"{timestamp_chimere}_mem_{mem}.sh"
-            command_chimere_run = (
-                "run_mimesi-ITA7_"
-                + string_to_replace_template
-                + f" '{timestamp_arg_run_chimere}'"
-            )
+            
             path_run = self.path_manager.chimere_name_run_sub_ens_bash(
                 string_to_replace_template
             )
@@ -126,8 +127,25 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 },
                 output_nml_path=path_run,
             )
+
+            chimere_script = path_run
+            slurm_script = (self.path_manager.path_submit_bsh / f"slurm_{chimere_script.stem}.sh")
+
+            slurm_script.write_text(f"""#!/bin/bash
+#SBATCH --partition={self.cineca_queue}
+#SBATCH --job-name=chimere_mem{mem}
+#SBATCH --output=logs/chimere_%j.out
+#SBATCH --error=logs/chimere_%j.err
+
+cd {self.path_manager.path_submit_bsh}
+
+./{chimere_script.name} '{timestamp_arg_run_chimere}'
+""")
+            slurm_script.chmod(0o755)
+            
+        
             commands_with_directories.append(
-                (command_chimere_run, self.path_manager.chimere_base_dir)
+                (slurm_script, self.path_manager.path_submit_bsh)
             )
         submit_and_wait_slurm(
             self.model_type,

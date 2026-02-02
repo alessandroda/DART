@@ -16,9 +16,7 @@ from pydantic import BaseModel, Field, field_validator
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
-from mimesi_orch.paths import ModelType
-from mimesi_orch.scheduler.scheduler import Scheduler
-
+from mimesi_types import ModelType, Scheduler
 
 # ---------------------------------------------------------------------
 # PATHS
@@ -101,6 +99,12 @@ class AssimilationConfig(BaseModel):
     no_mems: int = Field(gt=0)
     run_assimilation_flag: bool = True
 
+    @field_validator("model_type", mode="before")
+    @classmethod
+    def normalize_model_type(cls, v):
+        if isinstance(v, str):
+            return v.lower()
+        return v
 
 # ---------------------------------------------------------------------
 # CLUSTER
@@ -111,7 +115,12 @@ class ClusterConfig(BaseModel):
     cluster_queue: str
     scheduler: Scheduler
 
-
+    @field_validator("scheduler", mode="before")
+    @classmethod
+    def normalize_scheduler(cls, v):
+        if isinstance(v, str):
+            return v.lower()
+        return v
 # ---------------------------------------------------------------------
 # DART
 # ---------------------------------------------------------------------
@@ -204,3 +213,5 @@ class MonitoringConfig(BaseModel):
 
     cores: int = Field(gt=0)
     job_check_interval: int = Field(gt=0, description="Polling interval in seconds")
+
+AppConfig.model_rebuild()
