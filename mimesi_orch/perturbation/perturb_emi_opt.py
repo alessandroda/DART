@@ -1,20 +1,36 @@
-# Author: Alessandro D'Ausilio
-# email: alessandro.dausilio@suez.com
+"""
+Emission perturbation module for ensemble-based chemical data assimilation.
+
+This module generates spatially and temporally correlated perturbations of
+emission fields, following an Evensen-style formulation for ensemble
+generation, adapted for atmospheric chemistry applications.
+
+Main features
+-------------
+- Horizontal Gaussian correlations with configurable length scale
+- Vertical correlations via recursive Cholesky-like construction
+- Temporal AR(1) correlation
+- Ensemble mean constraint to preserve total emissions
+- Model-agnostic grid handling (lat/lon or WRF-style grids)
+
+References
+----------
+Evensen, G. (2003), Ocean Dynamics
+Boynard et al. (2021), ACP
+DART-Chem perturbation framework
+"""
 
 
-# Python version based from
-# https://github.com/apmizzi/DART_Chem/blob/main/apm_run_scripts/RUN_PERT_CHEM/EMISS_PERT/perturb_chem_emiss_CORR_RT_MA.f90
-# Evensen, G. (2003). "The Ensemble Kalman Filter: theoretical formulation and practical implementation." Ocean Dynamics, 53(4), 343-367.
-# An ensemble assessment of regional ozone model uncertainty with an explicit error representation. Boynard 2021
-
-# Organize imports, remove duplicates and unused ones
 import os
 import numpy as np
 import xarray as xr
+import logging
+import sys
 from pathlib import Path
 from tqdm import tqdm
 from typing import Tuple
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 from glob import glob
 from copy import deepcopy
 
@@ -40,11 +56,85 @@ class Settings(BaseSettings):
     corr_time: int = 24
     max_workers: int = 1  # Number of threads
 
-    class Config:
-        env_prefix = "EMISSION_"  # Allow overriding settings with environment variables
 
+    model_config = ConfigDict(
+        env_prefix = "EMISSION_",  # Allow overriding settings with environment variables
+    )
+
+HORIZONTAL_DIMS = [
+    ("lon", "lat"),                     # Case A
+    ("west_east", "south_north"),        # Case B
+]
+
+VERTICAL_DIMS = [
+    "z",
+    "bottom_top",
+]
 
 settings = Settings()
+separator_step = '--------------------'
+separator_inside_step = '----------------------------------------'
+
+def setup_logger(level=logging.INFO):
+    logger = logging.getLogger("mimesi.perturb_emi")
+    logger.setLevel(level)
+
+    handler = logging.StreamHandler(sys.stdout)
+    formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)-7s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    handler.setFormatter(formatter)
+
+    if not logger.handlers:
+        logger.addHandler(handler)
+
+    return logger
+
+
+def detect_dims(ds, varname):
+    dims = ds[varname].dims
+
+    # vertical
+    zdim = next((d for d in VERTICAL_DIMS if d in dims), None)
+    if zdim is None:
+        raise ValueError("Vertical dimension not found")
+
+    hdim = next((h for h in HORIZONTAL_DIMS if h[0] in dims and h[1] in dims), None)
+    if hdim is None:
+        raise ValueError("Horizontal dimensions not found")
+
+    return hdim, zdim
+
+def extract_grid(ds, varname):
+    hdim, zdim = detect_dims(ds, varname)
+    xdim, ydim = hdim
+
+    nx = ds.sizes[xdim]
+    ny = ds.sizes[ydim]
+    nz = ds.sizes[zdim]
+
+    # ---- longitude / latitude ----
+    if "lon" in ds.coords and "lat" in ds.coords:
+        # Case A: 1D coords
+        lon = ds["lon"].values
+        lat = ds["lat"].values
+        lon2d, lat2d = np.meshgrid(lon, lat)
+
+    elif "lon" in ds.variables and "lat" in ds.variables:
+        # Case B: 2D coords
+        lon2d = ds["lon"].values
+        lat2d = ds["lat"].values
+
+    else:
+        raise ValueError("Lat/Lon variables not found")
+
+    # ---- vertical coordinate ----
+    zcoord = ds[zdim].values
+
+    return nx, ny, nz, lon2d, lat2d, zcoord
+
+
 
 
 def constrain_mean_to_target(dict_members, target_field, var_name):
@@ -264,44 +354,54 @@ def recenter_and_rescale(field: np.ndarray, spread: float) -> np.ndarray:
 
 
 def perturb_emission():
-    """Perturb emission data."""
-    print(settings.path_emissions)
-    print(settings.emission_base_dir)
-    print(settings.name_netcdfs)
-    netcdfs = glob(settings.path_emissions + settings.emission_base_dir + settings.name_netcdfs)
-    print(f"Found netcdf: {netcdfs}")
+    
+    logger.info("Starting emission perturbation")
+    logger.info(f"Variable              : {settings.var}")
+    logger.info(f"Members               : {settings.mems}")
+    logger.info(f"Horizonal corr [m]    : {settings.corr_length_hz}")
+    logger.info(f"Vertical corr [lev]   : {settings.corr_length_vz}")
+    logger.info(f"Spread                : {settings.spread}")
+
+    netcdfs = glob(settings.emission_base_dir + settings.name_netcdfs)
+    logger.info(f"Found netcdf: {netcdfs}")
     for netcdf_emi in netcdfs:
         try:
             emission_dataset = xr.open_dataset(netcdf_emi)
         except FileNotFoundError:
-            print(f"Error: Could not find file {netcdf_emi}")
+            logger.error(f"Error: Could not find file {netcdf_emi}")
             return
 
-        nx, ny, nz = (
-            len(emission_dataset[settings.var].lon),
-            len(emission_dataset[settings.var].lat),
-            len(emission_dataset[settings.var].z),
+
+        nx, ny, nz, lon2d, lat2d, zcoord = extract_grid(
+            emission_dataset, settings.var
         )
-        print(f' processing: {netcdf_emi}')
-        print(f' nx, ny, nz: {nx}, {ny}, {nz}')
-        print(f' members: {settings.mems}')
-        print(f' 1- Get vertical correlation matrix: exponential decay')
+
+    
+        logger.info(f'processing: {netcdf_emi}')
+        logger.info(f'nx, ny, nz: {nx}, {ny}, {nz}')
+        logger.info(f'members: {settings.mems}')
+        logger.info(f'1{separator_step} Get vertical correlation matrix: exponential decay')
         A = get_vertical_correlation_matrix(nx, ny, nz, settings.corr_length_hz)
         chem_fac_pr = None
-        print(f' 2- Loop over times')
+        logger.info(f'2{separator_step} Loop over times')
         dict_members = {key: deepcopy(emission_dataset) for key in range(settings.mems)}
         grid_length = get_dist(
-            emission_dataset[settings.var].lat[0],
-            emission_dataset[settings.var].lat[1],
-            emission_dataset[settings.var].lon[0],
-            emission_dataset[settings.var].lat[1],
+                lat2d[0, 0],
+                lon2d[0, 0],
+                lat2d[1, 0],
+                lon2d[0, 1],
+            )
+        logger.info(
+            f"{separator_inside_step}Grid detected → nx={nx}, ny={ny}, nz={nz}, "
+            f"{separator_inside_step}Δx≈{grid_length:.1f} km"
         )
-        weights_dict = compute_weights(nx, ny, settings.corr_length_hz, grid_length, *np.meshgrid(emission_dataset.lat, emission_dataset.lon))
-        for i, time_step in enumerate(emission_dataset.time):
 
-            print(f' -------------------Time: {time_step.values}')
+        weights_dict = compute_weights(nx, ny, settings.corr_length_hz, grid_length, *np.meshgrid(lat2d, lon2d))
+        for i, time_step in enumerate(emission_dataset.Time):
+
+            logger.info(f'{separator_inside_step} Time: {time_step.values}')
             random_field = box_muller_random_field(nx, ny, nz, settings.mems)
-            print(f' 3- Apply horizontal correlations: corr_hz ={settings.corr_length_hz}')
+            logger.info(f'3{separator_step} Apply horizontal correlations: corr_hz ={settings.corr_length_hz}')
             chem_fac = apply_horizontal_correlations(
                 weights_dict,
                 random_field,
@@ -310,24 +410,24 @@ def perturb_emission():
                 nz,
                 settings.corr_length_hz,
                 grid_length,
-                *np.meshgrid(emission_dataset.lat, emission_dataset.lon),
+                *np.meshgrid(lat2d, lon2d),
             )
-            print(f' 4- Apply vertical correlation: corr_vz ={settings.corr_length_vz}')
+            print(f'4{separator_step} Apply vertical correlation: corr_vz ={settings.corr_length_vz}')
             chem_fac = apply_vertical_correlation(chem_fac, A)
-            print(f'5- Recenter and rescale')
+            print(f'5{separator_step} Recenter and rescale')
             chem_fac = recenter_and_rescale(chem_fac, settings.spread)
 
             if chem_fac_pr is not None:
                 alpha = np.exp(-1 / settings.corr_time)
                 chem_fac = alpha * chem_fac_pr + np.sqrt(1 - alpha**2) * chem_fac
-            print(f'6- PERTURBATION')
+            print(f'6{separator_step} PERTURBATION')
             for imem in range(settings.mems):
                 chem_fac_t = np.transpose(chem_fac[imem], axes=[2, 1, 0])
                 dict_members[imem][settings.var][i, :, :, :] *= np.exp(chem_fac_t)
             chem_fac_pr = chem_fac
 
             # After generating perturbations and before saving
-            print(f' 7- Constrain Ensemble Mean to Target Field')
+            print(f'{separator_step} Constrain Ensemble Mean to Target Field')
             constrain_mean_to_target(
                 dict_members=dict_members,
                 target_field=emission_dataset[settings.var].values,
@@ -348,4 +448,5 @@ def perturb_emission():
 
 
 if __name__ == "__main__":
+    logger = setup_logger(logging.INFO)
     perturb_emission()
