@@ -51,8 +51,8 @@ class Settings(BaseSettings):
     # ex: 2000 means there are
     sub_dir_emi: str = "0000"
     mems: int = 20
-    corr_length_hz: float = 100000
-    corr_length_vz: float = 500
+    corr_length_hz: float = 10  # [km]
+    corr_length_vz: float = 3  # levels
     spread: float = 1.6
     corr_time: int = 24
     max_workers: int = 1  # Number of threads
@@ -396,14 +396,22 @@ def apply_horizontal_correlations(
     max_cells = np.max(stencil_sizes)
     total_ops_est = nx * ny * avg_cells * nz  # No longer multiplied by mems!
 
-    print(
+    logger.info(
         f"{settings.separator_inside_step} Horizontal correlation workload (VECTORIZED):"
-        f"\n   grid: {nx} x {ny} x {nz}"
-        f"\n   members: {mems} (processed in parallel)"
-        f"\n   corr radius cells: {ngrid_corr}"
-        f"\n   stencil cells avg/min/max: {avg_cells:.1f} / {min_cells} / {max_cells}"
-        f"\n   estimated operations: {total_ops_est:.2e} (vs {total_ops_est*mems:.2e} in original)"
-        f"\n   → Expected speedup: ~{mems}x over original nested loops"
+    )
+    logger.info(f"{settings.separator_inside_step} grid: {nx} x {ny} x {nz}")
+    logger.info(
+        f"{settings.separator_inside_step} members: {mems} (processed in parallel)"
+    )
+    logger.info(f"{settings.separator_inside_step} corr radius cells: {ngrid_corr}")
+    logger.info(
+        f"{settings.separator_inside_step} stencil cells avg/min/max: {avg_cells:.1f} / {min_cells} / {max_cells}"
+    )
+    logger.info(
+        f"{settings.separator_inside_step} estimated operations: {total_ops_est:.2e} (vs {total_ops_est*mems:.2e} in original)"
+    )
+    logger.info(
+        f"{settings.separator_inside_step} → Expected speedup: ~{mems}x over original nested loops"
     )
 
     # Process all members simultaneously for each spatial point
@@ -463,7 +471,7 @@ def perturb_emission():
     logger.info("Starting emission perturbation")
     logger.info(f"Variable              : {settings.var}")
     logger.info(f"Members               : {settings.mems}")
-    logger.info(f"Horizonal corr [deg]    : {settings.corr_length_hz}")
+    logger.info(f"Horizonal corr [km]    : {settings.corr_length_hz}")
     logger.info(f"Vertical corr [lev]   : {settings.corr_length_vz}")
     logger.info(f"Spread                : {settings.spread}")
 
