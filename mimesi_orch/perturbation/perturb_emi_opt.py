@@ -20,7 +20,6 @@ Boynard et al. (2021), ACP
 DART-Chem perturbation framework
 """
 
-
 import os
 import numpy as np
 import xarray as xr
@@ -41,14 +40,14 @@ EARTH_RADIUS_KM = 6371.0
 # Settings class using Pydantic BaseSettings
 class Settings(BaseSettings):
     path_emissions: str = "/gporq3/minni/FARM-DART/perturbation_fields/"
-    emission_base_dir : str = 'data/emission_base_test/2023/emi/08/'
+    emission_base_dir: str = "data/emission_base_test/2023/emi/08/"
     name_netcdfs: str = "HERMESv3_*.nc"
     dim_to_groud_ncs: str = "time"
     var: str = "veSO2"
-# convention sub_dir_emi
-# 0000 : 0 spread, 0 vz, 0 hz, 0 corr_time
-# ex: 2000 means there are 
-    sub_dir_emi : str = '0000'
+    # convention sub_dir_emi
+    # 0000 : 0 spread, 0 vz, 0 hz, 0 corr_time
+    # ex: 2000 means there are
+    sub_dir_emi: str = "0000"
     mems: int = 20
     corr_length_hz: float = 100000
     corr_length_vz: float = 500
@@ -56,14 +55,14 @@ class Settings(BaseSettings):
     corr_time: int = 24
     max_workers: int = 1  # Number of threads
 
-
     model_config = ConfigDict(
-        env_prefix = "EMISSION_",  # Allow overriding settings with environment variables
+        env_prefix="EMISSION_",  # Allow overriding settings with environment variables
     )
 
+
 HORIZONTAL_DIMS = [
-    ("lon", "lat"),                     # Case A
-    ("west_east", "south_north"),        # Case B
+    ("lon", "lat"),  # Case A
+    ("west_east", "south_north"),  # Case B
 ]
 
 VERTICAL_DIMS = [
@@ -72,8 +71,9 @@ VERTICAL_DIMS = [
 ]
 
 settings = Settings()
-separator_step = '--------------------'
-separator_inside_step = '----------------------------------------'
+separator_step = "--------------------"
+separator_inside_step = "----------------------------------------"
+
 
 def setup_logger(level=logging.INFO):
     logger = logging.getLogger("mimesi.perturb_emi")
@@ -106,6 +106,7 @@ def detect_dims(ds, varname):
 
     return hdim, zdim
 
+
 def extract_grid(ds, varname):
     hdim, zdim = detect_dims(ds, varname)
     xdim, ydim = hdim
@@ -135,8 +136,6 @@ def extract_grid(ds, varname):
     return nx, ny, nz, lon2d, lat2d, zcoord
 
 
-
-
 def constrain_mean_to_target(dict_members, target_field, var_name):
     """
     Adjust the ensemble perturbations so that their mean matches the target field.
@@ -147,15 +146,15 @@ def constrain_mean_to_target(dict_members, target_field, var_name):
         var_name (str): Name of the variable being adjusted.
     """
     # Calculate current ensemble mean
-    print("7.1: Calculating mean start")
+    logger.info("7.1: Calculating mean start")
     ensemble_sum = np.zeros_like(target_field)
     for imem in dict_members:
         ensemble_sum += dict_members[imem][var_name].values
     ensemble_mean = ensemble_sum / len(dict_members)
-    print("7.1: Calculating mean end")
+    logger.info("7.1: Calculating mean end")
     # Adjust each member to ensure ensemble mean matches target_field
-    print(f"7.1test: target_field {target_field.shape}")
-    print(f"7.2test: ensemble_mean {ensemble_mean.shape}")
+    logger.debug(f"7.1test: target_field {target_field.shape}")
+    logger.debug(f"7.2test: ensemble_mean {ensemble_mean.shape}")
     epsilon = 1e-6
     ensemble_mean_safe = np.maximum(ensemble_mean, epsilon)
     scaling_factor = target_field / ensemble_mean_safe
@@ -167,13 +166,29 @@ def constrain_mean_to_target(dict_members, target_field, var_name):
     for imem in dict_members:
         adjusted_sum += dict_members[imem][var_name].values
     adjusted_mean = adjusted_sum / len(dict_members)
-    assert np.allclose(adjusted_mean, target_field, atol=1e-6), "Ensemble mean does not match target field!"
+    assert np.allclose(
+        adjusted_mean, target_field, atol=1e-6
+    ), "Ensemble mean does not match target field!"
 
 
-def process_time_step(i, time_step, emission_dataset, weights_dict, nx, ny, nz, A, grid_length, dict_members, chem_fac_pr):
-    print(f'-------------------Time: {time_step.values}')
+def process_time_step(
+    i,
+    time_step,
+    emission_dataset,
+    weights_dict,
+    nx,
+    ny,
+    nz,
+    A,
+    grid_length,
+    dict_members,
+    chem_fac_pr,
+):
+    logger.info(f"{separator_inside_step} Time: {time_step.values}")
     random_field = box_muller_random_field(nx, ny, nz, settings.mems)
-    print(f' 3- Apply horizontal correlations: corr_hz ={settings.corr_length_hz}')
+    logger.info(
+        f" 3- Apply horizontal correlations: corr_hz ={settings.corr_length_hz}"
+    )
     chem_fac = apply_horizontal_correlations(
         weights_dict,
         random_field,
@@ -184,15 +199,15 @@ def process_time_step(i, time_step, emission_dataset, weights_dict, nx, ny, nz, 
         grid_length,
         *np.meshgrid(emission_dataset.lat, emission_dataset.lon),
     )
-    print(f' 4- Apply vertical correlation: corr_vz ={settings.corr_length_vz}')
+    logger.info(f" 4- Apply vertical correlation: corr_vz ={settings.corr_length_vz}")
     chem_fac = apply_vertical_correlation(chem_fac, A)
-    print(f'5- Recenter and rescale')
+    logger.info(f"5- Recenter and rescale")
     chem_fac = recenter_and_rescale(chem_fac, settings.spread)
 
     if chem_fac_pr is not None:
         alpha = np.exp(-1 / settings.corr_time)
         chem_fac = alpha * chem_fac_pr + np.sqrt(1 - alpha**2) * chem_fac
-    print(f'6- PERTURBATION')
+    logger.info(f"6- PERTURBATION")
     for imem in range(settings.mems):
         chem_fac_t = np.transpose(chem_fac[imem], axes=[2, 1, 0])
         dict_members[imem][settings.var][i, :, :, :] *= np.exp(chem_fac_t)
@@ -263,17 +278,21 @@ def get_dist(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
     return EARTH_RADIUS_KM * c
 
-def compute_weights(    
+
+def compute_weights(
     nx: int,
     ny: int,
     corr_length_hz: float,
     grid_length: float,
     lat_grid: np.ndarray,
-    lon_grid: np.ndarray):
+    lon_grid: np.ndarray,
+):
 
     ngrid_corr = int(np.ceil(corr_length_hz / grid_length)) + 1
     weights_dict = {}
-    for i in tqdm(range(nx), unit="xcell", leave=False):
+    for i in tqdm(
+        range(nx), unit="xcell", leave=False, desc=f"{separator_inside_step} loop on x"
+    ):
         for j in range(ny):
             ii_str, ii_end = max(0, i - ngrid_corr), min(nx, i + ngrid_corr)
             jj_str, jj_end = max(0, j - ngrid_corr), min(ny, j + ngrid_corr)
@@ -287,8 +306,9 @@ def compute_weights(
                 np.exp(-(dist**2) / (corr_length_hz**2))[:, :, np.newaxis]
                 * within_distance[:, :, np.newaxis]
             )
-            weights_dict[(i,j)] = wgt
+            weights_dict[(i, j)] = wgt
     return weights_dict
+
 
 def apply_horizontal_correlations(
     weigths_dict: dict,
@@ -305,7 +325,11 @@ def apply_horizontal_correlations(
     ngrid_corr = int(np.ceil(corr_length_hz / grid_length)) + 1
     chem_fac = np.zeros_like(field)
 
-    for imem in tqdm(range(settings.mems), unit="member"):
+    for imem in tqdm(
+        range(settings.mems),
+        unit="member",
+        desc=f"{separator_inside_step} loop on members",
+    ):
         for i in tqdm(range(nx), unit="xcell"):
             for j in range(ny):
                 ii_str, ii_end = max(0, i - ngrid_corr), min(nx, i + ngrid_corr)
@@ -320,15 +344,14 @@ def apply_horizontal_correlations(
                 #     np.exp(-(dist**2) / (corr_length_hz**2))[:, :, np.newaxis]
                 #     * within_distance[:, :, np.newaxis]
                 # )
-                
-                chem_fac[imem,i,j,:] = np.sum(
-                        weigths_dict[(i,j)] 
-                        * field[imem,ii_str:ii_end, jj_str:jj_end, :],
-                        axis=(0,1),
+
+                chem_fac[imem, i, j, :] = np.sum(
+                    weigths_dict[(i, j)] * field[imem, ii_str:ii_end, jj_str:jj_end, :],
+                    axis=(0, 1),
                 )
-                weights_sum = np.sum(weigths_dict[(i,j)][:,:])
+                weights_sum = np.sum(weigths_dict[(i, j)][:, :])
                 if weights_sum != 0:
-                    chem_fac[imem,i,j,:] /= weights_sum
+                    chem_fac[imem, i, j, :] /= weights_sum
     return chem_fac
 
 
@@ -354,11 +377,11 @@ def recenter_and_rescale(field: np.ndarray, spread: float) -> np.ndarray:
 
 
 def perturb_emission():
-    
+
     logger.info("Starting emission perturbation")
     logger.info(f"Variable              : {settings.var}")
     logger.info(f"Members               : {settings.mems}")
-    logger.info(f"Horizonal corr [m]    : {settings.corr_length_hz}")
+    logger.info(f"Horizonal corr [deg]    : {settings.corr_length_hz}")
     logger.info(f"Vertical corr [lev]   : {settings.corr_length_vz}")
     logger.info(f"Spread                : {settings.spread}")
 
@@ -371,37 +394,39 @@ def perturb_emission():
             logger.error(f"Error: Could not find file {netcdf_emi}")
             return
 
+        nx, ny, nz, lon2d, lat2d, zcoord = extract_grid(emission_dataset, settings.var)
 
-        nx, ny, nz, lon2d, lat2d, zcoord = extract_grid(
-            emission_dataset, settings.var
+        logger.info(f"processing: {netcdf_emi}")
+        logger.info(f"nx, ny, nz: {nx}, {ny}, {nz}")
+        logger.info(f"members: {settings.mems}")
+        logger.info(
+            f"1{separator_step} Get vertical correlation matrix: exponential decay"
         )
-
-    
-        logger.info(f'processing: {netcdf_emi}')
-        logger.info(f'nx, ny, nz: {nx}, {ny}, {nz}')
-        logger.info(f'members: {settings.mems}')
-        logger.info(f'1{separator_step} Get vertical correlation matrix: exponential decay')
-        A = get_vertical_correlation_matrix(nx, ny, nz, settings.corr_length_hz)
+        A = get_vertical_correlation_matrix(nx, ny, nz, settings.corr_length_vz)
         chem_fac_pr = None
-        logger.info(f'2{separator_step} Loop over times')
+        logger.info(f"2{separator_step} Loop over times")
         dict_members = {key: deepcopy(emission_dataset) for key in range(settings.mems)}
         grid_length = get_dist(
-                lat2d[0, 0],
-                lon2d[0, 0],
-                lat2d[1, 0],
-                lon2d[0, 1],
-            )
+            lat2d[0, 0],
+            lon2d[0, 0],
+            lat2d[1, 0],
+            lon2d[0, 1],
+        )
         logger.info(
             f"{separator_inside_step}Grid detected → nx={nx}, ny={ny}, nz={nz}, "
             f"{separator_inside_step}Δx≈{grid_length:.1f} km"
         )
 
-        weights_dict = compute_weights(nx, ny, settings.corr_length_hz, grid_length, *np.meshgrid(lat2d, lon2d))
+        weights_dict = compute_weights(
+            nx, ny, settings.corr_length_hz, grid_length, *np.meshgrid(lat2d, lon2d)
+        )
         for i, time_step in enumerate(emission_dataset.Time):
 
-            logger.info(f'{separator_inside_step} Time: {time_step.values}')
+            logger.info(f"{separator_inside_step} Time: {time_step.values}")
             random_field = box_muller_random_field(nx, ny, nz, settings.mems)
-            logger.info(f'3{separator_step} Apply horizontal correlations: corr_hz ={settings.corr_length_hz}')
+            logger.info(
+                f"3{separator_step} Apply horizontal correlations: corr_hz ={settings.corr_length_hz}"
+            )
             chem_fac = apply_horizontal_correlations(
                 weights_dict,
                 random_field,
@@ -412,22 +437,24 @@ def perturb_emission():
                 grid_length,
                 *np.meshgrid(lat2d, lon2d),
             )
-            print(f'4{separator_step} Apply vertical correlation: corr_vz ={settings.corr_length_vz}')
+            logger.info(
+                f"4{separator_step} Apply vertical correlation: corr_vz ={settings.corr_length_vz}"
+            )
             chem_fac = apply_vertical_correlation(chem_fac, A)
-            print(f'5{separator_step} Recenter and rescale')
+            logger.info(f"5{separator_step} Recenter and rescale")
             chem_fac = recenter_and_rescale(chem_fac, settings.spread)
 
             if chem_fac_pr is not None:
                 alpha = np.exp(-1 / settings.corr_time)
                 chem_fac = alpha * chem_fac_pr + np.sqrt(1 - alpha**2) * chem_fac
-            print(f'6{separator_step} PERTURBATION')
+            logger.info(f"6{separator_step} PERTURBATION")
             for imem in range(settings.mems):
                 chem_fac_t = np.transpose(chem_fac[imem], axes=[2, 1, 0])
                 dict_members[imem][settings.var][i, :, :, :] *= np.exp(chem_fac_t)
             chem_fac_pr = chem_fac
 
             # After generating perturbations and before saving
-            print(f'{separator_step} Constrain Ensemble Mean to Target Field')
+            logger.info(f"{separator_step} Constrain Ensemble Mean to Target Field")
             constrain_mean_to_target(
                 dict_members=dict_members,
                 target_field=emission_dataset[settings.var].values,
@@ -435,16 +462,21 @@ def perturb_emission():
             )
         try:
             for imem in range(settings.mems):
-                dir_path = Path(settings.path_emissions) / 'emi_mems' / f'emi_{imem}' / f'{settings.var}_{settings.sub_dir_emi}'
+                dir_path = (
+                    Path(settings.path_emissions)
+                    / "emi_mems"
+                    / f"emi_{imem}"
+                    / f"{settings.var}_{settings.sub_dir_emi}"
+                )
                 file_name = f'{os.path.basename(netcdf_emi).strip(".nc")}_{imem}.nc'
-                print(file_name) 
+                logger.info(file_name)
                 path_filename = dir_path / file_name
                 if not os.path.exists(dir_path):
-                    print(f'dir_path: {dir_path}')
+                    logger.info(f"dir_path: {dir_path}")
                     os.makedirs(dir_path)
                 dict_members[imem][settings.var].to_netcdf(path_filename)
         except Exception as e:
-            print(f"Error saving netCDF file: {e}")
+            logger.error(f"Error saving netCDF file: {e}")
 
 
 if __name__ == "__main__":
