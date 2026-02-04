@@ -105,10 +105,13 @@ class PathManager:
     # ------------------------------------------------------------------
 
     def chimere2023_run_dir(self, mem: int) -> Path:
-        return self.path_data / f"{mem}"
+        return self.path_data / f"ENS{mem}"
 
-    def chimere2023_wps(self) -> Path:
+    def chimere2023_WPS(self) -> Path:
         return self.path_control_run / "WPS" 
+    
+    def chimere2023_run_dir_WPS(self, mem: int) -> Path:
+        return self.chimere2023_run_dir(mem) / "WPS"
     
     def chimere2023_ibc_src_dir(self) -> Path:
         return self.path_control_run / "IBC"
@@ -116,27 +119,30 @@ class PathManager:
     def chimere2023_ibc_dir(self, mem: int) -> Path:
         return self.chimere2023_run_dir(mem) / "IBC"
     
-    def chimere2023_BOUN_LIST_SRC(self, date_ymd: str, EXP_NAME: str) -> Path:
-        return self.chimere2023_ibc_src_dir() / f"BOUN_CONCS.{date_ymd}00_24_{EXP_NAME}_EUROCOMEX3.list"
+    def chimere2023_BOUN_LIST_SRC(self, date_ymd: str, control_run_exp_name: str) -> Path:
+        return self.chimere2023_ibc_src_dir() / f"BOUN_CONCS.{date_ymd}00_24_{control_run_exp_name}_EUROCOMEX3.list"
 
     def chimere2023_BOUN_LIST(self, date_ymd: str, mem: int) -> Path:
-        return self.chimere2023_ibc_dir(mem) / f"BOUN_CONCS.{date_ymd}00_24_{mem}_EUROCOMEX3.list"
+        return self.chimere2023_ibc_dir(mem) / f"BOUN_CONCS.{date_ymd}00_24_ENS{mem}_EUROCOMEX3.list"
     
-    def chimere2023_END_FILE_SRC(self, EXP_NAME: str, date_ymd: str) -> Path:
-        return self.path_control_run / f"end.{date_ymd}00_24_{EXP_NAME}.nc"
+    def chimere2023_END_FILE_SRC(self, control_run_exp_name: str, date_ymd: str) -> Path:
+        return self.path_control_run / f"end.{date_ymd}00_24_{control_run_exp_name}.nc"
     
     def chimere2023_END_FILE(self, mem: int, date_ymd: str) -> Path:
-        return self.chimere2023_run_dir(mem) / f"end.{date_ymd}00_24_{mem}.nc"
+        return self.chimere2023_run_dir(mem) / f"end.{date_ymd}00_24_ENS{mem}.nc"
     
     def chimere2023_PAR_BASE_TEMPLATE(self) -> Path:
         return self.base_path / "chimere.ensemble.par"
     
     def chimere2023_PAR_FILE(self, mem: int) -> Path:
-        return self.base_path / f"chimere.{mem}.par"
+        return self.base_path / f"chimere.ENS{mem}.par"
+    
+    def chimere2023_PAR_FILE_RUN_DIR(self, mem: int) -> Path:
+        return self.chimere2023_run_dir(mem)/ f"chimere.ENS{mem}.par"
     
     def chimere2023_EMIS_FILE_SRC(self, is_pert: bool, domain: str, month: int, weekday: str, emi_id: int) -> Path:
         if is_pert:
-            return self.path_perturbed_emi / f"EMIS.{domain}.{month}.{weekday}.s.ens{emi_id}.nc"
+            return self.path_perturbed_emi / f"EMIS.{domain}.{month}.{weekday}.s.ens0{emi_id}.nc"
         else: 
             return self.path_control_run / f"EMIS.{domain}.{month}.{weekday}.s.nc"
     
@@ -145,7 +151,7 @@ class PathManager:
     
     def chimere2023_METEO_FILE_SRC(self, is_pert: bool, domain: str, date_ymd: str, meteo_id: int) -> Path:
         if is_pert:
-            return self.path_perturbed_meteo / f"exdomout_{date_ymd}00_24_{domain}.ens{meteo_id}.nc"
+            return self.path_perturbed_meteo / f"exdomout_{date_ymd}00_24_{domain}.ens0{meteo_id}.nc"
         else:
             return self.path_control_run / f"exdomout_{date_ymd}00_24_{domain}.nc"
     

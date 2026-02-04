@@ -31,6 +31,9 @@ class TimeManager:
         self.sat_obs = None
         self.dt = pd.Timedelta(dt_seconds, unit="s")
         self.last_perturbed_day = None
+        self.end_file_date_control_run = self.start_time - timedelta(days=1)
+        self.NHOURS_forward = None
+        self.NHOURS_backwards = None
 
         self.check_start_ahead_end()
 
@@ -997,3 +1000,122 @@ def get_list_mems_to_rerun_slurm(
 
         logger.info(f"SLURM jobs still running: {running_jobs}. Waiting...")
         time.sleep(30)
+
+
+def safe_symlink(target: Path, link: Path):
+    """Create a symlink safely:
+    - If it exists and points correctly → do nothing
+    - If it is broken → recreate
+    - Never overwrite real files/directories
+    """
+
+    try:
+        # Try Python 3.11+ approach
+        link.symlink_to(target, exist_ok=True)
+        logger.info(f"Symlink ensured: {link} -> {target}")
+    except TypeError:
+        # Older Python (<3.11) doesn't support exist_ok
+        try:
+            link.symlink_to(target)
+            logger.info(f"Symlink created: {link} -> {target}")
+        except FileExistsError:
+            if link.is_symlink():
+                if not link.exists():
+                    # Broken symlink → fix it
+                    logger.info(f"Broken symlink detected. Recreating: {link}")
+                    link.unlink()
+                    link.symlink_to(target)
+                else:
+                    # Symlink exists and is valid → nothing to do
+                    logger.info(f"Symlink already exists and is valid: {link}")
+            else:
+                # Path exists but is a file or directory → skip
+                logger.warning(f"{link} exists and is not a symlink. Skipping. \
+                               Most likely this run is a continuation of previous runs. If not, \
+                               this run then needs to start from the contrul run from this current \
+                               time: please remove from the ensemble folders the specific end files \
+                               to allow the linking")
+                
+def check_and_clean_broken_links(run_dir: Path) -> bool:
+    """
+    Check for broken symlinks in run_dir (depth <= 2), remove them,
+    and report if any were found.
+
+    Returns:
+        True if broken links were found (submission should be skipped)
+        False otherwise
+    """
+
+    print(f">> Checking links...")
+
+    broken_found = False
+
+    # Scan up to depth 2
+    base_depth = len(run_dir.resolve().parts)
+
+    for path in run_dir.rglob("*"):
+
+        # Limit depth to maxdepth=2
+        if len(path.resolve().parts) - base_depth > 2:
+            continue
+
+        if path.is_symlink():
+
+            # Broken if target does not exist
+            if not path.exists():
+
+                print(f"   [!] BROKEN LINK FOUND: {path}")
+
+                try:
+                    target = path.resolve(strict=False)
+                    print(f"      Points to: {target}")
+                except Exception:
+                    print("      Points to: <unresolvable>")
+
+                # Remove broken symlink
+                path.unlink()
+                print("       >>> Unlinked broken reference!")
+
+                broken_found = True
+
+    return broken_found
+
+def from_liststr_to_listdict(ensemble_list: list[str], labels: list[str]) -> list[dict]:
+    """
+    Convert a list of colon-separated strings into a list of dictionaries.
+    Automatically assigns MemberID.
+    Maps parts to provided labels, creates ExtraID_n if needed.
+
+    Args:
+        ensemble_list: List like ["00", "00:01", "00:01:02", ...]
+        labels: List of labels like ["EmisID", "MeteoID", "ChemID"]
+
+    Returns:
+        List of dictionaries with integer values.
+    """
+    ensemble_dicts = []
+
+    for member_id, item in enumerate(ensemble_list):
+        parts = item.split(":")
+
+        entry = {
+            "MemberID": member_id
+        }
+
+        for i, value in enumerate(parts):
+
+            if i < len(labels):
+                key = labels[i]
+                logger.info("only MeteoID and EmisID are supported for the moment: specific functions (in pipeline and paths) need to be created to allow more")
+            else:
+                key = f"ExtraID_{i - len(labels) + 1}"
+                logger.info("Extra IDs were given: untracked")
+
+            entry[key] = int(value)
+
+        ensemble_dicts.append(entry)
+
+    return ensemble_dicts
+
+
+
