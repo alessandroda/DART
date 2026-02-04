@@ -223,11 +223,9 @@ days_per_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]  # Days in eac
 
 def run_command_in_directory(command, directory):
 
-    output_file = directory / f"{command}_output.log"
+    output_file = directory / f"test_output.log"
     original_directory = os.getcwd()
-
     logger = logging.getLogger(__name__)
-
     try:
         logger.info(f"[CMD] Entering directory: {directory}")
         os.chdir(directory)

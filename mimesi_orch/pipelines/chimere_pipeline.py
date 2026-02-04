@@ -23,8 +23,7 @@ from orchestrator_utils import (
     run_command_in_directory,
     run_command_in_directory_bsub,
     submit_and_wait_cineca,
-    submit_and_wait_slurm,
-)
+ )
 
 
 logger = logging.getLogger(__name__)
