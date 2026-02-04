@@ -17,14 +17,17 @@ from scheduler import submit_job, wait_for_slurm_jobs
 from typing import Iterable, Optional, Union
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
+import shlex
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class CommandSpec:
-    command: str                  # executable/script name
-    directory: Path               # where to run it
+    command: str  # executable/script name
+    directory: Path  # where to run it
     args: Optional[List[str]] = None
+
 
 class TimeManager:
     def __init__(self, start_time: str, end_time: str, dt_seconds: int):
@@ -280,7 +283,6 @@ def run_command_in_directory(spec: CommandSpec) -> Tuple[int, Optional[str]]:
         os.chdir(original_directory)
 
 
-
 def run_command_in_directory_bsub(
     command, directory, farm=True, replace_emissions=False
 ):
@@ -321,31 +323,30 @@ def run_command_in_directory_bsub(
 
 
 def submit_and_wait_cineca(
-    path_manager,
+    path_manager: PathManager,
     commands: list[CommandSpec],
-    timestamp_chimere,
-    no_mems,
+    timestamp_chimere: str,
+    no_mems: int,
+    scheduler: Scheduler,
+    model_type: ModelType,
 ):
-    logger = logging.getLogger(__name__)
-    job_ids = []
-
     for spec in commands:
-        rc, job_id = run_command_in_directory(spec)
+        rc, job_ids = run_command_in_directory(spec)
 
         if rc != 0:
-            raise RuntimeError(
-                f"Command failed ({spec.command}) with return code {rc}"
-            )
+            raise RuntimeError(f"Command failed ({spec.command}) with return code {rc}")
 
-        if job_id is None:
-            raise RuntimeError(
-                f"No job id returned by command {spec.command}"
-            )
+        if job_ids is None:
+            raise RuntimeError(f"No job id returned by command {spec.command}")
 
-        logger.info(f"[SLURM] Submitted job {job_id}")
-        job_ids.append(job_id)
+        logger.info(f"[SLURM] Submitted job {job_ids}")
+        time.sleep(10)
 
-    return job_ids
+    mems_to_rerun = get_list_mems_to_rerun(
+        job_ids, path_manager, timestamp_chimere, no_mems, scheduler, model_type
+    )
+    return True
+
 
 def searchFile(t1, t2, listing):
     orbit_filename = listing[["filename", "start_time"]][

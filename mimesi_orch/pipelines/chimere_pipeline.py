@@ -24,7 +24,7 @@ from orchestrator_utils import (
     run_command_in_directory,
     run_command_in_directory_bsub,
     submit_and_wait_cineca,
- )
+)
 
 
 logger = logging.getLogger(__name__)
@@ -107,8 +107,6 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             self.time_manager.current_time
         ).strftime("%Y%m%d%H")
 
-        commands_with_directories = []
-
         file_run_ens = self.path_manager.chimere_name_run_sub_ens_bash(
             timestamp_chimere
         )
@@ -125,14 +123,13 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         )
 
         commands: list[CommandSpec] = []
-        
 
         commands.append(
-                CommandSpec(
-                    command=file_run_ens,
-                    args=timestamp_arg_run_chimere.split(),
-                    directory=self.path_manager.path_submit_bsh
-                    )
+            CommandSpec(
+                command=file_run_ens,
+                args=timestamp_arg_run_chimere.split(),
+                directory=self.path_manager.path_submit_bsh,
+            )
         )
 
         submit_and_wait_cineca(
@@ -140,6 +137,8 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             commands,
             timestamp_chimere,
             self.no_mems,
+            self.scheduler,
+            self.model_type,
         )
 
     def process_satellite_data(self):
