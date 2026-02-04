@@ -263,22 +263,18 @@ def run_command_in_directory(spec: CommandSpec) -> Tuple[int, Optional[str]]:
             capture_output=True,
             text=True,
         )
-
         stdout = result.stdout.strip()
         stderr = result.stderr.strip()
 
-        logger.debug(f"[CMD stdout]\n{stdout}")
-        if stderr:
-            logger.debug(f"[CMD stderr]\n{stderr}")
+        stdout = result.stdout
 
-        # Expect sbatch --parsable → stdout == jobid
-        job_id = None
-        match = re.search(r"\b\d+\b", stdout)
-        if match:
-            job_id = match.group()
+        job_ids = re.findall(r"^ID:(\d+)$", stdout, re.MULTILINE)
 
-        return result.returncode, job_id
-
+        if not job_ids:
+            raise RuntimeError(
+                "No Slurm job IDs found in output.\n" "Expected lines like: ID:<jobid>"
+            )
+        return result.returncode, job_ids
     finally:
         os.chdir(original_directory)
 
