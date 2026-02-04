@@ -227,10 +227,10 @@ def run_command_in_directory(command, directory):
 
     try:
         os.chdir(directory)
-        command = directory / command
+        full_command = directory / command
         logging.info(f"running command: {command} in directory : {directory}")
         subprocess.call(
-            str(command),
+            str(full_command),
             shell=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
