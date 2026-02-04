@@ -33,6 +33,9 @@ class PathManager:
         self.run_submit_replace_perturbations = self._resolve(
             config.run_submit_replace_perturbations
         )
+        self.path_control_run = self._resolve(config.path_control_run)
+        self.path_perturbed_emi = self._resolve(config.path_perturbed_emi)
+        self.path_perturbed_meteo = self._resolve(config.path_perturbed_meteo)
 
         self._check_static_paths()
 
@@ -56,6 +59,9 @@ class PathManager:
             "path_filter": self.path_filter,
             "path_data": self.path_data,
             "run_submit_replace_perturbations": self.run_submit_replace_perturbations,
+            "path_control_run": self.path_control_run,
+            "path_perturbed_emi": self.path_perturbed_emi,
+            "path_perturbed_meteo": self.path_perturbed_meteo
         }
 
         for name, path in paths.items():
@@ -84,8 +90,8 @@ class PathManager:
         return self.path_data / f"OUTPUT_{mem}/OUT/{file_name}"
 
     # ------------------------------------------------------------------
-    # CHIMERE paths
-    #
+    # CHIMERE v2017 paths
+    # ------------------------------------------------------------------
     def chimere_name_run_sub_ens_bash(self, string_to_replace_template) -> Path:
         return (
             self.path_submit_bsh / f"run_mimesi_ens_member_{string_to_replace_template}"
@@ -93,6 +99,63 @@ class PathManager:
 
     def chimere_output_runs_dir(self, mem: int) -> Path:
         return self.path_data / f"runs_chimere/ITA7/RUNS_{mem}"
+    
+    # ------------------------------------------------------------------
+    # CHIMERE v2023 paths
+    # ------------------------------------------------------------------
+
+    def chimere2023_run_dir(self, mem: int) -> Path:
+        return self.path_data / f"{mem}"
+
+    def chimere2023_wps(self) -> Path:
+        return self.path_control_run / "WPS" 
+    
+    def chimere2023_ibc_src_dir(self) -> Path:
+        return self.path_control_run / "IBC"
+    
+    def chimere2023_ibc_dir(self, mem: int) -> Path:
+        return self.chimere2023_run_dir(mem) / "IBC"
+    
+    def chimere2023_BOUN_LIST_SRC(self, date_ymd: str, EXP_NAME: str) -> Path:
+        return self.chimere2023_ibc_src_dir() / f"BOUN_CONCS.{date_ymd}00_24_{EXP_NAME}_EUROCOMEX3.list"
+
+    def chimere2023_BOUN_LIST(self, date_ymd: str, mem: int) -> Path:
+        return self.chimere2023_ibc_dir(mem) / f"BOUN_CONCS.{date_ymd}00_24_{mem}_EUROCOMEX3.list"
+    
+    def chimere2023_END_FILE_SRC(self, EXP_NAME: str, date_ymd: str) -> Path:
+        return self.path_control_run / f"end.{date_ymd}00_24_{EXP_NAME}.nc"
+    
+    def chimere2023_END_FILE(self, mem: int, date_ymd: str) -> Path:
+        return self.chimere2023_run_dir(mem) / f"end.{date_ymd}00_24_{mem}.nc"
+    
+    def chimere2023_PAR_BASE_TEMPLATE(self) -> Path:
+        return self.base_path / "chimere.ensemble.par"
+    
+    def chimere2023_PAR_FILE(self, mem: int) -> Path:
+        return self.base_path / f"chimere.{mem}.par"
+    
+    def chimere2023_EMIS_FILE_SRC(self, is_pert: bool, domain: str, month: int, weekday: str, emi_id: int) -> Path:
+        if is_pert:
+            return self.path_perturbed_emi / f"EMIS.{domain}.{month}.{weekday}.s.ens{emi_id}.nc"
+        else: 
+            return self.path_control_run / f"EMIS.{domain}.{month}.{weekday}.s.nc"
+    
+    def chimere2023_EMI_FILE(self, mem: int, domain: str, month: int, weekday) -> Path:
+        return self.chimere2023_run_dir(mem) / f"EMIS.{domain}.{month}.{weekday}.s.nc"
+    
+    def chimere2023_METEO_FILE_SRC(self, is_pert: bool, domain: str, date_ymd: str, meteo_id: int) -> Path:
+        if is_pert:
+            return self.path_perturbed_meteo / f"exdomout_{date_ymd}00_24_{domain}.ens{meteo_id}.nc"
+        else:
+            return self.path_control_run / f"exdomout_{date_ymd}00_24_{domain}.nc"
+    
+    def chimere2023_METEO_FILE(self, mem: int, domain: str, date_ymd: str) -> Path:
+        return self.chimere2023_run_dir(mem) / f"exdomout_{date_ymd}00_24_{domain}.nc"
+    
+    def chimere2023_BASH_SUBMIT_SCRIPT(self, mem: int) -> Path:
+        return self.base_path / f"submit_p_{mem}.sh"
+    
+
 
     # ------------------------------------------------------------------
     # HERMES / emissions

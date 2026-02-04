@@ -34,12 +34,15 @@ class PathsConfig(BaseModel):
 
     listing_file: Path
 
-    run_submit_model_template: Path
+    run_submit_model_template:  Optional[Path] = None
     path_submit_bsh: Path
-    path_filter: Path
-    path_data: Path
+    path_filter: Path 
+    path_data: Path #dal nome non é chiaro come verrà utilizzato; mi pare siano i risultati, percio perche non path_outputs ? 
+    path_control_run: Optional[Path] = None
 
     run_submit_replace_perturbations: Optional[Path] = None
+    path_perturbed_emi: Optional[Path] = None
+    path_perturbed_meteo: Optional[Path] = None
     log_directory: Optional[Path] = None
 
     @field_validator("*", mode="before")
@@ -114,6 +117,10 @@ class AssimilationConfig(BaseModel):
 class ClusterConfig(BaseModel):
     cluster_queue: str
     scheduler: Scheduler
+    project_name: str
+    nb_proc: Optional[int] = Field(default=None, gt=0)
+    walltime: Optional[int] = Field(default=None, gt=0)
+    mail: Optional[str] = None
 
     @field_validator("scheduler", mode="before")
     @classmethod
@@ -171,6 +178,20 @@ class SatelliteDataConfig(BaseModel):
 
     search_window_seconds: int = Field(gt=0)
 
+# ---------------------------------------------------------------------
+# MODEL DATA
+# ---------------------------------------------------------------------
+
+
+class ModelDataConfig(BaseModel):
+    """
+    Satellite observation handling.
+    """
+
+    control_run_exp_name: Optional[str] = None
+    domain: Optional[str] = None
+    ensemble_list: Optional[list] = None
+
 
 # ---------------------------------------------------------------------
 # ROOT CONFIG
@@ -192,6 +213,7 @@ class AppConfig(BaseModel):
     dart: Optional[DartConfig] = None
     logging: Optional[LoggingConfig] = None
     satellite_data: Optional[SatelliteDataConfig] = None
+    model_data: Optional[ModelDataConfig] = None
     monitoring: Optional[MonitoringConfig] = None
 
     # runtime-only (not from YAML)

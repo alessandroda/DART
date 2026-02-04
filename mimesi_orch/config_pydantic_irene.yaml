@@ -1,0 +1,72 @@
+paths:
+  base_path: /ccc/work/cont003/gen7232/demoling/chimere_v2023_dart/
+  env_python: python
+
+  listing_file: DART/observations/obs_converters/S5P_TROPOMI_L3/data/NO2/C03__listing_02.csv
+  path_submit_bsh: /ccc/work/cont003/gen7232/demoling/chimere_v2023_dart/
+  path_filter: DART/models/FARM/work #need to put GAEL's 
+
+  path_data: /ccc/scratch/cont003/gen7232/demoling/OUT_Chimere/DA_ENSEMBLE_RUNS_test/ #SCRTACH
+  path_control_run: /ccc/scratch/cont003/gen7232/demoling/OUT_Chimere/CHIMOUT-EUROCOMEX3_reruned0102
+
+  path_perturbed_emi: /ccc/scratch/cont003/gen7232/demoling/PERTURBED/EMIS_ANT/fixed_scaling/
+  path_perturbed_meteo: /ccc/scratch/cont003/gen7232/demoling/PERTURBED/METEO/fixed_scaling/
+
+  log_directory: logs_orchestrator
+
+
+time:
+  start_time: "2020-02-06 00:00:00"
+  end_time: "2020-02-06 23:00:00"
+  dt_seconds: 3600
+
+  backup_perturb_days: 2
+  backup_ic_hours: 48
+  backup_ic_option: hourly
+
+
+assimilation:
+  run_assimilation_flag: false
+  model_type: chimere
+  ass_var: c_NO2
+  state_variable_qty: QTY_NO2
+  obs_type: SAT_NO2_TROPOMI
+
+  case_dir: test
+  case_emi_dir: emi
+  emi_var: NO2
+  no_mems: 2
+
+
+cluster:
+  cluster_queue: rome
+  scheduler : SLURM
+  project_name: gen7232
+  nb_proc: 101
+  walltime: 86400
+  mail: gdemoliner@lisa.ipsl.fr
+
+
+dart:
+  work_dir: DART/models/FARM/work
+  analysis_dir: RUN/data/analysis
+  preassim_dir: RUN/data/preassim
+  posteriors_dir: RUN/data/posteriors
+  obs_converters_dir: DART/observations/obs_converters/S5P_TROPOMI_L3
+
+
+logging:
+  level: INFO
+  format: "%(asctime)s [%(processName)s/%(threadName)s] %(levelname)s: %(message)s"
+
+
+satellite_data:
+  search_window_seconds: 1800
+
+
+model_data:
+  control_run_exp_name: EUROCOMEX3_reruned0102
+  domain: EUROCOMEX3
+  # Ensemble Mapping (MemberID : EmisID : MeteoID)
+  ensemble_list: ["0:00:00", "1:00:01", "2:00:02", "3:01:00", "4:01:01", "5:01:02", "6:02:00", "7:02:01", "8:02:02"]
+

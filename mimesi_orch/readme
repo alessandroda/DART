@@ -1,0 +1,2 @@
+source CHIMDART_env/bin/activate
+python -u orchestrator.py -c config_pydantic_irene.yaml
