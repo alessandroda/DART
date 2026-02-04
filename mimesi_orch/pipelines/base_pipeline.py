@@ -22,6 +22,7 @@ Key design principles
 from abc import ABC, abstractmethod
 from datetime import timedelta
 import logging
+import pipeline_errors
 from orchestrator_utils import set_date_gregorian
 
 logger = logging.getLogger(__name__)
@@ -72,35 +73,47 @@ class BaseAssimilationPipeline(ABC):
         logger.info("[MIMESI] ---- TIME LOOP START ----")
 
         while self.time_manager.current_time <= self.time_manager.end_time:
-            # Optional hook: e.g. emission perturbations, cleanup
-            self.before_step()
+            try:
+                # Optional hook: e.g. emission perturbations, cleanup
+                self.before_step()
 
-            # Run the forward model (mandatory)
-            self.run_model()
+                # Run the forward model (mandatory)
+                self.run_model()
 
-            # Define the time associated with model outputs
-            # (typically current_time + forecast step)
-            self.time_manager.simulated_time = (
-                self.time_manager.current_time + timedelta(hours=1)
-            )
+                # Define the time associated with model outputs
+                # (typically current_time + forecast step)
+                self.time_manager.simulated_time = (
+                    self.time_manager.current_time + timedelta(hours=1)
+                )
 
-            # Convert simulated_time to (days, seconds) for DA systems
-            self.set_days_seconds_model()
+                # Convert simulated_time to (days, seconds) for DA systems
+                self.set_days_seconds_model()
 
-            # Optional hook: prepare model outputs for assimilation
-            self.after_model()
+                # Optional hook: prepare model outputs for assimilation
+                self.after_model()
 
-            logger.info(f"Increment time")
-            self.time_manager.increment_time()
+                logger.info(f"Increment time")
+                self.time_manager.increment_time()
 
-            # Perform data assimilation if applicable
-            self.run_assimilation_if_needed()
+                # Perform data assimilation if applicable
+                try:
+                    self.run_assimilation_if_needed()
+                except pipeline_errors.SkipAssimilation as e:
+                    logger.info(f"[DART] Skipped: {e}")
 
-            # Optional hook: map analysis back to the model
-            self.after_assimilation()
+                # Optional hook: map analysis back to the model
+                self.after_assimilation()
 
-            # Optional hook: cleanup, logging, archiving
-            self.finalize_step()
+                # Optional hook: cleanup, logging, archiving
+                self.finalize_step()
+
+            except pipeline_errors.FatalPipelineError as e:
+                logger.critical(f"[PIPELINE] Fatal error: {e}")
+                raise
+
+            except pipeline_errors.PipelineError as e:
+                logger.error(f"[PIPELINE] Error: {e}")
+                continue
 
         logger.info("[PIPELINE] ---- TIME LOOP END ----")
 

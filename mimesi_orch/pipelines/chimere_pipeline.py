@@ -3,6 +3,7 @@ from pathlib import Path
 import shutil
 import time
 
+from mimesi_orch.pipeline_errors import FatalPipelineError, ModelRunError
 from mimesi_types import Scheduler
 from config_models import AppConfig
 from paths import PathManager
@@ -13,6 +14,7 @@ import pandas as pd
 from orchestrator_utils import (
     CommandSpec,
     check_job_status_cresco,
+    get_list_mems_to_rerun,
     modify_yaml_date,
     filter_dates,
     TimeManager,
@@ -110,36 +112,46 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         file_run_ens = self.path_manager.chimere_name_run_sub_ens_bash(
             timestamp_chimere
         )
-
-        replace_nml_template(
-            input_nml_path=self.path_manager.base_path
-            / self.path_manager.run_submit_model_template,
-            entries_tbr_dict={
-                "@mimesi_dh_inizio": "0",  # this becomes variable
-                "@mimesi_nhours_list": "1",  # this becomes variable
-                "@mimesi_ens_size": self.no_mems,
-            },
-            output_nml_path=self.path_manager.path_submit_bsh / file_run_ens,
-        )
-
-        commands: list[CommandSpec] = []
-
-        commands.append(
-            CommandSpec(
-                command=file_run_ens,
-                args=timestamp_arg_run_chimere.split(),
-                directory=self.path_manager.path_submit_bsh,
+        try:
+            replace_nml_template(
+                input_nml_path=self.path_manager.base_path
+                / self.path_manager.run_submit_model_template,
+                entries_tbr_dict={
+                    "@mimesi_dh_inizio": "0",  # this becomes variable
+                    "@mimesi_nhours_list": "1",  # this becomes variable
+                    "@mimesi_ens_size": self.no_mems,
+                },
+                output_nml_path=self.path_manager.path_submit_bsh / file_run_ens,
             )
+        except Exception as e:
+            raise FatalPipelineError(f"Failed to prepare CHIMERE submit script: {e}")
+
+        command = CommandSpec(
+            command=file_run_ens,
+            args=timestamp_arg_run_chimere.split(),
+            directory=self.path_manager.path_submit_bsh,
         )
 
-        submit_and_wait_cineca(
+        job_ids = submit_and_wait_cineca(
             self.path_manager,
-            commands,
+            command,
             timestamp_chimere,
             self.no_mems,
             self.scheduler,
             self.model_type,
         )
+
+        mems_to_rerun = get_list_mems_to_rerun(
+            job_ids,
+            self.path_manager,
+            timestamp_chimere,
+            self.no_mems,
+            self.scheduler,
+            self.model_type,
+        )
+
+        if mems_to_rerun:
+            raise ModelRunError(f"Ensemble members failed: {mems_to_rerun}")
 
     def process_satellite_data(self):
 

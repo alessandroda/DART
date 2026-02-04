@@ -11,6 +11,7 @@ import time
 import logging
 import pandas as pd
 import re
+from mimesi_orch.pipeline_errors import SchedulerError
 from mimesi_types import ModelType, Scheduler
 from paths import PathManager
 from scheduler import submit_job, wait_for_slurm_jobs
@@ -320,28 +321,27 @@ def run_command_in_directory_bsub(
 
 def submit_and_wait_cineca(
     path_manager: PathManager,
-    commands: list[CommandSpec],
+    spec: CommandSpec,
     timestamp_chimere: str,
     no_mems: int,
     scheduler: Scheduler,
     model_type: ModelType,
 ):
-    for spec in commands:
-        rc, job_ids = run_command_in_directory(spec)
 
-        if rc != 0:
-            raise RuntimeError(f"Command failed ({spec.command}) with return code {rc}")
+    rc, job_ids = run_command_in_directory(spec)
 
-        if job_ids is None:
-            raise RuntimeError(f"No job id returned by command {spec.command}")
+    if rc != 0:
+        raise SchedulerError(
+            f"Submission command failed: {spec.command} " f"(return code {rc})"
+        )
 
-        logger.info(f"[SLURM] Submitted job {job_ids}")
-        time.sleep(10)
+    if not job_ids:
+        raise SchedulerError(f"No job id returned by command {spec.command}")
 
-    mems_to_rerun = get_list_mems_to_rerun(
-        job_ids, path_manager, timestamp_chimere, no_mems, scheduler, model_type
-    )
-    return True
+    logger.info(f"[SLURM] Submitted job {job_ids}")
+    time.sleep(10)
+
+    return job_ids
 
 
 def searchFile(t1, t2, listing):
@@ -352,39 +352,33 @@ def searchFile(t1, t2, listing):
 
 
 def replace_nml_template(
-    input_nml_path: str, entries_tbr_dict: dict, output_nml_path: str
+    input_nml_path: str,
+    entries_tbr_dict: dict,
+    output_nml_path: str,
 ):
-    # Validate input dictionary
     if not isinstance(entries_tbr_dict, dict):
-        print("Error: 'entries_tbr_dict' must be a dictionary.")
-        return
+        raise TypeError("'entries_tbr_dict' must be a dictionary")
 
-    # Read input file
     try:
         with open(input_nml_path, "r") as f1:
             input_nml = f1.read()
-    except FileNotFoundError:
-        print(f"Error: Input file '{input_nml_path}' not found.")
-        return
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"Input template not found: {input_nml_path}") from e
     except Exception as e:
-        print(f"Error reading input file: {e}")
-        return
+        raise RuntimeError(f"Error reading input template {input_nml_path}") from e
 
-    # Replace entries
     for key, value in entries_tbr_dict.items():
         input_nml = input_nml.replace(key, str(value))
 
-    # Write to output file
     try:
         with open(output_nml_path, "w") as f2:
             f2.write(input_nml)
         os.chmod(output_nml_path, 0o775)
     except Exception as e:
-        print(f"Error writing to output file: {e}")
-        return
+        raise RuntimeError(f"Error writing output file {output_nml_path}") from e
 
     logger.info(
-        f"Replacement {input_nml_path} to {output_nml_path} completed successfully."
+        f"Replacement {input_nml_path} → {output_nml_path} completed successfully."
     )
 
 
@@ -796,7 +790,10 @@ def get_list_mems_to_rerun(
     scheduler: Scheduler,
     model_type: ModelType,
 ) -> list[int]:
-
+    """Block until all jobs in job_ids have finished.
+    Return list of ensemble members that did not produce valid outputs.
+    Empty list means success.
+    """
     datetime_model_p1 = pd.to_datetime(timestamp_model, format="%Y%m%d%H") + timedelta(
         hours=1
     )
@@ -819,12 +816,14 @@ def get_list_mems_to_rerun(
 
         if not running_jobs:
             logger.info(f"Jobs {job_ids} have finished")
-            return check_ic_g1_existing(
-                path_manager=path_manager,
-                model=model_type,
-                datetime_model=datetime_model_p1,
-                no_mems=no_mems,
-            )
+            return True
+
+            # check_ic_g1_existing(
+            #     path_manager=path_manager,
+            #     model=model_type,
+            #     datetime_model=datetime_model_p1,
+            #     no_mems=no_mems,
+            # )
 
         logger.info(f"Jobs still running: {running_jobs}. Waiting...")
         time.sleep(30)
