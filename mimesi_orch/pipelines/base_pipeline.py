@@ -113,7 +113,7 @@ class BaseAssimilationPipeline(ABC):
 
             except pipeline_errors.PipelineError as e:
                 logger.error(f"[PIPELINE] Error: {e}")
-                continue
+                raise
 
         logger.info("[PIPELINE] ---- TIME LOOP END ----")
 
