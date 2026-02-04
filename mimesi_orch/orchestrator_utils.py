@@ -223,20 +223,41 @@ days_per_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]  # Days in eac
 
 def run_command_in_directory(command, directory):
 
+    output_file = directory / f"{command}_output.log"
     original_directory = os.getcwd()
 
+    logger = logging.getLogger(__name__)
+
     try:
+        logger.info(f"[CMD] Entering directory: {directory}")
         os.chdir(directory)
-        full_command = directory / command
-        logging.info(f"running command: {command} in directory : {directory}")
-        subprocess.call(
-            str(full_command),
-            shell=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+
+        command_path = directory / command
+        logger.info(f"[CMD] Running: {command_path}")
+        logger.info(f"[CMD] Output redirected to: {output_file}")
+
+        start_time = time.time()
+
+        with open(output_file, "a") as log_file:
+            return_code = subprocess.call(
+                str(command_path),
+                shell=True,
+                stdout=log_file,
+                stderr=log_file,
+            )
+
+        elapsed = time.time() - start_time
+
+        if return_code == 0:
+            logger.info(f"[CMD] Finished successfully in {elapsed:.1f}s")
+        else:
+            logger.error(
+                f"[CMD] Failed with return code {return_code} after {elapsed:.1f}s"
+            )
+
     finally:
         os.chdir(original_directory)
+        logger.debug(f"[CMD] Returned to directory: {original_directory}")
 
 
 def run_command_in_directory_bsub(
