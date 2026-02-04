@@ -14,9 +14,17 @@ import re
 from mimesi_types import ModelType, Scheduler
 from paths import PathManager
 from scheduler import submit_job, wait_for_slurm_jobs
+from typing import Iterable, Optional, Union
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
+@dataclass
+class CommandSpec:
+    command: str                  # executable/script name
+    directory: Path               # where to run it
+    args: Optional[List[str]] = None
 
 class TimeManager:
     def __init__(self, start_time: str, end_time: str, dt_seconds: int):
@@ -221,25 +229,56 @@ def is_leap_year(year):
 days_per_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]  # Days in each month
 
 
-def run_command_in_directory(command, directory):
-
-    output_file = directory / f"test_output.log"
-    original_directory = os.getcwd()
+def run_command_in_directory(spec: CommandSpec) -> Tuple[int, Optional[str]]:
     logger = logging.getLogger(__name__)
+    original_directory = os.getcwd()
+
     try:
-        logger.info(f"[CMD] Entering directory: {directory}")
-        os.chdir(directory)
+        logger.info(f"[CMD] Entering directory: {spec.directory}")
+        os.chdir(spec.directory)
 
-        command_path = directory / command
+        command_path = Path(spec.command)
+        if not command_path.is_absolute():
+            command_path = spec.directory / command_path
 
-        subprocess.run(["chmod", "+x", command])
-        output = subprocess.run(command, capture_output=True, text=True)
-        lines = output.stdout.strip().splitlines()
-        breakpoint()
-        jobid = [line.split("ID:")[1] for line in lines if "ID:" in line]
-        print(f"Job submitted for {command} with job IDs : {jobid}")
+        if not command_path.exists():
+            raise FileNotFoundError(command_path)
+
+        cmd = [str(command_path)]
+        if spec.args:
+            cmd.extend(map(str, spec.args))
+
+        logger.info(
+            "[CMD] Running: %s",
+            " ".join(shlex.quote(c) for c in cmd),
+        )
+
+        subprocess.run(["chmod", "+x", str(command_path)], check=True)
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+        )
+
+        stdout = result.stdout.strip()
+        stderr = result.stderr.strip()
+
+        logger.debug(f"[CMD stdout]\n{stdout}")
+        if stderr:
+            logger.debug(f"[CMD stderr]\n{stderr}")
+
+        # Expect sbatch --parsable → stdout == jobid
+        job_id = None
+        match = re.search(r"\b\d+\b", stdout)
+        if match:
+            job_id = match.group()
+
+        return result.returncode, job_id
+
     finally:
         os.chdir(original_directory)
+
 
 
 def run_command_in_directory_bsub(
@@ -282,22 +321,31 @@ def run_command_in_directory_bsub(
 
 
 def submit_and_wait_cineca(
-    path_manager: PathManager,
-    commands_with_directories: list[tuple[Path, Path]],
-    timestamp_model: str,
-    no_mems: int,
-) -> bool:
+    path_manager,
+    commands: list[CommandSpec],
+    timestamp_chimere,
+    no_mems,
+):
+    logger = logging.getLogger(__name__)
+    job_ids = []
 
-    for command, directory in commands_with_directories:
-        job_ids = run_command_in_directory(command, directory)
-        time.sleep(10)
-    mems_to_rerun = get_list_mems_to_rerun(
-        job_ids, path_manager, timestamp_model, no_mems
-    )
-    if mems_to_rerun:
-        return False
-    return True
+    for spec in commands:
+        rc, job_id = run_command_in_directory(spec)
 
+        if rc != 0:
+            raise RuntimeError(
+                f"Command failed ({spec.command}) with return code {rc}"
+            )
+
+        if job_id is None:
+            raise RuntimeError(
+                f"No job id returned by command {spec.command}"
+            )
+
+        logger.info(f"[SLURM] Submitted job {job_id}")
+        job_ids.append(job_id)
+
+    return job_ids
 
 def searchFile(t1, t2, listing):
     orbit_filename = listing[["filename", "start_time"]][

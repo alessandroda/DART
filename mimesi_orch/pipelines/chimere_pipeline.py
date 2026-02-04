@@ -11,6 +11,7 @@ import logging
 import os
 import pandas as pd
 from orchestrator_utils import (
+    CommandSpec,
     check_job_status_cresco,
     modify_yaml_date,
     filter_dates,
@@ -122,15 +123,21 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             },
             output_nml_path=self.path_manager.path_submit_bsh / file_run_ens,
         )
-        commands_with_directories.append(
-            (
-                f"{file_run_ens} {timestamp_arg_run_chimere}",
-                self.path_manager.path_submit_bsh,
-            )
+
+        commands: list[CommandSpec] = []
+        
+
+        commands.append(
+                CommandSpec(
+                    command=file_run_ens,
+                    args=timestamp_arg_run_chimere.split(),
+                    directory=self.path_manager.path_submit_bsh
+                    )
         )
+
         submit_and_wait_cineca(
             self.path_manager,
-            commands_with_directories,
+            commands,
             timestamp_chimere,
             self.no_mems,
         )
