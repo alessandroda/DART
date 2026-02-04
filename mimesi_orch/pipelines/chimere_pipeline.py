@@ -94,8 +94,44 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         self.cleanup_FARM()
 
 
+    #def run_model_v1(self):
+    #    """
+    #    Run CHIMERE for the current time step.
+    #    Decision to handle the loop on the members in one bash
+    #    """
+    #    logger.info(f"[STEP] Running CHIMERE model at {self.time_manager.current_time}")
+    #    
+    #    timestamp_arg_run_chimere = self.time_manager.current_time.strftime(
+    #        "%Y-%m-%d %H:00"
+    #    )
+    #    string_to_replace_template = f"run_ens_{timestamp_chimere}.sh"
+    #        
+    #    path_run = self.path_manager.chimere_name_run_sub_ens_bash(
+    #            string_to_replace_template
+    #    )
+    #    replace_nml_template(
+    #            input_nml_path=self.path_manager.base_path
+    #            / self.path_manager.run_submit_model_template,
+    #            entries_tbr_dict={
+    #                "@mimesi_dh_inizio": "1",
+    #                "@mimesi_nhours_list": "1",
+    #                "@mimesi_ens_members" : self.no_mems,
+    #            },
+    #            output_nml_path=path_run,
+    #        )
+    #     commands_with_directories = [
+    #        string_to_relace_template, self.path_manager.path_submit_bsh)
+    #    ]
+    #    submit_and_wait(
+    #        self.path_manager,
+    #        commands_with_directories,
+    #        time_stamp_arg_chimere,
+    #        self.no_mems,
+    #        self.case_dir,
+    #        self.cluster_queue,
+    #    )
 
-
+                 
     def run_model(self):
         """
         Run CHIMERE for the current time step.
@@ -119,15 +155,23 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 string_to_replace_template
             )
             replace_nml_template(
+                input_nml_path=self.path_manager.base_path / "catena_aria_test/config/mimesi/chimere.mimesi-ITA7_template.par",
+                entries_tbr_dict={
+                    "@mimesi_ens_member" : mem,
+                },
+                output_nml_path= self.path_manager.path_submit_bsh / f'pars/chimere.mimesi-ITA7_{mem}.par')
+   
+
+            replace_nml_template(
                 input_nml_path=self.path_manager.base_path
                 / self.path_manager.run_submit_model_template,
                 entries_tbr_dict={
                     "@mimesi_dh_inizio": "1",
                     "@mimesi_nhours_list": "1",
+                    "@mimesi_ens_member" : mem,
                 },
                 output_nml_path=path_run,
             )
-
             chimere_script = path_run
             slurm_script = (self.path_manager.path_submit_bsh / f"slurm_{chimere_script.stem}.sh")
 
@@ -136,6 +180,12 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 #SBATCH --job-name=chimere_mem{mem}
 #SBATCH --output=logs/chimere_%j.out
 #SBATCH --error=logs/chimere_%j.err
+#SBATCH --time=00:05:00
+#SBATCH --nodes=1
+#SBATCH --ntasks=4
+
+cd {self.path_manager.base_path}
+source env_cineca
 
 cd {self.path_manager.path_submit_bsh}
 

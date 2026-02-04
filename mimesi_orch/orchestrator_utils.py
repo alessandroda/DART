@@ -378,6 +378,7 @@ def replace_nml_template(
     try:
         with open(output_nml_path, "w") as f2:
             f2.write(input_nml)
+        os.chmod(output_nml_path, 0o775)
     except Exception as e:
         print(f"Error writing to output file: {e}")
         return
