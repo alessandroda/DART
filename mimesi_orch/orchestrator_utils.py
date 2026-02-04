@@ -223,15 +223,18 @@ days_per_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]  # Days in eac
 
 def run_command_in_directory(command, directory):
 
-    output_file = directory / f"{command}_output.log"
     original_directory = os.getcwd()
 
     try:
         os.chdir(directory)
         command = directory / command
-        logging.info(f"running command: {command}")
-        with open(output_file, "a") as log_file:
-            subprocess.call(str(command), shell=True, stdout=log_file, stderr=log_file)
+        logging.info(f"running command: {command} in directory : {directory}")
+        subprocess.call(
+            str(command),
+            shell=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
     finally:
         os.chdir(original_directory)
 
