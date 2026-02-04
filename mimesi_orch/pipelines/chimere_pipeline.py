@@ -22,6 +22,7 @@ from orchestrator_utils import (
     submit_and_wait,
     run_command_in_directory,
     run_command_in_directory_bsub,
+    submit_and_wait_cineca,
     submit_and_wait_slurm,
 )
 
@@ -69,7 +70,6 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         self.backup_ic_hours = self.config.time.backup_ic_hours
         self.backup_ic_option = self.config.time.backup_ic_option
 
-
         self.scheduler = self.config.cluster.scheduler
         logger.info(f"Using scheduler={self.scheduler}, queue={self.cineca_queue}")
 
@@ -93,139 +93,45 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         )
         self.cleanup_FARM()
 
-
-    #def run_model_v1(self):
-    #    """
-    #    Run CHIMERE for the current time step.
-    #    Decision to handle the loop on the members in one bash
-    #    """
-    #    logger.info(f"[STEP] Running CHIMERE model at {self.time_manager.current_time}")
-    #    
-    #    timestamp_arg_run_chimere = self.time_manager.current_time.strftime(
-    #        "%Y-%m-%d %H:00"
-    #    )
-    #    string_to_replace_template = f"run_ens_{timestamp_chimere}.sh"
-    #        
-    #    path_run = self.path_manager.chimere_name_run_sub_ens_bash(
-    #            string_to_replace_template
-    #    )
-    #    replace_nml_template(
-    #            input_nml_path=self.path_manager.base_path
-    #            / self.path_manager.run_submit_model_template,
-    #            entries_tbr_dict={
-    #                "@mimesi_dh_inizio": "1",
-    #                "@mimesi_nhours_list": "1",
-    #                "@mimesi_ens_members" : self.no_mems,
-    #            },
-    #            output_nml_path=path_run,
-    #        )
-    #     commands_with_directories = [
-    #        string_to_relace_template, self.path_manager.path_submit_bsh)
-    #    ]
-    #    submit_and_wait(
-    #        self.path_manager,
-    #        commands_with_directories,
-    #        time_stamp_arg_chimere,
-    #        self.no_mems,
-    #        self.case_dir,
-    #        self.cluster_queue,
-    #    )
-
-                 
     def run_model(self):
         """
         Run CHIMERE for the current time step.
         """
         logger.info(f"[STEP] Running CHIMERE model at {self.time_manager.current_time}")
-        
+
         timestamp_arg_run_chimere = self.time_manager.current_time.strftime(
             "%Y-%m-%d %H:00"
         )
-        
-        # to be understood time_emi, date_emi
+
         timestamp_chimere = TimeManager.round_to_closest_hour(
             self.time_manager.current_time
         ).strftime("%Y%m%d%H")
-        
+
         commands_with_directories = []
-        for mem in range(self.no_mems):
-            string_to_replace_template = f"{timestamp_chimere}_mem_{mem}.sh"
-            
-            path_run = self.path_manager.chimere_name_run_sub_ens_bash(
-                string_to_replace_template
-            )
-            replace_nml_template(
-                input_nml_path=self.path_manager.base_path / "catena_aria_test/config/mimesi/chimere.mimesi-ITA7_template.par",
-                entries_tbr_dict={
-                    "@mimesi_ens_member" : mem,
-                },
-                output_nml_path= self.path_manager.path_submit_bsh / f'pars/chimere.mimesi-ITA7_{mem}.par')
-   
 
-            replace_nml_template(
-                input_nml_path=self.path_manager.base_path
-                / self.path_manager.run_submit_model_template,
-                entries_tbr_dict={
-                    "@mimesi_dh_inizio": "1",
-                    "@mimesi_nhours_list": "1",
-                    "@mimesi_ens_member" : mem,
-                },
-                output_nml_path=path_run,
-            )
-            chimere_script = path_run
-            slurm_script = (self.path_manager.path_submit_bsh / f"slurm_{chimere_script.stem}.sh")
+        file_run_ens = self.path_manager.chimere_name_run_sub_ens_bash(
+            timestamp_chimere
+        )
 
-            slurm_script.write_text(f"""#!/bin/bash
-#SBATCH --partition={self.cineca_queue}
-#SBATCH --job-name=chimere_mem{mem}
-#SBATCH --output=logs/chimere_%j.out
-#SBATCH --error=logs/chimere_%j.err
-#SBATCH --time=00:05:00
-#SBATCH --nodes=1
-#SBATCH --ntasks=4
-
-cd {self.path_manager.base_path}
-source env_cineca
-
-cd {self.path_manager.path_submit_bsh}
-
-./{chimere_script.name} '{timestamp_arg_run_chimere}'
-""")
-            slurm_script.chmod(0o755)
-            
-        
-            commands_with_directories.append(
-                (slurm_script, self.path_manager.path_submit_bsh)
-            )
-        submit_and_wait_slurm(
-            self.model_type,
+        replace_nml_template(
+            input_nml_path=self.path_manager.base_path
+            / self.path_manager.run_submit_model_template,
+            entries_tbr_dict={
+                "@mimesi_dh_inizio": "0",  # this becomes variable
+                "@mimesi_nhours_list": "1",  # this becomes variable
+                "@mimesi_ens_size": self.no_mems,
+            },
+            output_nml_path=self.path_manager.path_submit_bsh / file_run_ens,
+        )
+        commands_with_directories.append(
+            (file_run_ens, self.path_manager.path_submit_bsh)
+        )
+        submit_and_wait_cineca(
             self.path_manager,
-            self.scheduler,
             commands_with_directories,
             timestamp_chimere,
             self.no_mems,
-            self.case_dir,
-            self.cineca_queue,
         )
-
-        # ./run_mimesi-ITA7.sh '2026-01-26 0:00'
-        # il bash esegue un altro bash lancia_chimere_m_nh.sh
-        # dentro a questo bash si esegue chimere.sh
-        # chimere .sh esegue finalmente lo slurm
-        #         export NP
-
-        # sbatch --wait --job-name=${dom}.${idatestart}.${simclab} \
-        #         --account=arpae_aqm \
-        #         --output=${job_o_log} --error=${job_e_log}    ${chimere_root}/scripts/run_chimere.job
-        # exitstato_run=$?
-        # set +x
-
-        # else
-        # echo "No such file ${chimere_tmp}/chimere.e ! Bye."
-        # exit 1
-        # fi
-
-        pass
 
     def process_satellite_data(self):
 

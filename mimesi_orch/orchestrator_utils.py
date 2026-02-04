@@ -275,73 +275,22 @@ def run_command_in_directory_bsub(
     return jobid
 
 
-def submit_and_wait_slurm(
-    model_type: ModelType,
+def submit_and_wait_cineca(
     path_manager: PathManager,
-    scheduler: Scheduler,
     commands_with_directories: list[tuple[Path, Path]],
     timestamp_model: str,
     no_mems: int,
-    case_dir: str,
-    queue: str,
-    max_retries: int = 2,
 ) -> bool:
 
-    attempt = 0
-
-    while attempt <= max_retries:
-        attempt += 1
-        logger.info(f"SLURM submission attempt {attempt}")
-
-        # --- submit ---
-        all_job_ids = []
-        for command, directory in commands_with_directories:
-            job_ids = submit_job(scheduler, command, directory)
-            all_job_ids.extend(job_ids)
-            time.sleep(2)
-
-        # --- wait until finished ---
-        wait_for_slurm_jobs(all_job_ids)
-
-        # --- inspect outputs ---
-        mems_to_rerun = get_list_mems_to_rerun(
-            all_job_ids,
-            path_manager,
-            timestamp_model,
-            no_mems,
-        )
-
-        if not mems_to_rerun:
-            logger.info("All ensemble members completed successfully")
-            return True
-
-        logger.warning(f"Members to rerun: {mems_to_rerun}")
-
-        if attempt >= max_retries:
-            raise RuntimeError(
-                f"SLURM retries exceeded. Failed members: {mems_to_rerun}"
-            )
-
-        # --- prepare rerun script ---
-        list_mems = [str(mem) for mem in mems_to_rerun]
-
-        replace_nml_template(
-            input_nml_path=path_manager.base_path.run_submit_model_template,
-            entries_tbr_dict={
-                "da_date_start": timestamp_model,
-                "da_date_end": timestamp_model,
-                "@no_mems_list": str(tuple(list_mems)).replace(",", ""),
-                "@case_dir": case_dir,
-                "@cresco_queue": queue,
-            },
-            output_nml_path=commands_with_directories[0][1]
-            / commands_with_directories[0][0],
-        )
-
-        # Only rerun failed members
-        commands_with_directories = [commands_with_directories[0]]
-
-    return False
+    for command, directory in commands_with_directories:
+        job_ids = run_command_in_directory(command, directory)
+        time.sleep(10)
+    mems_to_rerun = get_list_mems_to_rerun(
+        job_ids, path_manager, timestamp_model, no_mems
+    )
+    if mems_to_rerun:
+        return False
+    return True
 
 
 def searchFile(t1, t2, listing):

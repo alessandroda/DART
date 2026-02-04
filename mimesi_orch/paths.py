@@ -6,6 +6,7 @@ from mimesi_types import ModelType
 
 logger = logging.getLogger(__name__)
 
+
 class PathManager:
     """
     Centralized filesystem API for MIMESI.
@@ -87,9 +88,7 @@ class PathManager:
     # CHIMERE paths
     #
     def chimere_name_run_sub_ens_bash(self, string_to_replace_template) -> Path:
-        return (
-            self.path_submit_bsh / f"run_mimesi_ens_member_{string_to_replace_template}"
-        )
+        return f"run_mimesi_ens_{string_to_replace_template}.sh"
 
     def chimere_output_runs_dir(self, mem: int) -> Path:
         return self.path_data / f"runs_chimere/ITA7/RUNS_{mem}"
