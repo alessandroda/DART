@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+from typing import Optional, List, Tuple
 import netCDF4
 import xarray as xr
 import math
@@ -11,12 +13,19 @@ import time
 import logging
 import pandas as pd
 import re
+from pipeline_errors import SchedulerError
 from mimesi_types import ModelType, Scheduler
 from paths import PathManager
+import shlex
 from scheduler import submit_job, wait_for_slurm_jobs
 
 logger = logging.getLogger(__name__)
 
+@dataclass
+class CommandSpec:
+    command: str  # executable/script name
+    directory: Path  # where to run it
+    args: Optional[List[str]] = None
 
 class TimeManager:
     def __init__(self, start_time: str, end_time: str, dt_seconds: int):
@@ -32,8 +41,6 @@ class TimeManager:
         self.dt = pd.Timedelta(dt_seconds, unit="s")
         self.last_perturbed_day = None
         self.end_file_date_control_run = self.start_time - timedelta(days=1)
-        self.NHOURS_forward = None
-        self.NHOURS_backwards = None
 
         self.check_start_ahead_end()
 
@@ -223,18 +230,71 @@ def is_leap_year(year):
 
 days_per_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]  # Days in each month
 
-
-def run_command_in_directory(command, directory):
-
-    output_file = directory / f"{command}_output.log"
+def run_command_in_directory(spec: CommandSpec) -> Tuple[int, Optional[str]]:
+    logger = logging.getLogger(__name__)
     original_directory = os.getcwd()
 
     try:
-        os.chdir(directory)
-        command = directory / command
-        logging.info(f"running command: {command}")
-        with open(output_file, "a") as log_file:
-            subprocess.call(str(command), shell=True, stdout=log_file, stderr=log_file)
+        logger.info(f"[CMD] Entering directory: {spec.directory}")
+        os.chdir(spec.directory)
+        
+        """
+        command_path = Path(spec.command)
+        if not command_path.is_absolute():
+            command_path = spec.directory / command_path
+
+        if not command_path.exists():
+            raise FileNotFoundError(command_path)
+
+        cmd = [str(command_path)]
+        subprocess.run(["chmod", "+x", str(command_path)], check=True)
+        """     
+        cmd = shlex.split(spec.command)
+        if not cmd:
+            raise ValueError("Empty command")
+
+        # If first token is a path, ensure it exists + executable
+        first = Path(cmd[0])
+        if first.exists(): 
+            first = first.resolve()
+            # Make executable if needed
+            subprocess.run(
+                ["chmod", "+x", str(first)],
+                check=True,
+            )
+            cmd[0] = str(first)
+        
+        ### end of changes
+        if spec.args:
+            cmd.extend(map(str, spec.args))
+
+        logger.info(
+            "[CMD] Running: %s",
+            " ".join(shlex.quote(c) for c in cmd),
+        )
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+        ) #stdout='Submitted Batch Session 3561287\n'
+        stdout = result.stdout.strip()
+        stderr = result.stderr.strip()
+
+        stdout = result.stdout
+        
+        # Try strict format: ID:12345
+        job_ids = re.findall(r"^ID:(\d+)$", stdout, re.MULTILINE)
+
+        # Fallback: any number
+        if not job_ids:
+            job_ids = re.findall(r"\d+", stdout)
+        
+        if not job_ids:
+            raise RuntimeError(
+                "No Slurm job IDs found in output.\n" "Expected lines like: ID:<jobid>"
+            )
+        return result.returncode, job_ids
     finally:
         os.chdir(original_directory)
 
@@ -277,6 +337,44 @@ def run_command_in_directory_bsub(
         os.chdir(original_directory)
     return jobid
 
+def submit_irene(spec: CommandSpec) -> str:
+    rc, job_id = run_command_in_directory(spec)
+
+    if rc != 0:
+        raise SchedulerError(
+            f"Submission command failed: {spec.command} " f"(return code {rc})"
+        )
+    if not job_id:
+        raise SchedulerError(f"No job id returned by command {spec.command}")
+    
+    time.sleep(5)
+    logger.info(f"[TGCC-IRENE] Submitted job with ID:{job_id}")
+
+    return job_id
+
+def submit_and_wait_cineca(
+    path_manager: PathManager,
+    spec: CommandSpec,
+    timestamp_chimere: str,
+    no_mems: int,
+    scheduler: Scheduler,
+    model_type: ModelType,
+):
+
+    rc, job_ids = run_command_in_directory(spec)
+
+    if rc != 0:
+        raise SchedulerError(
+            f"Submission command failed: {spec.command} " f"(return code {rc})"
+        )
+
+    if not job_ids:
+        raise SchedulerError(f"No job id returned by command {spec.command}")
+
+    logger.info(f"[SLURM] Submitted job {job_ids}")
+    time.sleep(10)
+
+    return job_ids
 
 def submit_and_wait_slurm(
     model_type: ModelType,
@@ -792,16 +890,16 @@ def submit_and_wait(
 
 def get_list_mems_to_rerun(
     job_ids: list[str],
-    path_manager: PathManager,
-    timestamp_model: str,
-    no_mems: int,
     scheduler: Scheduler,
     model_type: ModelType,
+    path_manager: Optional[PathManager] = None,
+    timestamp_model: Optional[str] = None,
+    no_mems: Optional[int] = None
 ) -> list[int]:
 
-    datetime_model_p1 = pd.to_datetime(timestamp_model, format="%Y%m%d%H") + timedelta(
-        hours=1
-    )
+    #datetime_model_p1 = pd.to_datetime(timestamp_model, format="%Y%m%d%H") + timedelta(
+    #    hours=1
+    #)
 
     while True:
         running_jobs = []
@@ -821,12 +919,14 @@ def get_list_mems_to_rerun(
 
         if not running_jobs:
             logger.info(f"Jobs {job_ids} have finished")
-            return check_ic_g1_existing(
-                path_manager=path_manager,
-                model=model_type,
-                datetime_model=datetime_model_p1,
-                no_mems=no_mems,
-            )
+            return True
+        
+            #return check_ic_g1_existing(
+            #    path_manager=path_manager,
+            #    model=model_type,
+            #    datetime_model=datetime_model_p1,
+            #    no_mems=no_mems,
+            #)
 
         logger.info(f"Jobs still running: {running_jobs}. Waiting...")
         time.sleep(30)

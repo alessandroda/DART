@@ -17,12 +17,8 @@ paths:
 
 time:
   start_time: "2020-02-06 00:00:00"
-  end_time: "2020-02-06 23:00:00"
+  end_time: "2020-02-06 05:00:00"
   dt_seconds: 3600
-
-  backup_perturb_days: 2
-  backup_ic_hours: 48
-  backup_ic_option: hourly
 
 
 assimilation:
@@ -32,9 +28,9 @@ assimilation:
   state_variable_qty: QTY_NO2
   obs_type: SAT_NO2_TROPOMI
 
-  case_dir: test
-  case_emi_dir: emi
-  emi_var: NO2
+  case_dir: test 
+  case_emi_dir: emi #da capire se viene usato 
+  emi_var: NO2 #da capire se viene usato 
   no_mems: 9
 
 
@@ -67,7 +63,6 @@ satellite_data:
 model_data:
   control_run_exp_name: EUROCOMEX3_reruned0102
   domain: EUROCOMEX3
-  # Ensemble Mapping (EmisID : MeteoID)
-  perturbation_names: ["EmisID", "MeteoID"]
+  perturbation_names: ["EmisID", "MeteoID"] # Ensemble Mapping (EmisID : MeteoID)
   ensemble_list: ["00:00", "00:01", "00:02", "01:00", "01:01", "01:02", "02:00", "02:01", "02:02"]
 

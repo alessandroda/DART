@@ -132,14 +132,23 @@ class PathManager:
         return self.chimere2023_run_dir(mem) / f"end.{date_ymd}00_24_ENS{mem}.nc"
     
     def chimere2023_PAR_BASE_TEMPLATE(self) -> Path:
-        return self.base_path / "chimere.ensemble.par"
+        return self.base_path / "chimere.template_ensemble.par"
     
     def chimere2023_PAR_FILE(self, mem: int) -> Path:
         return self.base_path / f"chimere.ENS{mem}.par"
     
-    def chimere2023_PAR_FILE_RUN_DIR(self, mem: int) -> Path:
-        return self.chimere2023_run_dir(mem)/ f"chimere.ENS{mem}.par"
+    def chimere2023_PAR_FILE_RUN_DIR(self, mem: int, START_DATEHOUR: str) -> Path:
+        return self.chimere2023_run_dir(mem)/ f"chimere.ENS{mem}_{START_DATEHOUR}.par"
     
+    def chimere2023_BASH_SUBMIT_SCRIPT_TEMPLATE(self) -> Path:
+        return self.base_path / f"submit_p_template.sh"
+    
+    def chimere2023_BASH_SUBMIT_SCRIPT(self, mem: int) -> Path:
+        return self.base_path / f"submit_p_{mem}.sh"
+    
+    def chimere2023_BASH_SUBMIT_SCRIPT_RUN_DIR(self, mem: int, START_DATEHOUR: str) -> Path:
+        return self.chimere2023_run_dir(mem) / f"submit_p_{mem}_{START_DATEHOUR}.sh"
+
     def chimere2023_EMIS_FILE_SRC(self, is_pert: bool, domain: str, month: int, weekday: str, emi_id: int) -> Path:
         if is_pert:
             return self.path_perturbed_emi / f"EMIS.{domain}.{month}.{weekday}.s.ens0{emi_id}.nc"
@@ -157,9 +166,6 @@ class PathManager:
     
     def chimere2023_METEO_FILE(self, mem: int, domain: str, date_ymd: str) -> Path:
         return self.chimere2023_run_dir(mem) / f"exdomout_{date_ymd}00_24_{domain}.nc"
-    
-    def chimere2023_BASH_SUBMIT_SCRIPT(self, mem: int) -> Path:
-        return self.base_path / f"submit_p_{mem}.sh"
     
 
 

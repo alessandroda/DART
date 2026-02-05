@@ -188,8 +188,9 @@ class ModelDataConfig(BaseModel):
     Satellite observation handling.
     """
 
-    control_run_exp_name: Optional[str] = None
+    control_run_exp_name: Optional[str] = Nones
     domain: Optional[str] = None
+    perturbation_names: Optional[list] = None
     ensemble_list: Optional[list] = None
 
 

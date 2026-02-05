@@ -1,16 +1,19 @@
 from datetime import timedelta
 from pathlib import Path
 import shutil
+import subprocess
 import time
 
 from mimesi_types import Scheduler
 from config_models import AppConfig
 from paths import PathManager
 from pipelines.base_pipeline import BaseAssimilationPipeline
+from pipeline_errors import FatalPipelineError, ModelRunError
 import logging
 import os
 import pandas as pd
 from orchestrator_utils import (
+    CommandSpec,
     check_job_status_cresco,
     modify_yaml_date,
     filter_dates,
@@ -25,7 +28,9 @@ from orchestrator_utils import (
     submit_and_wait_slurm,
     safe_symlink,
     check_and_clean_broken_links,
-    from_liststr_to_listdict
+    from_liststr_to_listdict,
+    submit_irene,
+    get_list_mems_to_rerun
 )
 
 
@@ -69,6 +74,10 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         self.case_emi_dir = a.case_emi_dir
 
         self.queue = self.config.cluster.cluster_queue
+        self.project_name = self.config.cluster.project_name
+        self.nb_proc = self.config.cluster.nb_proc
+        self.walltime = self.config.cluster.walltime
+        self.mail = self.config.cluster.mail
 
         self.backup_perturb_days = self.config.time.backup_perturb_days
         self.backup_ic_hours = self.config.time.backup_ic_hours
@@ -110,189 +119,114 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
                          self.path_manager.chimere2023_END_FILE(dict_mem["MemberID"], self.time_manager.end_file_date_control_run.strftime("%Y%m%d")))
             #link anche a emis del giorno succ se ci si ferma a 00 e non ma le si vogliono
 
-        #self.HOURS = [TimeManager.round_to_closest_hour(start_time).strftime("%Y%m%d%H") for start_time in self.listing["start_time"]]
-        #self.NHOURS = (self.HOURS.diff() / pd.Timedelta(hours=1))[1:].tolist()
-
-
-    def cleanup_CHIMERE2017(self):
-        pass
-
-    def replace_perturb_into_original_emissions(self):
-        pass
-
-    def finalize_step(self):
-        """
-        Cleanup + YAML update.
-        """
-
-        modify_yaml_date(
-            self.config["_config_path"],
-            self.time_manager.simulated_time.strftime("%Y-%m-%d %H:00:00"),
-        )
-        self.cleanup_FARM()
-
-
     def run_model(self):
         """
         Run CHIMERE for the current time step.
         """
         logger.info(f"[STEP] Running CHIMERE model at {self.time_manager.current_time}")
         
-        date_ymd = self.time_manager.current_time.strftime("%Y-%m-%d")
-        self.HOURS = [TimeManager.round_to_closest_hour(start_time).strftime("%Y%m%d%H") for start_time in self.listing["start_time"]]
-        self.NHOURS = (self.HOURS.diff() / pd.Timedelta(hours=1))[1:].tolist()
-        
-        commands_with_directories = []
+        date_ymd = self.time_manager.current_time.strftime("%Y%m%d")
+        date_ymdH = self.time_manager.current_time.strftime("%Y%m%d%H")
+
+        job_ids = []
+        job_id = None
         for mem in range(self.no_mems):
             if check_and_clean_broken_links(self.path_manager.chimere2023_run_dir(mem)):
                 logger.info("Skipping submission due to broken links. Broken references cleaned up")
                 break
-            replace_nml_template(
-                input_nml_path=self.path_manager.chimere2023_PAR_BASE_TEMPLATE(),
-                #serve fare template con @ENTRIES
-                entries_tbr_dict={
-                    "@LAB": f"ENS{mem}",
-                    "@SIMULDIR": self.path_manager.chimere2023_run_dir(mem),
-                    "@IUSEINI": "2",
-                    "@ENDFILE": self.path_manager.chimere2023_END_FILE(mem, date_ymd), #da capire NHOURS_backward
-                    "@EMISSDIR": self.path_manager.chimere2023_run_dir(mem)
-                },
-                output_nml_path=self.path_manager.chimere2023_PAR_FILE(mem)
-            )
-            shutil.copy(self.path_manager.chimere2023_PAR_FILE(mem), self.path_manager.chimere2023_PAR_FILE_RUN_DIR(mem))
-
-
-            timestamp_chimere = TimeManager.round_to_closest_hour(self.time_manager.current_time).strftime("%Y%m%d%H")
-            chimere_script = path_run
-            slurm_script = (self.path_manager.path_submit_bsh / f"slurm_{chimere_script.stem}.sh")
-
-            slurm_script.write_text(f"""#!/bin/bash
-#SBATCH --partition={self.queue}
-#SBATCH --job-name=chimere_mem{mem}
-#SBATCH --output=logs/chimere_%j.out
-#SBATCH --error=logs/chimere_%j.err
-
-cd {self.path_manager.path_submit_bsh}
-
-./{chimere_script.name} '{timestamp_arg_run_chimere}'
-""")
-            slurm_script.chmod(0o755)
+            try:
+                logger.info("Replacing @TOKENS in CHIMERE .par template file ...")
+                replace_nml_template(
+                    input_nml_path=self.path_manager.chimere2023_PAR_BASE_TEMPLATE(),
+                    entries_tbr_dict={
+                        "@LAB": f"ENS{mem}",
+                        "@SIMULDIR": self.path_manager.chimere2023_run_dir(mem),
+                        "@IUSEINI": "2",
+                        "@ENDFILE": self.path_manager.chimere2023_END_FILE(mem, date_ymd), #per ora c'é 24 dentro 
+                        "@EMISSDIR": self.path_manager.chimere2023_run_dir(mem)
+                    },
+                    output_nml_path=self.path_manager.chimere2023_PAR_FILE(mem)
+                )
+                shutil.copy(self.path_manager.chimere2023_PAR_FILE(mem), self.path_manager.chimere2023_PAR_FILE_RUN_DIR(mem, date_ymdH))
+            except Exception as e:
+                raise FatalPipelineError(f"Failed to prepare CHIMERE .par file: {e}")
+            try:
+                logger.info("Replacing @TOKENS in CHIMERE template submit script ...")
+                replace_nml_template(
+                    input_nml_path=self.path_manager.chimere2023_BASH_SUBMIT_SCRIPT_TEMPLATE(),
+                    entries_tbr_dict={
+                        "@JOBNAME": f"ENS{mem}",
+                        "@NPROC": f"{self.nb_proc}",
+                        "@QUEUED_NODES": f"{self.queue}",
+                        "@PROJECT": f"{self.project_name}",
+                        "@WALLTIME": f"{self.walltime}",
+                        "@RUN_DIR": f"{self.path_manager.chimere2023_run_dir()}",
+                        "@MAIL": f"{self.mail}",
+                        "@PARFILE": f"{self.path_manager.chimere2023_PAR_FILE(mem).name}",
+                        "@START_DATEHOUR": f"{date_ymdH}",
+                        "@NHOURS_forward": "1"
+                    },
+                    output_nml_path=self.path_manager.chimere2023_BASH_SUBMIT_SCRIPT(mem)
+                )
+                shutil.copy(self.path_manager.chimere2023_BASH_SUBMIT_SCRIPT(mem), self.path_manager.chimere2023_BASH_SUBMIT_SCRIPT_RUN_DIR(mem, date_ymdH))
+                subprocess.run(["chmod", "+x", str(self.path_manager.chimere2023_BASH_SUBMIT_SCRIPT(mem))], check=True)
+            except:
+                raise FatalPipelineError(f"Failed to prepare CHIMERE submit script: {e}")
             
-        
-            commands_with_directories.append(
-                (slurm_script, self.path_manager.path_submit_bsh)
-            )
-        submit_and_wait_slurm(
-            self.model_type,
-            self.path_manager,
+            logger.info(f"Queuing job for member {mem}...")
+            if job_id is None:
+                submit_command = f"ccc_msub ./{self.path_manager.chimere2023_BASH_SUBMIT_SCRIPT(mem).name}"
+            else:
+                submit_command = f"ccc_msub -a {job_id} ./{self.path_manager.chimere2023_BASH_SUBMIT_SCRIPT(mem).name}"
+    
+            #job_id = submit_irene(CommandSpec(
+            #    command=submit_command,
+            #    directory=self.path_manager.base_path
+            #))
+            job_ids.append(submit_irene(CommandSpec(
+                command=submit_command,
+                directory=self.path_manager.base_path
+            )))
+        logger.info(f"Checking job status ...")
+        mems_to_rerun = get_list_mems_to_rerun(
+            job_ids,
             self.scheduler,
-            commands_with_directories,
-            timestamp_chimere,
-            self.no_mems,
-            self.case_dir,
-            self.queue,
-        )
+            self.model_type,
+            )
+        if mems_to_rerun:
+            raise ModelRunError(f"Ensemble members failed: {mems_to_rerun}")
+        logger.info(f" Run_model() compled successfully.")
 
-        # ./run_mimesi-ITA7.sh '2026-01-26 0:00'
-        # il bash esegue un altro bash lancia_chimere_m_nh.sh
-        # dentro a questo bash si esegue chimere.sh
-        # chimere .sh esegue finalmente lo slurm
-        #         export NP
 
-        # sbatch --wait --job-name=${dom}.${idatestart}.${simclab} \
-        #         --account=arpae_aqm \
-        #         --output=${job_o_log} --error=${job_e_log}    ${chimere_root}/scripts/run_chimere.job
-        # exitstato_run=$?
-        # set +x
-
-        # else
-        # echo "No such file ${chimere_tmp}/chimere.e ! Bye."
-        # exit 1
-        # fi
-
+    def after_model(self):
         pass
 
-
-    def run_model_old(self):
+    def run_assimilation_if_needed(self):
         """
-        Run CHIMERE for the current time step.
+        Run DART assimilation only if:
+        - assimilation is enabled
+        - satellite observations are available
         """
-        logger.info(f"[STEP] Running CHIMERE model at {self.time_manager.current_time}")
-        
-        timestamp_arg_run_chimere = self.time_manager.current_time.strftime(
-            "%Y-%m-%d %H:00"
+        if not self.run_assimilation_flag:
+            logger.info("[DART] Assimilation disabled by config")
+            return
+
+        orbit_filename = self.process_satellite_data()
+        if not orbit_filename:
+            logger.info("[DART] No satellite data found, skipping assimilation")
+            return
+
+        obs_seq_name = self.run_obs_converter(orbit_filename)
+
+        obs_path = (
+            self.path_manager.base_path
+            / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/{obs_seq_name}"
         )
-        
-        # to be understood time_emi, date_emi
-        timestamp_chimere = TimeManager.round_to_closest_hour(
-            self.time_manager.current_time
-        ).strftime("%Y%m%d%H")
-        
-        commands_with_directories = []
-        for mem in range(self.no_mems):
-            string_to_replace_template = f"{timestamp_chimere}_mem_{mem}.sh"
-            
-            path_run = self.path_manager.chimere_name_run_sub_ens_bash(
-                string_to_replace_template
-            )
-            replace_nml_template(
-                input_nml_path=self.path_manager.base_path
-                / self.path_manager.run_submit_model_template,
-                entries_tbr_dict={
-                    "@mimesi_dh_inizio": "1",
-                    "@mimesi_nhours_list": "1",
-                },
-                output_nml_path=path_run,
-            )
+        if not obs_path.exists():
+            logger.info("[DART] obs_seq not found, skipping assimilation")
+            return
 
-            chimere_script = path_run
-            slurm_script = (self.path_manager.path_submit_bsh / f"slurm_{chimere_script.stem}.sh")
-
-            slurm_script.write_text(f"""#!/bin/bash
-#SBATCH --partition={self.queue}
-#SBATCH --job-name=chimere_mem{mem}
-#SBATCH --output=logs/chimere_%j.out
-#SBATCH --error=logs/chimere_%j.err
-
-cd {self.path_manager.path_submit_bsh}
-
-./{chimere_script.name} '{timestamp_arg_run_chimere}'
-""")
-            slurm_script.chmod(0o755)
-            
-        
-            commands_with_directories.append(
-                (slurm_script, self.path_manager.path_submit_bsh)
-            )
-        submit_and_wait_slurm(
-            self.model_type,
-            self.path_manager,
-            self.scheduler,
-            commands_with_directories,
-            timestamp_chimere,
-            self.no_mems,
-            self.case_dir,
-            self.queue,
-        )
-
-        # ./run_mimesi-ITA7.sh '2026-01-26 0:00'
-        # il bash esegue un altro bash lancia_chimere_m_nh.sh
-        # dentro a questo bash si esegue chimere.sh
-        # chimere .sh esegue finalmente lo slurm
-        #         export NP
-
-        # sbatch --wait --job-name=${dom}.${idatestart}.${simclab} \
-        #         --account=arpae_aqm \
-        #         --output=${job_o_log} --error=${job_e_log}    ${chimere_root}/scripts/run_chimere.job
-        # exitstato_run=$?
-        # set +x
-
-        # else
-        # echo "No such file ${chimere_tmp}/chimere.e ! Bye."
-        # exit 1
-        # fi
-
-        pass
+        self.run_dart(obs_seq_name)
 
     def process_satellite_data(self):
 
@@ -350,16 +284,6 @@ cd {self.path_manager.path_submit_bsh}
             logger.error(f"Error running obs converter: {e}")
             return False
         return obs_seq_name
-
-    def after_model(self):
-        prepare_farm_to_dart_nc_par(
-            self.path_manager,
-            self.time_manager.simulated_time,
-            self.time_manager.simulated_time,
-            self.seconds_model,
-            self.days_model,
-            self.no_mems,
-        )
 
     def run_dart(self, obs_seq_name):
         logger.info("Running DART")
@@ -445,7 +369,7 @@ cd {self.path_manager.path_submit_bsh}
             output_nml_path=self.path_manager.path_submit_bsh / "run_filter.bsh",
         )
 
-        job_id = run_command_in_directory_bsub(
+        job_id = run_command_in_directory_bsub( #da portare a run_command_in_directory
             "./submit_filter.bsh", self.path_manager.path_submit_bsh, farm=False
         )
         time.sleep(10)
@@ -508,29 +432,26 @@ cd {self.path_manager.path_submit_bsh}
                         f"Failed to move '{filename}' to '{preassim_sim_folder}' because it already exists."
                     )
 
-    def run_assimilation_if_needed(self):
+    
+    def after_assimilation(self):
         """
-        Run DART assimilation only if:
-        - assimilation is enabled
-        - satellite observations are available
+        Optional hook executed after the assimilation step.
+
+        Typical use cases:
+        - mapping analysis fields back to the model format
+        - updating boundary or initial conditions
         """
-        if not self.run_assimilation_flag:
-            logger.info("[DART] Assimilation disabled by config")
-            return
+        pass
 
-        orbit_filename = self.process_satellite_data()
-        if not orbit_filename:
-            logger.info("[DART] No satellite data found, skipping assimilation")
-            return
+    def finalize_step(self):
+        """
+        Cleanup + YAML update.
+        """
 
-        obs_seq_name = self.run_obs_converter(orbit_filename)
+        #modify_yaml_date(
+        #    self.config["_config_path"],
+        #    self.time_manager.simulated_time.strftime("%Y-%m-%d %H:00:00"),
+        #)
+        #self.cleanup_FARM()
 
-        obs_path = (
-            self.path_manager.base_path
-            / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/{obs_seq_name}"
-        )
-        if not obs_path.exists():
-            logger.info("[DART] obs_seq not found, skipping assimilation")
-            return
-
-        self.run_dart(obs_seq_name)
+        pass
