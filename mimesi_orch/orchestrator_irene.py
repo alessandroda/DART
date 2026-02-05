@@ -24,7 +24,7 @@ with open(CONFIG_PATH, "r") as f:
 config = AppConfig.model_validate(cfg)
 path_manager = PathManager(config.paths)
 
-LOG_DIR = Path(config.paths.run_dir) / "irene_orchestrator_logs"
+LOG_DIR = Path.cwd()/ "irene_orchestrator_logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 logfile = LOG_DIR / f"{config.assimilation.model_type.value}_DART_{time.strftime('%Y%m%d_%H%M%S')}.log"
@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 logger.info(f"Starting {config.assimilation.model_type.value}–DART orchestrator")
 logger.info(f"Config file: {CONFIG_PATH}")
-logger.info(f"Run dir: {config.paths.run_dir}")
+logger.info(f"Run dir: {Path.cwd()}")
 logger.info(f"Log file: {logfile}")
 
 time_manager = TimeManager(

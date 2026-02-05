@@ -99,7 +99,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
 
         for dict_mem in dict_mem_list: #loop on mems
             self.path_manager.chimere2023_run_dir(dict_mem["MemberID"]).mkdir(parents=True, exist_ok=True)
-            logger.info("Creating directories and links to run chimere's parallel part")
+            logger.info(f"Creating directories and links for ENS{dict_mem['MemberID']} to run chimere's parallel part")
             #link WPS
             safe_symlink(self.path_manager.chimere2023_WPS(), 
                          self.path_manager.chimere2023_run_dir_WPS(dict_mem["MemberID"]))
@@ -127,6 +127,8 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         
         date_ymd = self.time_manager.current_time.strftime("%Y%m%d")
         date_ymdH = self.time_manager.current_time.strftime("%Y%m%d%H")
+        self.time_manager.end_file_date = self.time_manager.current_time - timedelta(days=1)
+        end_file_date_ymd = self.time_manager.end_file_date.strftime("%Y%m%d")
 
         job_ids = []
         job_id = None
@@ -134,6 +136,8 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
             if check_and_clean_broken_links(self.path_manager.chimere2023_run_dir(mem)):
                 logger.info("Skipping submission due to broken links. Broken references cleaned up")
                 break
+            else:
+                logger.info(f">> No broken links found ...")
             try:
                 logger.info("Replacing @TOKENS in CHIMERE .par template file ...")
                 replace_nml_template(
@@ -142,7 +146,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
                         "@LAB": f"ENS{mem}",
                         "@SIMULDIR": self.path_manager.chimere2023_run_dir(mem),
                         "@IUSEINI": "2",
-                        "@ENDFILE": self.path_manager.chimere2023_END_FILE(mem, date_ymd), #per ora c'é 24 dentro 
+                        "@ENDFILE": self.path_manager.chimere2023_END_FILE(mem, end_file_date_ymd), #per ora c'é 24 dentro 
                         "@EMISSDIR": self.path_manager.chimere2023_run_dir(mem)
                     },
                     output_nml_path=self.path_manager.chimere2023_PAR_FILE(mem)
@@ -160,7 +164,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
                         "@QUEUED_NODES": f"{self.queue}",
                         "@PROJECT": f"{self.project_name}",
                         "@WALLTIME": f"{self.walltime}",
-                        "@RUN_DIR": f"{self.path_manager.chimere2023_run_dir()}",
+                        "@RUN_DIR": f"{self.path_manager.chimere2023_run_dir(mem)}",
                         "@MAIL": f"{self.mail}",
                         "@PARFILE": f"{self.path_manager.chimere2023_PAR_FILE(mem).name}",
                         "@START_DATEHOUR": f"{date_ymdH}",
@@ -170,7 +174,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
                 )
                 shutil.copy(self.path_manager.chimere2023_BASH_SUBMIT_SCRIPT(mem), self.path_manager.chimere2023_BASH_SUBMIT_SCRIPT_RUN_DIR(mem, date_ymdH))
                 subprocess.run(["chmod", "+x", str(self.path_manager.chimere2023_BASH_SUBMIT_SCRIPT(mem))], check=True)
-            except:
+            except Exception as e:
                 raise FatalPipelineError(f"Failed to prepare CHIMERE submit script: {e}")
             
             logger.info(f"Queuing job for member {mem}...")
@@ -193,6 +197,8 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
             self.scheduler,
             self.model_type,
             )
+        if not mems_to_rerun:
+            raise ModelRunError("submission stopped")
         if mems_to_rerun:
             raise ModelRunError(f"Ensemble members failed: {mems_to_rerun}")
         logger.info(f" Run_model() compled successfully.")

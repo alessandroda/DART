@@ -1,2 +1,2 @@
-source CHIMDART_env/bin/activate
-python -u orchestrator.py -c config_pydantic_irene.yaml
+source /ccc/cont003/home/lisa/demoling/CHIMDART_env/bin/activate
+python -u orchestrator_irene.py -c config_pydantic_irene.yaml

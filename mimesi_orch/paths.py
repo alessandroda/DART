@@ -3,6 +3,7 @@ import logging
 import pandas as pd
 from config_models import PathsConfig
 from mimesi_types import ModelType
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ class PathManager:
         self.base_path: Path = config.base_path.resolve()
 
         # ---- resolve static paths ----
-        self.env_python = self._resolve(config.env_python)
+        self.env_python = config.env_python
         self.listing_file = self._resolve(config.listing_file)
         self.run_submit_model_template = self._resolve(config.run_submit_model_template)
         self.path_submit_bsh = self._resolve(config.path_submit_bsh)
@@ -37,14 +38,18 @@ class PathManager:
         self.path_perturbed_emi = self._resolve(config.path_perturbed_emi)
         self.path_perturbed_meteo = self._resolve(config.path_perturbed_meteo)
 
-        self._check_static_paths()
+        #self._check_static_paths()
 
     # ------------------------------------------------------------------
     # internal helpers
     # ------------------------------------------------------------------
+    
+    def _resolve(self, p: Optional[Path]) -> Path:
+        """Resolve a path relative to base_path. If p is None, return base_path."""
+    
+        if p is None:
+            return self.base_path.resolve()
 
-    def _resolve(self, p: Path) -> Path:
-        """Resolve a path relative to base_path."""
         return (self.base_path / p).resolve()
 
     def _check_static_paths(self):

@@ -1,8 +1,8 @@
 paths:
   base_path: /ccc/work/cont003/gen7232/demoling/chimere_v2023_dart/
-  env_python: python
+  env_python: /ccc/cont003/home/lisa/demoling/CHIMDART_env/bin/python
 
-  listing_file: DART/observations/obs_converters/S5P_TROPOMI_L3/data/NO2/C03__listing_02.csv
+  listing_file: C03__listing_02.csv #DART/observations/obs_converters/S5P_TROPOMI_L3/data/NO2/C03__listing_02.csv
   path_submit_bsh: /ccc/work/cont003/gen7232/demoling/chimere_v2023_dart/
   path_filter: DART/models/FARM/work #need to put GAEL's 
 
@@ -64,5 +64,5 @@ model_data:
   control_run_exp_name: EUROCOMEX3_reruned0102
   domain: EUROCOMEX3
   perturbation_names: ["EmisID", "MeteoID"] # Ensemble Mapping (EmisID : MeteoID)
-  ensemble_list: ["00:00", "00:01", "00:02", "01:00", "01:01", "01:02", "02:00", "02:01", "02:02"]
+  ensemble_list: ["01:02", "02:02"] #["00:00", "00:01", "00:02", "01:00", "01:01", "01:02", "02:00", "02:01", "02:02"]
 

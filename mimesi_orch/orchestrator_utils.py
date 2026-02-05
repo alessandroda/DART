@@ -41,6 +41,7 @@ class TimeManager:
         self.dt = pd.Timedelta(dt_seconds, unit="s")
         self.last_perturbed_day = None
         self.end_file_date_control_run = self.start_time - timedelta(days=1)
+        self.end_file_date = None
 
         self.check_start_ahead_end()
 
@@ -908,7 +909,7 @@ def get_list_mems_to_rerun(
             if scheduler == Scheduler.SLURM:
                 finished = check_job_status_slurm(
                     jobid, which_run=model_type.value.upper()
-                )
+                ) #da cambiare, ritorna finished anche se é fallito o se é pending !
             else:
                 finished = check_job_status_cresco(
                     jobid, which_run=model_type.value.upper()
@@ -919,7 +920,7 @@ def get_list_mems_to_rerun(
 
         if not running_jobs:
             logger.info(f"Jobs {job_ids} have finished")
-            return True
+            return False
         
             #return check_ic_g1_existing(
             #    path_manager=path_manager,
@@ -1108,6 +1109,8 @@ def safe_symlink(target: Path, link: Path):
     - If it is broken → recreate
     - Never overwrite real files/directories
     """
+    if not link.parent.exists():
+        link.parent.mkdir(parents=True, exist_ok=True)
 
     try:
         # Try Python 3.11+ approach
@@ -1146,7 +1149,7 @@ def check_and_clean_broken_links(run_dir: Path) -> bool:
         False otherwise
     """
 
-    print(f">> Checking links...")
+    logger.info(f">> Checking links...")
 
     broken_found = False
 
@@ -1164,17 +1167,17 @@ def check_and_clean_broken_links(run_dir: Path) -> bool:
             # Broken if target does not exist
             if not path.exists():
 
-                print(f"   [!] BROKEN LINK FOUND: {path}")
+                logger.info(f"   [!] BROKEN LINK FOUND: {path}")
 
                 try:
                     target = path.resolve(strict=False)
-                    print(f"      Points to: {target}")
+                    logger.info(f"      Points to: {target}")
                 except Exception:
-                    print("      Points to: <unresolvable>")
+                    logger.info("      Points to: <unresolvable>")
 
                 # Remove broken symlink
                 path.unlink()
-                print("       >>> Unlinked broken reference!")
+                logger.info("       >>> Unlinked broken reference!")
 
                 broken_found = True
 
@@ -1206,9 +1209,9 @@ def from_liststr_to_listdict(ensemble_list: list[str], labels: list[str]) -> lis
 
             if i < len(labels):
                 key = labels[i]
-                logger.info("only MeteoID and EmisID are supported for the moment: specific functions (in pipeline and paths) need to be created to allow more")
             else:
                 key = f"ExtraID_{i - len(labels) + 1}"
+                logger.info("only MeteoID and EmisID are supported for the moment: specific functions (in pipeline and paths) need to be created to allow more")
                 logger.info("Extra IDs were given: untracked")
 
             entry[key] = int(value)
