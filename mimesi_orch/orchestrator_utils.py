@@ -1120,16 +1120,17 @@ def safe_symlink(target: Path, link: Path):
         # Older Python (<3.11) doesn't support exist_ok
         try:
             link.symlink_to(target)
-            logger.info(f"Symlink created: {link} -> {target}")
+            logger.info(f"Symlink created: {link} -> {target}") 
         except FileExistsError:
             if link.is_symlink():
                 if not link.exists():
                     # Broken symlink → fix it
                     logger.info(f"Broken symlink detected. Recreating: {link}")
                     link.unlink()
-                    link.symlink_to(target)
+                    link.symlink_to(target) 
                 else:
                     # Symlink exists and is valid → nothing to do
+                    ##ERRORE: puo essere che sia un refuso é punti non a quello che dovrebbe puntare
                     logger.info(f"Symlink already exists and is valid: {link}")
             else:
                 # Path exists but is a file or directory → skip
@@ -1171,7 +1172,8 @@ def check_and_clean_broken_links(run_dir: Path) -> bool:
 
                 try:
                     target = path.resolve(strict=False)
-                    logger.info(f"      Points to: {target}")
+                    logger.info(f"      Points to target: {target}")
+                    logger.info(f"   [!] CHECK IF TARGET EXITS")
                 except Exception:
                     logger.info("      Points to: <unresolvable>")
 
@@ -1219,6 +1221,19 @@ def from_liststr_to_listdict(ensemble_list: list[str], labels: list[str]) -> lis
         ensemble_dicts.append(entry)
 
     return ensemble_dicts
+
+def compute_hourly(data_path: str, time: int, path_saving_data: Path, path_saving_list: Optional[Path]=None) -> Path:
+    data = xr.open_dataset(data_path)
+    data_sel = data.sel(Time=slice(time, time+1)) #to keep Time dimension
+    if len(data_sel.Times.values) == 0: #when time is saved as float (isel drops Time even with drop=False)
+        data_sel = data.sel(Time=slice(data.Time.values[time], data.Time.values[time]))
+    
+    data_sel.to_netcdf(path_saving_data)
+    if path_saving_list:
+        path_saving_list.write_text("1\n" + str(path_saving_data) + "\n")
+        logger.info("Hourly dataset computed and listing created")
+    else:
+        logger.info("Hourly dataset computed")
 
 
 

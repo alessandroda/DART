@@ -31,7 +31,7 @@ assimilation:
   case_dir: test 
   case_emi_dir: emi #da capire se viene usato 
   emi_var: NO2 #da capire se viene usato 
-  no_mems: 9
+  no_mems: 2
 
 
 cluster:

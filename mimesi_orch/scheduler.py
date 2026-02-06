@@ -76,10 +76,9 @@ def check_job_status_slurm(job_id: str) -> bool:
         capture_output=True,
         text=True,
     )
-
+    print(f"{result.stdout}")
     # If squeue prints something → job is still in queue
     return bool(result.stdout.strip())
-
 
 def check_job_status_lsf(job_id: str) -> str:
     result = subprocess.run(
