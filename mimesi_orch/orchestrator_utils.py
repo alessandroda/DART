@@ -295,7 +295,7 @@ def run_command_in_directory(spec: CommandSpec) -> Tuple[int, Optional[str]]:
             raise RuntimeError(
                 "No Slurm job IDs found in output.\n" "Expected lines like: ID:<jobid>"
             )
-        return result.returncode, job_ids
+        return result.returncode, job_ids[0]
     finally:
         os.chdir(original_directory)
 

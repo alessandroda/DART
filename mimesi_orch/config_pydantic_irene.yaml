@@ -63,6 +63,7 @@ satellite_data:
 model_data:
   control_run_exp_name: EUROCOMEX3_reruned0102
   domain: EUROCOMEX3
+  chimpart: f
   perturbation_names: ["EmisID", "MeteoID"] # Ensemble Mapping (EmisID : MeteoID)
   ensemble_list: ["01:02", "02:02"] #["00:00", "00:01", "00:02", "01:00", "01:01", "01:02", "02:00", "02:01", "02:02"]
 
