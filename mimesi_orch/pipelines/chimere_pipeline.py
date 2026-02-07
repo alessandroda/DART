@@ -3,7 +3,7 @@ from pathlib import Path
 import shutil
 import time
 
-from mimesi_orch.pipeline_errors import FatalPipelineError, ModelRunError
+from pipeline_errors import FatalPipelineError, ModelRunError
 from mimesi_types import Scheduler
 from config_models import AppConfig
 from paths import PathManager
@@ -88,12 +88,11 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         """
         Cleanup + YAML update.
         """
-
+    
         modify_yaml_date(
             self.config["_config_path"],
             self.time_manager.simulated_time.strftime("%Y-%m-%d %H:00:00"),
         )
-        self.cleanup_FARM()
 
     def run_model(self):
         """
@@ -150,7 +149,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             self.model_type,
         )
 
-        if mems_to_rerun:
+        if not mems_to_rerun:
             raise ModelRunError(f"Ensemble members failed: {mems_to_rerun}")
 
     def process_satellite_data(self):
@@ -211,14 +210,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         return obs_seq_name
 
     def after_model(self):
-        prepare_farm_to_dart_nc_par(
-            self.path_manager,
-            self.time_manager.simulated_time,
-            self.time_manager.simulated_time,
-            self.seconds_model,
-            self.days_model,
-            self.no_mems,
-        )
+        pass
 
     def run_dart(self, obs_seq_name):
         logger.info("Running DART")
