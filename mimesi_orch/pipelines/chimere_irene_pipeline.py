@@ -57,6 +57,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         self.days_model = 0
         self.seconds_model = 0
         self.output_sim_folder = None
+        self.current_end_file = {}
         a = self.config.assimilation
 
         self.model_type = a.model_type
@@ -88,13 +89,14 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         self.domain = self.config.model_data.domain
         self.chimpart = self.config.model_data.chimpart
         self.submit_sequentially = self.config.model_data.submit_sequentially
+        self.restart_from_controlrun = self.config.model_data.restart_from_controlrun
 
         self.scheduler = self.config.cluster.scheduler
         logger.info(f"Using scheduler={self.scheduler}, queue={self.queue}")
 
 
     def before_step(self):
-        logger.info(f">>> current time: {self.time_manager.current_time}; start: {self.time_manager.start_time}; end: {self.time_manager.end_time}")
+        logger.info(f"---------->>> current time: {self.time_manager.current_time}; start: {self.time_manager.start_time}; end: {self.time_manager.end_time}")
         dict_mem_list = from_liststr_to_listdict(self.ensemble_list, self.perturbation_names)
         if len(dict_mem_list) != self.no_mems:
             logger.info(f"NB The ensemble list values ({len(dict_mem_list)}) are not equal in number to the requested assimilation ensemble ({self.no_mems})")
@@ -104,55 +106,65 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
             logger.info(f"Creating directories and links for ENS{dict_mem['MemberID']} to run chimere's parallel part")
             #link WPS
             #TODO simply replace template (move in run_model)
-            safe_symlink(self.path_manager.chimere2023_WPS(), 
-                         self.path_manager.chimere2023_run_dir_WPS(dict_mem["MemberID"]))
+            #logger.info("Linking WPS ...")
+            #safe_symlink(self.path_manager.chimere2023_WPS(), 
+            #             self.path_manager.chimere2023_run_dir_WPS(dict_mem["MemberID"]))
             #link BOUN, EMIS and METEO (from either control run or perturbed dir))
-            for date in pd.date_range(self.time_manager.start_time, self.time_manager.end_time, freq='D'):
-                date_ymd = date.strftime("%Y%m%d")
-                date_ymd00 = date.strftime("%Y%m%d00")
-                date_month = date.strftime("%m")
-                date_weekday = date.strftime("%A")
-                safe_symlink(self.path_manager.chimere2023_EMIS_FILE_SRC("EmisID" in dict_mem.keys(), self.domain, date_month, date_weekday, dict_mem["EmisID"]),
-                             self.path_manager.chimere2023_EMI_FILE(dict_mem["MemberID"], self.domain, date_month, date_weekday))
-                safe_symlink(self.path_manager.chimere2023_METEO_FILE_SRC("MeteoID" in dict_mem.keys(), self.domain, date_ymd, dict_mem["MeteoID"]), 
-                             self.path_manager.chimere2023_METEO_FILE(dict_mem["MemberID"], self.domain, date_ymd00, 24))
-                safe_symlink(self.path_manager.chimere2023_BOUN_LIST_SRC(date_ymd, self.control_run_exp_name, self.domain), 
-                             self.path_manager.chimere2023_BOUN_LIST(date_ymd00, 24, dict_mem["MemberID"], self.domain))
-            #link first end file (if it is a continuation run, the end file in the folder is kept)
-            safe_symlink(self.path_manager.chimere2023_END_FILE_SRC(self.control_run_exp_name, self.time_manager.end_file_date_control_run.strftime("%Y%m%d")), 
-                         self.path_manager.chimere2023_END_FILE(dict_mem["MemberID"], self.time_manager.end_file_date_control_run.strftime("%Y%m%d")))
+            date_month = self.time_manager.current_time.strftime("%m")
+            date_weekday = self.time_manager.current_time.strftime("%A")
+            logger.info("Linking EMIS ...")
+            safe_symlink(self.path_manager.chimere2023_EMIS_FILE_SRC("EmisID" in dict_mem.keys(), self.domain, date_month, date_weekday, dict_mem["EmisID"]),
+                            self.path_manager.chimere2023_EMI_FILE(dict_mem["MemberID"], self.domain, date_month, date_weekday))
+            if self.restart_from_controlrun and self.time_manager.current_time == self.time_manager.start_time:
+                #link first end file
+                logger.info("Linking END ...")
+                safe_symlink(self.path_manager.chimere2023_END_FILE_SRC(self.control_run_exp_name, self.time_manager.end_file_date_control_run.strftime("%Y%m%d")), 
+                             self.path_manager.chimere2023_END_FILE(dict_mem["MemberID"], self.time_manager.end_file_date_control_run.strftime("%Y%m%d00"), 24))
+                self.current_end_file[dict_mem["MemberID"]]=self.path_manager.chimere2023_END_FILE(dict_mem["MemberID"], self.time_manager.end_file_date_control_run.strftime("%Y%m%d00"), 24)
+            else:
+                self.current_end_file[dict_mem["MemberID"]]=None
             #link anche a emis del giorno succ se ci si ferma a 00 e non ma le si vogliono
-            
             if check_and_clean_broken_links(self.path_manager.chimere2023_run_dir(dict_mem["MemberID"])):
                 raise FatalPipelineError(f"Broken links detected. Please clean up. The target needs to exists.")
             else:
                 logger.info(f">> All links are good for ENS{dict_mem['MemberID']}  ...")
+            
+            date_ymd = self.time_manager.current_time.strftime("%Y%m%d")
+            date_ymdH = self.time_manager.current_time.strftime("%Y%m%d%H")
+            date_H = self.time_manager.current_time.strftime("%H")
+            #date_ymd00 = self.time_manager.current_time.strftime("%Y%m%d00")
+            #logger.info("Linking METEO ...")
+            #safe_symlink(self.path_manager.chimere2023_METEO_FILE_SRC("MeteoID" in dict_mem.keys(), self.domain, date_ymd, dict_mem["MeteoID"]), 
+            #                self.path_manager.chimere2023_METEO_FILE(dict_mem["MemberID"], self.domain, date_ymd00, 24))
+            #logger.info("Linking BOUN ...")
+            #safe_symlink(self.path_manager.chimere2023_BOUN_LIST_SRC(date_ymd, self.control_run_exp_name, self.domain), 
+            #                self.path_manager.chimere2023_BOUN_LIST(date_ymd00, 24, dict_mem["MemberID"], self.domain))
+            
+            logger.info("Computing BOUNs for the specific hours to run")
+            #sarà da cambiare quando gireremo su piu ore
+            compute_hourly(self.path_manager.chimere2023_BOUN_LIST_SRC(date_ymd, self.control_run_exp_name, self.domain).read_text().splitlines()[1], 
+                                   int(date_H), 
+                                   self.path_manager.chimere2023_BOUN_NC(date_ymdH, 1, dict_mem["MemberID"], self.control_run_exp_name, self.domain), 
+                                   self.path_manager.chimere2023_BOUN_LIST(date_ymdH, 1, dict_mem["MemberID"], self.domain))
+            logger.info("Computing exdomouts for the specific hours to run")
+            #sarà da cambiare quando gireremo su piu ore
+            compute_hourly(str(self.path_manager.chimere2023_METEO_FILE_SRC("MeteoID" in dict_mem.keys(), self.domain, date_ymd, dict_mem["MeteoID"])), 
+                                   int(date_H), 
+                                   self.path_manager.chimere2023_METEO_FILE(dict_mem["MemberID"], self.domain, date_ymdH, 1))
+
 
     def run_model(self):
         """
         Run CHIMERE for the current time step.
         """
-        logger.info(f"[STEP] Running CHIMERE model at {self.time_manager.current_time}")
-        
-        date_ymd = self.time_manager.current_time.strftime("%Y%m%d")
+        logger.info(f"---------->>> Running CHIMERE model at {self.time_manager.current_time}")
+    
         date_ymdH = self.time_manager.current_time.strftime("%Y%m%d%H")
-        date_H = self.time_manager.current_time.strftime("%H")
-        self.time_manager.end_file_date = self.time_manager.current_time - timedelta(days=1)
-        end_file_date_ymd = self.time_manager.end_file_date.strftime("%Y%m%d")
+        self.time_manager.end_file_date = self.time_manager.current_time - timedelta(hours=1)
+        end_file_date_ymdH = self.time_manager.end_file_date.strftime("%Y%m%d%H")
 
         job_ids = []
         for mem in range(self.no_mems):
-            logger.info("Computing BOUNs for the specific hours to run")
-            #sarà da cambiare quando gireremo su piu ore
-            compute_hourly(self.path_manager.chimere2023_BOUN_LIST(date_ymdH, 24, mem, self.domain).read_text().splitlines()[1], 
-                                   int(date_H), 
-                                   self.path_manager.chimere2023_BOUN_NC(date_ymdH, 1, mem, self.control_run_exp_name, self.domain), 
-                                   self.path_manager.chimere2023_BOUN_LIST(date_ymdH, 1, mem, self.domain))
-            logger.info("Computing exdomouts for the specific hours to run")
-            #sarà da cambiare quando gireremo su piu ore
-            compute_hourly(str(self.path_manager.chimere2023_METEO_FILE(mem, self.domain, date_ymdH, 24)), 
-                                   int(date_H), 
-                                   self.path_manager.chimere2023_METEO_FILE(mem, self.domain, date_ymdH, 1))
             try:
                 logger.info("Replacing @TOKENS in CHIMERE .par template file ...")
                 logger.info(f"The output directory (run_dir) is: {self.path_manager.chimere2023_run_dir(mem)}")
@@ -162,7 +174,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
                         "@LAB": f"ENS{mem}",
                         "@SIMULDIR": self.path_manager.chimere2023_run_dir(mem),
                         "@IUSEINI": "2",
-                        "@ENDFILE": self.path_manager.chimere2023_END_FILE(mem, end_file_date_ymd), #per ora c'é 24 dentro 
+                        "@ENDFILE": self.path_manager.chimere2023_END_FILE(mem, end_file_date_ymdH, 1) if self.current_end_file[mem] is None else self.current_end_file[mem],
                         "@EMISSDIR": self.path_manager.chimere2023_run_dir(mem)
                     },
                     output_nml_path=self.path_manager.chimere2023_PAR_FILE(mem)
@@ -195,7 +207,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
                 raise FatalPipelineError(f"Failed to prepare CHIMERE submit script: {e}")
             
             logger.info(f"Queuing job for member {mem}...")
-            if len(job_ids)==0 or not self.config.model_data.submit_sequentially:
+            if len(job_ids)==0 or not self.submit_sequentially:
                 submit_command = f"ccc_msub ./{self.path_manager.chimere2023_BASH_SUBMIT_SCRIPT(mem).name}"
             else:
                 submit_command = f"ccc_msub -a {job_ids[-1]} ./{self.path_manager.chimere2023_BASH_SUBMIT_SCRIPT(mem).name}"
@@ -207,12 +219,13 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
             
         logger.info(f"Checking job status ...")
         mems_to_rerun = get_list_mems_to_rerun(
-            job_ids,
-            self.scheduler,
-            self.model_type,
+            job_ids=job_ids,
+            scheduler=self.scheduler,
+            model_type=self.model_type,
+            path_manager=self.path_manager,
+            timestamp_model=date_ymdH,
+            no_mems=self.no_mems
             )
-        #if not mems_to_rerun:
-        #    raise ModelRunError("submission stopped")
         if mems_to_rerun:
             raise ModelRunError(f"Ensemble members failed: {mems_to_rerun}")
         logger.info(f" Run_model() compled successfully.")

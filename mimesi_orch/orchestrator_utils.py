@@ -901,6 +901,7 @@ def get_list_mems_to_rerun(
     #datetime_model_p1 = pd.to_datetime(timestamp_model, format="%Y%m%d%H") + timedelta(
     #    hours=1
     #)
+    datetime_model_p1=timestamp_model
 
     while True:
         running_jobs = []
@@ -909,7 +910,7 @@ def get_list_mems_to_rerun(
             if scheduler == Scheduler.SLURM:
                 finished = check_job_status_slurm(
                     jobid, which_run=model_type.value.upper()
-                ) #da cambiare, ritorna finished anche se é fallito o se é pending !
+                )
             else:
                 finished = check_job_status_cresco(
                     jobid, which_run=model_type.value.upper()
@@ -920,42 +921,43 @@ def get_list_mems_to_rerun(
 
         if not running_jobs:
             logger.info(f"Jobs {job_ids} have finished")
-            return False
         
-            #return check_ic_g1_existing(
-            #    path_manager=path_manager,
-            #    model=model_type,
-            #    datetime_model=datetime_model_p1,
-            #    no_mems=no_mems,
-            #)
+            return check_restart_files_exist(
+                path_manager=path_manager,
+                model=model_type,
+                datetime_model=datetime_model_p1,
+                no_mems=no_mems,
+            )
 
         logger.info(f"Jobs still running: {running_jobs}. Waiting...")
         time.sleep(30)
 
 
-def check_ic_g1_existing(
+def check_restart_files_exist(
     path_manager: PathManager,
     model: ModelType,
-    datetime_farm: pd.Timestamp,
     no_mems: int,
+    #datetime_farm: Optional[pd.Timestamp] = None,
+    datetime_model: Optional[str] = None,
 ) -> list[int]:
 
     mems_to_rerun = []
 
     for mem in range(no_mems):
-        ic_path = path_manager.get_ic_g1_path(
-            model=model,
-            mem=mem,
-            timestamp=datetime_farm,
-        )
+        #ic_path = path_manager.get_ic_g1_path(
+        #    model=model,
+        #    mem=mem,
+        #    timestamp=datetime,
+        #)
+        ic_path = path_manager.chimere2023_END_FILE(mem, datetime_model, 1)
 
         if ic_path.exists() and ic_path.stat().st_size > 0:
             logger.info(
-                f"{model} | ic_g1 exists for mem {mem} "
+                f"{model} | restart_file {ic_path} exists for mem {mem} "
                 f"({ic_path.stat().st_size} bytes)"
             )
         else:
-            logger.warning(f"{model} | ic_g1 missing for mem {mem}")
+            logger.warning(f"{model} | restart_file {ic_path} missing for mem {mem}")
             mems_to_rerun.append(mem)
 
     return mems_to_rerun

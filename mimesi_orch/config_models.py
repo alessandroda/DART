@@ -192,6 +192,7 @@ class ModelDataConfig(BaseModel):
     domain: Optional[str] = None
     chimpart: Optional[str] = None
     submit_sequentially: Optional[bool] = None
+    restart_from_controlrun: Optional[bool] = None
     perturbation_names: Optional[list] = None
     ensemble_list: Optional[list] = None
 

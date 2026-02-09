@@ -136,8 +136,8 @@ class PathManager:
     def chimere2023_END_FILE_SRC(self, control_run_exp_name: str, date_ymd: str) -> Path:
         return self.path_control_run / f"end.{date_ymd}00_24_{control_run_exp_name}.nc"
     
-    def chimere2023_END_FILE(self, mem: int, date_ymd: str) -> Path:
-        return self.chimere2023_run_dir(mem) / f"end.{date_ymd}00_24_ENS{mem}.nc"
+    def chimere2023_END_FILE(self, mem: int, date_ymdH: str, NHOURS: int) -> Path:
+        return self.chimere2023_run_dir(mem) / f"end.{date_ymdH}_{NHOURS}_ENS{mem}.nc"
     
     def chimere2023_PAR_BASE_TEMPLATE(self) -> Path:
         return self.base_path / "chimere.template_ensemble.par"
