@@ -195,7 +195,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
                 raise FatalPipelineError(f"Failed to prepare CHIMERE submit script: {e}")
             
             logger.info(f"Queuing job for member {mem}...")
-            if len(job_ids)==0 or self.config.model_data.submit_sequentially:
+            if len(job_ids)==0 or not self.config.model_data.submit_sequentially:
                 submit_command = f"ccc_msub ./{self.path_manager.chimere2023_BASH_SUBMIT_SCRIPT(mem).name}"
             else:
                 submit_command = f"ccc_msub -a {job_ids[-1]} ./{self.path_manager.chimere2023_BASH_SUBMIT_SCRIPT(mem).name}"
