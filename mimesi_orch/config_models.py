@@ -191,6 +191,7 @@ class ModelDataConfig(BaseModel):
     control_run_exp_name: Optional[str] = None
     domain: Optional[str] = None
     chimpart: Optional[str] = None
+    submit_sequentially: Optional[bool] = None
     perturbation_names: Optional[list] = None
     ensemble_list: Optional[list] = None
 

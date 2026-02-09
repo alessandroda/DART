@@ -1224,9 +1224,9 @@ def from_liststr_to_listdict(ensemble_list: list[str], labels: list[str]) -> lis
 
 def compute_hourly(data_path: str, time: int, path_saving_data: Path, path_saving_list: Optional[Path]=None) -> Path:
     data = xr.open_dataset(data_path)
-    data_sel = data.sel(Time=slice(time, time+1)) #to keep Time dimension
+    data_sel = data.sel(Time=slice(time, time+2)) #to keep Time dimension
     if len(data_sel.Times.values) == 0: #when time is saved as float (isel drops Time even with drop=False)
-        data_sel = data.sel(Time=slice(data.Time.values[time], data.Time.values[time]))
+        data_sel = data.sel(Time=slice(data.Time.values[time], data.Time.values[time+1]))
     
     data_sel.to_netcdf(path_saving_data)
     if path_saving_list:
