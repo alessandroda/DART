@@ -1109,6 +1109,7 @@ def safe_symlink(target: Path, link: Path):
     """Create a symlink safely:
     - If it exists and points correctly → do nothing
     - If it is broken → recreate
+    - If it points to the wrong target → recreate
     - Never overwrite real files/directories
     """
     if not link.parent.exists():
@@ -1131,16 +1132,25 @@ def safe_symlink(target: Path, link: Path):
                     link.unlink()
                     link.symlink_to(target) 
                 else:
-                    # Symlink exists and is valid → nothing to do
-                    ##ERRORE: puo essere che sia un refuso é punti non a quello che dovrebbe puntare
-                    logger.info(f"Symlink already exists and is valid: {link}")
+                    # Symlink exists and is valid → verify target
+                    try:
+                        current_target = link.resolve(strict=False)
+                        expected_target = target.resolve()
+
+                        if current_target != expected_target:
+                            logger.info(
+                                f"Symlink points to wrong target "
+                                f"({current_target}). Recreating: {link}"
+                            )
+                            link.unlink()
+                            link.symlink_to(target)
+                        else:
+                            logger.info(f"Symlink already exists and is correct: {link}")
+                    except OSError as e:
+                        logger.error(f"Error verifying symlink {link}: {e}")
             else:
                 # Path exists but is a file or directory → skip
-                logger.warning(f"{link} exists and is not a symlink. Skipping. \
-                               Most likely this run is a continuation of previous runs. If not, \
-                               this run then needs to start from the contrul run from this current \
-                               time: please remove from the ensemble folders the specific end files \
-                               to allow the linking")
+                logger.warning(f"{link} exists and is not a symlink. Skipping linking.")
                 
 def check_and_clean_broken_links(run_dir: Path) -> bool:
     """

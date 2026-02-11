@@ -1,2 +1,3 @@
 source /ccc/cont003/home/lisa/demoling/CHIMDART_env/bin/activate
 python -u orchestrator_irene.py -c config_pydantic_irene.yaml
+/ccc/cont003/dsku/blanchet/home/user/lisa/descomga/INVERSION/DART_CHIM
