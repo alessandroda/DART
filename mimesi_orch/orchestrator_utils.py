@@ -921,6 +921,7 @@ def get_list_mems_to_rerun(
 
         if not running_jobs:
             logger.info(f"Jobs {job_ids} have finished")
+            logger.info(f"Checking if runs failed ...")
         
             return check_restart_files_exist(
                 path_manager=path_manager,

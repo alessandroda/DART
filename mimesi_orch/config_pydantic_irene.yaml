@@ -16,8 +16,8 @@ paths:
 
 
 time:
-  start_time: "2020-02-06 02:00:00"
-  end_time: "2020-02-06 04:00:00"
+  start_time: "2020-02-06 23:00:00"
+  end_time: "2020-02-07 00:00:00"
   dt_seconds: 3600
 
 
