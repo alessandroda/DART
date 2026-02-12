@@ -34,7 +34,11 @@ class PathManager:
         self.run_submit_replace_perturbations = self._resolve(
             config.run_submit_replace_perturbations
         )
-
+        self.chimere_par_template = (
+                self._resolve(config.chimere_par_template)
+                if config.chimere_par_template is not None
+                else None
+        )
         self._check_static_paths()
 
     # ------------------------------------------------------------------
@@ -57,9 +61,12 @@ class PathManager:
             "path_filter": self.path_filter,
             "path_data": self.path_data,
             "run_submit_replace_perturbations": self.run_submit_replace_perturbations,
+            "chimere_par_template" : self.chimere_par_template
         }
 
         for name, path in paths.items():
+            if path is None:
+                continue
             if not path.exists():
                 raise FileNotFoundError(f"[PathManager] {name} not found: {path}")
             if self.log_paths:

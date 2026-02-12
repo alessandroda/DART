@@ -38,7 +38,7 @@ class PathsConfig(BaseModel):
     path_submit_bsh: Path
     path_filter: Path
     path_data: Path
-
+    chimere_par_template: Optional[Path] = None
     run_submit_replace_perturbations: Optional[Path] = None
     log_directory: Optional[Path] = None
 

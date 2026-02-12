@@ -11,7 +11,7 @@ import time
 import logging
 import pandas as pd
 import re
-from mimesi_orch.pipeline_errors import SchedulerError
+from pipeline_errors import SchedulerError
 from mimesi_types import ModelType, Scheduler
 from paths import PathManager
 from scheduler import submit_job, wait_for_slurm_jobs

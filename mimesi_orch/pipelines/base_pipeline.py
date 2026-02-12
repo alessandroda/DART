@@ -70,7 +70,7 @@ class BaseAssimilationPipeline(ABC):
         exceeds `time_manager.end_time`.
         """
 
-        logger.info("[MIMESI] ---- TIME LOOP START ----")
+        logger.info("[STEP] ---- TIME LOOP START ----")
 
         while self.time_manager.current_time <= self.time_manager.end_time:
             try:
@@ -85,6 +85,10 @@ class BaseAssimilationPipeline(ABC):
                 self.time_manager.simulated_time = (
                     self.time_manager.current_time + timedelta(hours=1)
                 )
+                #self.time_manager.simulated_time = (
+                #    self.time_manager.current_time + hours_simulated
+                #)
+
 
                 # Convert simulated_time to (days, seconds) for DA systems
                 self.set_days_seconds_model()

@@ -11,6 +11,8 @@ from pipelines.base_pipeline import BaseAssimilationPipeline
 import logging
 import os
 import pandas as pd
+import subprocess
+
 from orchestrator_utils import (
     CommandSpec,
     check_job_status_cresco,
@@ -76,10 +78,161 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         logger.info(f"Using scheduler={self.scheduler}, queue={self.cineca_queue}")
 
     def before_step(self):
-        pass
+        self.update_ibc_inputs()
+        self.update_meteo_input()
 
     def cleanup_CHIMERE2017(self):
         pass
+
+    def _read_boun_list_target(self, list_path: Path) -> Path:
+        try:
+            lines = [
+                line.strip()
+                for line in list_path.read_text().splitlines()
+                if line.strip()
+            ]
+        except FileNotFoundError as e:
+            raise FatalPipelineError(f"Missing IBC list file: {list_path}") from e
+        except Exception as e:
+            raise FatalPipelineError(f"Failed reading IBC list {list_path}: {e}") from e
+
+        if not lines:
+            raise FatalPipelineError(f"IBC list is empty: {list_path}")
+
+        if len(lines) > 1 and lines[0].isdigit():
+            return Path(lines[1])
+
+        return Path(lines[-1])
+
+    def _resolve_boun_daily_list(self, daily_list_name: str) -> Path:
+        ibc_dir = self.path_manager.path_data / "basecase/IBC"
+        candidate = ibc_dir / daily_list_name
+        if candidate.exists():
+            return candidate
+        raise FatalPipelineError(
+            f"Daily BOUN list not found in any IBC dir: {daily_list_name}"
+        )
+
+    def update_ibc_inputs(self):
+        """
+        Update INI/BOUN list files and extract hourly BOUN files for CHIMERE runs.
+        """
+        current_time = self.time_manager.current_time
+        start_ts = current_time.strftime("%Y%m%d%H")
+        end_ts = (current_time + timedelta(hours=1)).strftime("%Y%m%d%H")
+        hour_index = current_time.hour
+
+        daily_start = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        daily_end = daily_start + timedelta(days=1)
+
+        daily_list_name = f"BOUN_CONCS.{daily_start:%Y%m%d%H}_{daily_end:%Y%m%d%H}_ITA7.list"
+        
+        daily_boun_list_path = self._resolve_boun_daily_list(daily_list_name)
+        daily_boun_path = self._read_boun_list_target(daily_boun_list_path)
+
+        if not daily_boun_path.exists():
+            raise FatalPipelineError(
+                f"Daily BOUN netcdf not found: {daily_boun_path}"
+            )
+
+        templates_dir = self.path_manager.path_submit_bsh / "templates"
+        ini_template = (
+            templates_dir / "INI_CONCS.YYYYMMDDHH_YYYYMMDDHH+dh_ITA7_template.list"
+        )
+        boun_template = (
+            templates_dir / "BOUN_CONCS.YYYYMMDDHH_YYYYMMDDHH+dh_ITA7_template.list"
+        )
+        if not ini_template.exists():
+            raise FatalPipelineError(f"Missing INI template: {ini_template}")
+        if not boun_template.exists():
+            raise FatalPipelineError(f"Missing BOUN template: {boun_template}")
+
+        for mem in range(self.no_mems):
+            mem_ibc_dir = self.path_manager.path_data / f"RUN_{mem}/IBC"
+            mem_ibc_dir.mkdir(parents=True, exist_ok=True)
+
+            hourly_boun_nc = (
+                mem_ibc_dir / f"BOUN_CONCS.{start_ts}_{end_ts}_ITA7.nc"
+            )
+            try:
+                subprocess.run(
+                    [
+                        "ncks",
+                        "-O",
+                        "-d",
+                        f"Time,{hour_index},{hour_index+1}",
+                        str(daily_boun_path),
+                        str(hourly_boun_nc),
+                    ],
+                    check=True,
+                )
+            except subprocess.CalledProcessError as e:
+                raise FatalPipelineError(
+                    f"ncks failed extracting hour {hour_index} from {daily_boun_path}"
+                ) from e
+
+            replace_nml_template(
+                input_nml_path=str(boun_template),
+                entries_tbr_dict={
+                    "@mimesi_path_data": str(self.path_manager.path_data),
+                    "@mimesi_ens_memeber": mem,
+                    "@mimesi_start_date": start_ts,
+                    "@mimesi_end_date": end_ts,
+                },
+                output_nml_path=str(
+                    mem_ibc_dir / f"BOUN_CONCS.{start_ts}_{end_ts}_ITA7.list"
+                ),
+            )
+
+            replace_nml_template(
+                input_nml_path=str(ini_template),
+                entries_tbr_dict={
+                    "YYYYMMDDHH+dh": end_ts,
+                    "YYYYMMDDHH": start_ts,
+                    "@mimesi_path_data": str(self.path_manager.path_data),
+                    "@mimesi_ens_member": mem,
+                },
+                output_nml_path=str(
+                    mem_ibc_dir / f"INI_CONCS.{start_ts}_{end_ts}_ITA7.list"
+                ),
+            )
+
+    def update_meteo_input(self):
+        current_time = self.time_manager.current_time
+        start_ts = current_time.strftime("%Y%m%d%H")
+        end_ts = (current_time + timedelta(hours=1)).strftime("%Y%m%d%H")
+        hour_index = current_time.hour
+
+        daily_start = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        daily_end = daily_start + timedelta(days=1)
+
+        meteo_dir = self.path_manager.path_data / "ATM"
+        meteo_daily_name = (
+            f"exdomout.{daily_start:%Y%m%d%H}_{daily_end:%Y%m%d%H}_ITA7.nc"
+        )
+        meteo_daily_path = meteo_dir / meteo_daily_name
+        if not meteo_daily_path.exists():
+            raise FatalPipelineError(f"Daily meteo netcdf not found: {meteo_daily_path}")
+
+        meteo_dir.mkdir(parents=True, exist_ok=True)
+        hourly_meteo_nc = meteo_dir / f"exdomout.{start_ts}_{end_ts}_ITA7.nc"
+        try:
+            subprocess.run(
+                [
+                    "ncks",
+                    "-O",
+                    "-d",
+                    f"Time,{hour_index},{hour_index+1}",
+                    str(meteo_daily_path),
+                    str(hourly_meteo_nc),
+                ],
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            raise FatalPipelineError(
+                f"ncks failed extracting hour {hour_index} from {meteo_daily_path}"
+            ) from e
+
 
     def replace_perturb_into_original_emissions(self):
         pass
@@ -90,9 +243,62 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         """
     
         modify_yaml_date(
-            self.config["_config_path"],
+            self.config._config_path,
             self.time_manager.simulated_time.strftime("%Y-%m-%d %H:00:00"),
         )
+    def _prepare_chimere_run_assets(self) -> tuple[Path, Path]:
+        
+        run_dir = self.path_manager.path_submit_bsh / "runs"
+        pars_dir = self.path_manager.path_submit_bsh / "pars"
+        templates_dir = self.path_manager.path_submit_bsh / "templates"
+        
+        lancia_script = (
+            self.path_manager.path_submit_bsh / "lancia" / "lancia_chimere_m_nh.sh"
+        )
+
+        for d in (run_dir, pars_dir, templates_dir):
+            d.mkdir(parents=True, exist_ok=True)
+
+        
+        par_template = self.path_manager.chimere_par_template
+        if par_template is None:
+            par_template = (
+                self.path_manager.base_path
+                / "catena_aria_test/config/mimesi/chimere.mimesi-ITA7_template.par"
+            )
+            logger.warning(
+                f"chimere_par_template not set; using default: {par_template}"
+            )
+        if not par_template.exists():
+            raise FatalPipelineError(f"CHIMERE par template not found: {par_template}")
+
+        
+        par_name = par_template.name
+        if par_name.endswith("_template.par"):
+            par_prefix = par_name.replace("_template.par", "")
+        elif par_name.endswith(".par"):
+            par_prefix = Path(par_name).stem
+        else:
+            par_prefix = par_name
+
+        for mem in range(self.no_mems):
+            output_par = pars_dir / f"{par_prefix}_{mem}.par"
+            try:
+                replace_nml_template(
+                    input_nml_path=str(par_template),
+                    entries_tbr_dict={"@mimesi_ens_member": mem},
+                    output_nml_path=str(output_par),
+                )
+            except Exception as e:
+                raise FatalPipelineError(
+                    f"Failed to prepare par file {output_par}: {e}"
+                )
+
+        if not lancia_script.exists():
+            raise FatalPipelineError(f"Missing lancia script: {lancia_script}")
+
+        return run_dir, lancia_script
+
 
     def run_model(self):
         """
@@ -108,6 +314,8 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             self.time_manager.current_time
         ).strftime("%Y%m%d%H")
 
+        run_dir, lancia_script = self._prepare_chimere_run_assets()
+
         file_run_ens = self.path_manager.chimere_name_run_sub_ens_bash(
             timestamp_chimere
         )
@@ -119,6 +327,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                     "@mimesi_dh_inizio": "0",  # this becomes variable
                     "@mimesi_nhours_list": "1",  # this becomes variable
                     "@mimesi_ens_size": self.no_mems,
+                    "@mimesi_lancia_script": lancia_script
                 },
                 output_nml_path=self.path_manager.path_submit_bsh / file_run_ens,
             )
@@ -127,7 +336,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
         command = CommandSpec(
             command=file_run_ens,
-            args=timestamp_arg_run_chimere.split(),
+            args=[timestamp_arg_run_chimere],
             directory=self.path_manager.path_submit_bsh,
         )
 
