@@ -22,6 +22,7 @@ Key design principles
 from abc import ABC, abstractmethod
 from datetime import timedelta
 import logging
+import pipeline_errors
 from orchestrator_utils import set_date_gregorian
 
 logger = logging.getLogger(__name__)
@@ -69,38 +70,54 @@ class BaseAssimilationPipeline(ABC):
         exceeds `time_manager.end_time`.
         """
 
-        logger.info("[MIMESI] ---- TIME LOOP START ----")
+        logger.info("[STEP] ---- TIME LOOP START ----")
 
         while self.time_manager.current_time <= self.time_manager.end_time:
-            # Optional hook: e.g. emission perturbations, cleanup
-            self.before_step()
+            try:
+                # Optional hook: e.g. emission perturbations, cleanup
+                self.before_step()
 
-            # Run the forward model (mandatory)
-            self.run_model()
+                # Run the forward model (mandatory)
+                self.run_model()
 
-            # Define the time associated with model outputs
-            # (typically current_time + forecast step)
-            self.time_manager.simulated_time = (
-                self.time_manager.current_time + timedelta(hours=1)
-            )
+                # Define the time associated with model outputs
+                # (typically current_time + forecast step)
+                self.time_manager.simulated_time = (
+                    self.time_manager.current_time + timedelta(hours=1)
+                )
+                #self.time_manager.simulated_time = (
+                #    self.time_manager.current_time + hours_simulated
+                #)
 
-            # Convert simulated_time to (days, seconds) for DA systems
-            self.set_days_seconds_model()
 
-            # Optional hook: prepare model outputs for assimilation
-            self.after_model()
+                # Convert simulated_time to (days, seconds) for DA systems
+                self.set_days_seconds_model()
 
-            logger.info(f"Increment time")
-            self.time_manager.increment_time()
+                # Optional hook: prepare model outputs for assimilation
+                self.after_model()
 
-            # Perform data assimilation if applicable
-            self.run_assimilation_if_needed()
+                logger.info(f"Increment time")
+                self.time_manager.increment_time()
 
-            # Optional hook: map analysis back to the model
-            self.after_assimilation()
+                # Perform data assimilation if applicable
+                try:
+                    self.run_assimilation_if_needed()
+                except pipeline_errors.SkipAssimilation as e:
+                    logger.info(f"[DART] Skipped: {e}")
 
-            # Optional hook: cleanup, logging, archiving
-            self.finalize_step()
+                # Optional hook: map analysis back to the model
+                self.after_assimilation()
+
+                # Optional hook: cleanup, logging, archiving
+                self.finalize_step()
+
+            except pipeline_errors.FatalPipelineError as e:
+                logger.critical(f"[PIPELINE] Fatal error: {e}")
+                raise
+
+            except pipeline_errors.PipelineError as e:
+                logger.error(f"[PIPELINE] Error: {e}")
+                raise
 
         logger.info("[PIPELINE] ---- TIME LOOP END ----")
 

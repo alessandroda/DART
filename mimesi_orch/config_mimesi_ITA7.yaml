@@ -1,0 +1,42 @@
+assimilation:
+  ass_var: c_NO2
+  case_dir: data_freerun
+  case_emi_dir: emi
+  emi_var: NO2
+  model_type: CHIMERE
+  no_mems: 3
+  obs_type: SAT_NO2_TROPOMI
+  run_assimilation_flag: false
+  state_variable_qty: QTY_NO2
+cluster:
+  cluster_queue: g100_usr_prod
+  scheduler: SLURM
+dart:
+  analysis_dir: RUN/data_freerun/analysis
+  obs_converters_dir: DART/observations/obs_converters/S5P_TROPOMI_L3
+  posteriors_dir: RUN/data_freerun/posteriors
+  preassim_dir: RUN/data_freerun/preassim
+  work_dir: DART/models/FARM/work_freerun
+logging:
+  format: '%(asctime)s [%(processName)s/%(threadName)s] %(levelname)s: %(message)s'
+  level: INFO
+paths:
+  base_path: /g100_work/ARPAE_AQM/MIMESI/
+  chimere_par_template: catena_aria_test/Chimere/auto_runs/templates/chimere.mimesi-ITA7_template.par
+  env_python: miniconda3/bin/python3.13
+  listing_file: DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03__listing.csv
+  log_directory: logs_orchestrator
+  path_data: runs_chimere/ITA7
+  path_filter: DART/models/CHIMERE_v2017r/work_offline
+  path_submit_bsh: catena_aria_test/Chimere/auto_runs
+  run_submit_model_template: catena_aria_test/Chimere/auto_runs/templates/run_mimesi-ITA7_template.sh
+  run_submit_replace_perturbations: DART/mimesi_orch/perturbation/bash_emissions/submit_replace_perturb_into_original_emission_arg.sh
+satellite_data:
+  search_window_seconds: 1800
+time:
+  backup_ic_hours: 48
+  backup_ic_option: hourly
+  backup_perturb_days: 2
+  dt_seconds: 3600
+  end_time: '2026-01-26 00:00:00'
+  start_time: '2026-01-25 07:00:00'

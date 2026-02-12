@@ -7,6 +7,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+
 class PathManager:
     """
     Centralized filesystem API for MIMESI.
@@ -34,6 +35,12 @@ class PathManager:
         self.run_submit_replace_perturbations = self._resolve(
             config.run_submit_replace_perturbations
         )
+        self.chimere_par_template = (
+                self._resolve(config.chimere_par_template)
+                if config.chimere_par_template is not None
+                else None
+        )
+        self._check_static_paths()
         self.path_control_run = self._resolve(config.path_control_run)
         self.path_perturbed_emi = self._resolve(config.path_perturbed_emi)
         self.path_perturbed_meteo = self._resolve(config.path_perturbed_meteo)
@@ -70,6 +77,8 @@ class PathManager:
         }
 
         for name, path in paths.items():
+            if path is None:
+                continue
             if not path.exists():
                 raise FileNotFoundError(f"[PathManager] {name} not found: {path}")
             if self.log_paths:
@@ -98,9 +107,7 @@ class PathManager:
     # CHIMERE v2017 paths
     # ------------------------------------------------------------------
     def chimere_name_run_sub_ens_bash(self, string_to_replace_template) -> Path:
-        return (
-            self.path_submit_bsh / f"run_mimesi_ens_member_{string_to_replace_template}"
-        )
+        return f"run_mimesi_ens_{string_to_replace_template}.sh"
 
     def chimere_output_runs_dir(self, mem: int) -> Path:
         return self.path_data / f"runs_chimere/ITA7/RUNS_{mem}"

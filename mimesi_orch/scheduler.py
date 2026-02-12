@@ -14,7 +14,6 @@ def submit_sbatch(command: Path, workdir: Path) -> list[str]:
         os.chdir(workdir)
 
         subprocess.run(["chmod", "+x", command], check=True)
-
         result = subprocess.run(
             ["sbatch", str(command)],
             capture_output=True,

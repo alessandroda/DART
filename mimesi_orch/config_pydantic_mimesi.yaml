@@ -2,18 +2,18 @@ paths:
   base_path: /g100_work/ARPAE_AQM/MIMESI/
   env_python: miniconda3/bin/python3.13
 
-  listing_file: assim_mimesi/DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03__listing.csv
+  listing_file: DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03__listing.csv
   run_submit_model_template: catena_aria_test/Chimere/run_mimesi-ITA7_template.sh
   path_submit_bsh: catena_aria_test/Chimere/auto_runs
-  path_filter: assim_mimesi/DART/models/CHIMERE_v2017r/work_offline
+  path_filter: DART/models/CHIMERE_v2017r/work_offline
   path_data: runs_chimere/ITA7
-  run_submit_replace_perturbations: assim_mimesi/DART/mimesi_orch/perturbation/bash_emissions/submit_replace_perturb_into_original_emission_arg.sh
+  run_submit_replace_perturbations: DART/mimesi_orch/perturbation/bash_emissions/submit_replace_perturb_into_original_emission_arg.sh
   log_directory: logs_orchestrator
 
 
 time:
-  start_time: "2023-08-06 19:00:00"
-  end_time: "2023-08-31 23:00:00"
+  start_time: "2026-01-25 00:00:00"
+  end_time: "2026-01-26 01:00:00"
   dt_seconds: 3600
 
   backup_perturb_days: 2

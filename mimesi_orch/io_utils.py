@@ -20,6 +20,11 @@ from scheduler import Scheduler, submit_job, wait_for_slurm_jobs
 
 logger = logging.getLogger(__name__)
 
+I0 = ""
+I1 = "  "
+I2 = "    "
+I3 = "      "
+
 
 def process_member(
     mem, path_manager, timestamp_farm, rounded_timestamp, seconds_model, days_model
@@ -399,7 +404,6 @@ def prepare_dart_to_farm_nc(
                 f"{path_manager.path_data}/OUTPUT_{mem}/OUT/prior/"
             )
             prior_farm_folder.mkdir(parents=True, exist_ok=True)
-            # breakpoint()
             prior_from_farm_file = prior_farm_folder / f"ic_g1_{time_model}.nc"
 
             # first to delete variable ass_var
@@ -413,8 +417,7 @@ def prepare_dart_to_farm_nc(
 
             with open("subprocess_output.log", "w") as log_file:
                 logger.info("0: Storing prior elsewhere")
-                # breakpoint()
-
+               
                 subprocess.run(
                     ["mv", result, prior_from_farm_file],
                     stdout=log_file,

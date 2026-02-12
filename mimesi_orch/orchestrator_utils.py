@@ -14,10 +14,15 @@ import logging
 import pandas as pd
 import re
 from pipeline_errors import SchedulerError
+from pipeline_errors import SchedulerError
 from mimesi_types import ModelType, Scheduler
 from paths import PathManager
 import shlex
 from scheduler import submit_job, wait_for_slurm_jobs
+from typing import Iterable, Optional, Union
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
+import shlex
 
 logger = logging.getLogger(__name__)
 
@@ -231,6 +236,7 @@ def is_leap_year(year):
 
 days_per_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]  # Days in each month
 
+
 def run_command_in_directory(spec: CommandSpec) -> Tuple[int, Optional[str]]:
     logger = logging.getLogger(__name__)
     original_directory = os.getcwd()
@@ -295,7 +301,7 @@ def run_command_in_directory(spec: CommandSpec) -> Tuple[int, Optional[str]]:
             raise RuntimeError(
                 "No Slurm job IDs found in output.\n" "Expected lines like: ID:<jobid>"
             )
-        return result.returncode, job_ids[0]
+        return result.returncode, job_ids
     finally:
         os.chdir(original_directory)
 
@@ -338,20 +344,6 @@ def run_command_in_directory_bsub(
         os.chdir(original_directory)
     return jobid
 
-def submit_irene(spec: CommandSpec) -> str:
-    rc, job_id = run_command_in_directory(spec)
-
-    if rc != 0:
-        raise SchedulerError(
-            f"Submission command failed: {spec.command} " f"(return code {rc})"
-        )
-    if not job_id:
-        raise SchedulerError(f"No job id returned by command {spec.command}")
-    
-    time.sleep(5)
-    logger.info(f"[TGCC-IRENE] Submitted job with ID:{job_id}")
-
-    return job_id
 
 def submit_and_wait_cineca(
     path_manager: PathManager,
@@ -377,74 +369,6 @@ def submit_and_wait_cineca(
 
     return job_ids
 
-def submit_and_wait_slurm(
-    model_type: ModelType,
-    path_manager: PathManager,
-    scheduler: Scheduler,
-    commands_with_directories: list[tuple[Path, Path]],
-    timestamp_model: str,
-    no_mems: int,
-    case_dir: str,
-    queue: str,
-    max_retries: int = 2,
-) -> bool:
-
-    attempt = 0
-
-    while attempt <= max_retries:
-        attempt += 1
-        logger.info(f"SLURM submission attempt {attempt}")
-
-        # --- submit ---
-        all_job_ids = []
-        for command, directory in commands_with_directories:
-            job_ids = submit_job(scheduler, command, directory)
-            all_job_ids.extend(job_ids)
-            time.sleep(2)
-
-        # --- wait until finished ---
-        wait_for_slurm_jobs(all_job_ids)
-
-        # --- inspect outputs ---
-        mems_to_rerun = get_list_mems_to_rerun(
-            all_job_ids,
-            path_manager,
-            timestamp_model,
-            no_mems,
-        )
-
-        if not mems_to_rerun:
-            logger.info("All ensemble members completed successfully")
-            return True
-
-        logger.warning(f"Members to rerun: {mems_to_rerun}")
-
-        if attempt >= max_retries:
-            raise RuntimeError(
-                f"SLURM retries exceeded. Failed members: {mems_to_rerun}"
-            )
-
-        # --- prepare rerun script ---
-        list_mems = [str(mem) for mem in mems_to_rerun]
-
-        replace_nml_template(
-            input_nml_path=path_manager.base_path.run_submit_model_template,
-            entries_tbr_dict={
-                "da_date_start": timestamp_model,
-                "da_date_end": timestamp_model,
-                "@no_mems_list": str(tuple(list_mems)).replace(",", ""),
-                "@case_dir": case_dir,
-                "@cresco_queue": queue,
-            },
-            output_nml_path=commands_with_directories[0][1]
-            / commands_with_directories[0][0],
-        )
-
-        # Only rerun failed members
-        commands_with_directories = [commands_with_directories[0]]
-
-    return False
-
 
 def searchFile(t1, t2, listing):
     orbit_filename = listing[["filename", "start_time"]][
@@ -454,38 +378,33 @@ def searchFile(t1, t2, listing):
 
 
 def replace_nml_template(
-    input_nml_path: str, entries_tbr_dict: dict, output_nml_path: str
+    input_nml_path: str,
+    entries_tbr_dict: dict,
+    output_nml_path: str,
 ):
-    # Validate input dictionary
     if not isinstance(entries_tbr_dict, dict):
-        print("Error: 'entries_tbr_dict' must be a dictionary.")
-        return
+        raise TypeError("'entries_tbr_dict' must be a dictionary")
 
-    # Read input file
     try:
         with open(input_nml_path, "r") as f1:
             input_nml = f1.read()
-    except FileNotFoundError:
-        print(f"Error: Input file '{input_nml_path}' not found.")
-        return
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"Input template not found: {input_nml_path}") from e
     except Exception as e:
-        print(f"Error reading input file: {e}")
-        return
+        raise RuntimeError(f"Error reading input template {input_nml_path}") from e
 
-    # Replace entries
     for key, value in entries_tbr_dict.items():
         input_nml = input_nml.replace(key, str(value))
 
-    # Write to output file
     try:
         with open(output_nml_path, "w") as f2:
             f2.write(input_nml)
+        os.chmod(output_nml_path, 0o775)
     except Exception as e:
-        print(f"Error writing to output file: {e}")
-        return
+        raise RuntimeError(f"Error writing output file {output_nml_path}") from e
 
     logger.info(
-        f"Replacement {input_nml_path} to {output_nml_path} completed successfully."
+        f"Replacement {input_nml_path} → {output_nml_path} completed successfully."
     )
 
 
@@ -897,6 +816,13 @@ def get_list_mems_to_rerun(
     timestamp_model: Optional[str] = None,
     no_mems: Optional[int] = None
 ) -> list[int]:
+    """Block until all jobs in job_ids have finished.
+    Return list of ensemble members that did not produce valid outputs.
+    Empty list means success.
+    """
+    datetime_model_p1 = pd.to_datetime(timestamp_model, format="%Y%m%d%H") + timedelta(
+        hours=1
+    )
 
     #datetime_model_p1 = pd.to_datetime(timestamp_model, format="%Y%m%d%H") + timedelta(
     #    hours=1

@@ -36,10 +36,9 @@ class PathsConfig(BaseModel):
 
     run_submit_model_template:  Optional[Path] = None
     path_submit_bsh: Path
-    path_filter: Path 
-    path_data: Path #dal nome non é chiaro come verrà utilizzato; mi pare siano i risultati, percio perche non path_outputs ? 
-    path_control_run: Optional[Path] = None
-
+    path_filter: Path
+    path_data: Path
+    chimere_par_template: Optional[Path] = None
     run_submit_replace_perturbations: Optional[Path] = None
     path_perturbed_emi: Optional[Path] = None
     path_perturbed_meteo: Optional[Path] = None
