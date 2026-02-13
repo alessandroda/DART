@@ -5,9 +5,9 @@ import yaml
 
 from pathlib import Path
 from orchestrator_utils import TimeManager
-from pipelines.chimere_irene_pipeline import ChimereV2023DartPipeline
 from config_models import AppConfig
 from paths import PathManager
+from pipelines.factory import build_pipeline
 
 
 parser = argparse.ArgumentParser(description="Python orchestrator for CHIMERE-DART")
@@ -50,6 +50,5 @@ time_manager = TimeManager(
     end_time=config.time.end_time,
     dt_seconds=config.time.dt_seconds,
 )
-path_manager = PathManager(config.paths)
-pipeline = ChimereV2023DartPipeline(time_manager, path_manager, config)
+pipeline = build_pipeline(config, time_manager)
 pipeline.run_pipeline()
