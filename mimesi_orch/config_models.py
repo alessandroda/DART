@@ -29,7 +29,8 @@ class PathsConfig(BaseModel):
     All paths are relative to base_path unless explicitly absolute.
     """
 
-    base_path: Path
+    base_path_ctm: Path
+    base_path_DART: Path
     env_python: Path
 
     listing_file: Path
@@ -177,6 +178,10 @@ class SatelliteDataConfig(BaseModel):
     """
 
     search_window_seconds: int = Field(gt=0)
+    obs_name: str
+    collection: str
+    vertical_ref_height: Optional[int] = None
+    superobs: Optional[str] = None
 
 # ---------------------------------------------------------------------
 # MODEL DATA
@@ -195,6 +200,13 @@ class ModelDataConfig(BaseModel):
     restart_from_controlrun: Optional[bool] = None
     perturbation_names: Optional[list] = None
     ensemble_list: Optional[list] = None
+    dom_west: Optional[float] = None
+    dom_east: Optional[float] = None
+    dom_south: Optional[float] = None
+    dom_north: Optional[float] = None
+    nz: Optional[int] = None
+    dlon: Optional[float] = None
+    dlat: Optional[float] = None
 
 
 # ---------------------------------------------------------------------

@@ -278,24 +278,26 @@ def run_command_in_directory(spec: CommandSpec) -> Tuple[int, Optional[str]]:
             cmd,
             capture_output=True,
             text=True,
-        ) #stdout='Submitted Batch Session 3561287\n'
+        )
         stdout = result.stdout.strip()
         stderr = result.stderr.strip()
 
         stdout = result.stdout
-        
         # Try strict format: ID:12345
         job_ids = re.findall(r"^ID:(\d+)$", stdout, re.MULTILINE)
+        # Fallback: stdout='Submitted Batch Session 3561287\n'
+        if not job_ids:
+            job_ids = re.findall(r"^Submitted Batch Session\s+(\d+)\s*$", stdout, re.MULTILINE)
 
         # Fallback: any number
-        if not job_ids:
-            job_ids = re.findall(r"\d+", stdout)
+        #if not job_ids:
+        #    job_ids = re.findall(r"\d+", stdout)
         
-        if not job_ids:
-            raise RuntimeError(
-                "No Slurm job IDs found in output.\n" "Expected lines like: ID:<jobid>"
-            )
-        return result.returncode, job_ids[0]
+        #f not job_ids:
+            #raise RuntimeError(
+            #    "No Slurm job IDs found in output.\n" "Expected lines like: ID:<jobid>"
+            #)
+        return result.returncode, job_ids
     finally:
         os.chdir(original_directory)
 
@@ -351,7 +353,7 @@ def submit_irene(spec: CommandSpec) -> str:
     time.sleep(5)
     logger.info(f"[TGCC-IRENE] Submitted job with ID:{job_id}")
 
-    return job_id
+    return job_id[0]
 
 def submit_and_wait_cineca(
     path_manager: PathManager,
@@ -921,7 +923,7 @@ def get_list_mems_to_rerun(
 
         if not running_jobs:
             logger.info(f"Jobs {job_ids} have finished")
-            logger.info(f"Checking if runs failed ...")
+            logger.info(f"Checking if runs succeded...")
         
             return check_restart_files_exist(
                 path_manager=path_manager,
@@ -931,7 +933,7 @@ def get_list_mems_to_rerun(
             )
 
         logger.info(f"Jobs still running: {running_jobs}. Waiting...")
-        time.sleep(30)
+        time.sleep(15)
 
 
 def check_restart_files_exist(
@@ -954,11 +956,11 @@ def check_restart_files_exist(
 
         if ic_path.exists() and ic_path.stat().st_size > 0:
             logger.info(
-                f"{model} | restart_file {ic_path} exists for mem {mem} "
+                f"{model} | restart_file exists for mem {mem}: {ic_path}"
                 f"({ic_path.stat().st_size} bytes)"
             )
         else:
-            logger.warning(f"{model} | restart_file {ic_path} missing for mem {mem}")
+            logger.warning(f"{model} | restart_file is missing for mem {mem}: {ic_path}")
             mems_to_rerun.append(mem)
 
     return mems_to_rerun

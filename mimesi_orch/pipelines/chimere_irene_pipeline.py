@@ -8,7 +8,7 @@ from mimesi_types import Scheduler
 from config_models import AppConfig
 from paths import PathManager
 from pipelines.base_pipeline import BaseAssimilationPipeline
-from pipeline_errors import FatalPipelineError, ModelRunError
+from pipeline_errors import FatalPipelineError, ModelRunError, SchedulerError
 import logging
 import os
 import pandas as pd
@@ -90,6 +90,19 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         self.chimpart = self.config.model_data.chimpart
         self.submit_sequentially = self.config.model_data.submit_sequentially
         self.restart_from_controlrun = self.config.model_data.restart_from_controlrun
+        self.dom_west = self.config.model_data.dom_west
+        self.dom_east = self.config.model_data.dom_east
+        self.dom_south = self.config.model_data.dom_south
+        self.dom_north = self.config.model_data.dom_north
+        self.nz = self.config.model_data.nz
+        self.dlon = self.config.model_data.dlon
+        self.dlat = self.config.model_data.dlat
+
+        self.search_window_seconds = self.config.satellite_data.search_window_seconds
+        self.obs_name = self.config.satellite_data.obs_name
+        self.collection = self.config.satellite_data.collection
+        self.vertical_ref_height = self.config.satellite_data.vertical_ref_height
+        self.superobs = self.config.satellite_data.superobs
 
         self.scheduler = self.config.cluster.scheduler
         logger.info(f"Using scheduler={self.scheduler}, queue={self.queue}")
@@ -216,7 +229,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
 
             job_ids.append(submit_irene(CommandSpec(
                 command=submit_command,
-                directory=self.path_manager.base_path
+                directory=self.path_manager.base_path_ctm
             )))
             
         logger.info(f"Checking job status ...")
@@ -246,22 +259,23 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         if not self.run_assimilation_flag:
             logger.info("[DART] Assimilation disabled by config")
             return
-
+        logger.info(f"---------->>> Running process_satellite_data() for {self.time_manager.current_time}")
         orbit_filename = self.process_satellite_data()
         if not orbit_filename:
             logger.info("[DART] No satellite data found, skipping assimilation")
             return
 
+        logger.info(f"---------->>> Running run_obs_converter() for {self.time_manager.current_time}")
         obs_seq_name = self.run_obs_converter(orbit_filename)
 
-        obs_path = (
-            self.path_manager.base_path
-            / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/{obs_seq_name}"
-        )
+        obs_path = (self.path_manager.dart_s5p_output_dir(self.obs_name, self.collection) / Path(obs_seq_name))
         if not obs_path.exists():
             logger.info("[DART] obs_seq not found, skipping assimilation")
             return
-
+        else:
+            logger.info(f"[DART] obs_seq created: {obs_path}")
+        logger.info('je suis ici. Skipping DART')
+        return
         self.run_dart(obs_seq_name)
 
     def process_satellite_data(self):
@@ -278,9 +292,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         orbit_filename = orbit_filename[orbit_filename["start_time"].dt.hour >= 10]
 
         if orbit_filename.empty:
-            logger.info(
-                f'No valid orbit file found after 10 AM.{orbit_filename["start_time"]}'
-            )
+            logger.info(f'No valid orbit file found after 10 AM.{orbit_filename["start_time"]}')
             return False
 
         logger.info(f"Orbit file found: {orbit_filename['filename'].values[0]}")
@@ -303,19 +315,33 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         replace_nml_template(
             self.path_manager.dart_s5p_input_template(),
             entries_tbr_dict={
-                "$file_path_s5p": self.path_manager.dart_file_s5p_orbit(orbit_filename),
+                "$file_path_s5p": self.path_manager.dart_file_s5p_orbit(orbit_filename, self.obs_name),
                 "$file_out": self.path_manager.dart_obs_seq(
-                    self.seconds_obs, self.days_obs
+                    self.seconds_obs, self.days_obs, self.obs_name, self.collection
                 ),
                 "$obs_type": self.obs_type,
+                "$dom_west": self.dom_west,
+                "$dom_east": self.dom_east,
+                "$dom_south": self.dom_south,
+                "$dom_north": self.dom_north,
+                "$nz": self.nz,
+                "$dlon": self.dlon,
+                "$dlat": self.dlat,
+                "$vertical_ref_height": self.vertical_ref_height,
+                "$superobs": self.superobs
             },
             output_nml_path=self.path_manager.dart_s5p_input(),
         )
         try:
-            run_command_in_directory(
-                "convert_s5p_tropomi_l3",
-                self.path_manager.dart_s5p_work(),
-            )
+            spec = CommandSpec(
+                command="convert_s5p_tropomi_l3",
+                directory=self.path_manager.dart_s5p_work(),
+                )
+            rc, _ = run_command_in_directory(spec)
+            if rc != 0:
+                raise SchedulerError(
+                    f"Submission command failed: {spec.command} " f"(return code {rc})"
+                )
         except Exception as e:
             logger.error(f"Error running obs converter: {e}")
             return False
@@ -330,13 +356,13 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         Path(self.output_sim_folder).mkdir(parents=True, exist_ok=True)
 
         replace_nml_template(
-            self.path_manager.base_path
+            self.path_manager.base_path_DART
             / self.path_manager.path_filter
             / "input_template.nml",
             entries_tbr_dict={
                 "$obs_sequence_name": obs_seq_name,
                 "$folder_path": self.output_sim_folder,
-                "$folder_obs_path": self.path_manager.dart_s5p_output_dir(),
+                "$folder_obs_path": self.path_manager.dart_s5p_output_dir(self.obs_name, self.collection),
                 "$date_assim": self.time_manager.current_time.strftime("%Y%m%d_%H%M%S"),
                 "$template_farm": self.path_manager.path_data
                 / f"to_DART/ic_g1_{self.seconds_model}_{self.days_model}_0.nc",
@@ -349,13 +375,13 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
                 "$state_variable_conc": str(self.state_variable_conc),
                 "$state_variable_qty": str(self.state_variable_qty),
             },
-            output_nml_path=self.path_manager.base_path
+            output_nml_path=self.path_manager.base_path_DART
             / self.path_manager.path_filter
             / "input.nml",
         )
         # FILTER_INPUT_LIST.TXT
         replace_nml_template(
-            self.path_manager.base_path
+            self.path_manager.base_path_DART
             / self.path_manager.path_filter
             / "filter_input_list_template.txt",
             entries_tbr_dict={
@@ -363,27 +389,27 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
                 "$days": str(self.seconds_model),
                 "$seconds": str(self.days_model),
             },
-            output_nml_path=self.path_manager.base_path
+            output_nml_path=self.path_manager.base_path_DART
             / self.path_manager.path_filter
             / "filter_input_list.txt",
         )
 
         # FILTER_OUTPUT_LIST.TXT
         replace_nml_template(
-            self.path_manager.base_path
+            self.path_manager.base_path_DART
             / self.path_manager.path_filter
             / "filter_output_list_template.txt",
             entries_tbr_dict={
                 "$folder_path": self.output_sim_folder,
                 "$date": self.time_manager.simulated_time.strftime("%Y%m%d%H"),
             },
-            output_nml_path=self.path_manager.base_path
+            output_nml_path=self.path_manager.base_path_DART
             / self.path_manager.path_filter
             / "filter_output_list.txt",
         )
         # SUBMIT_FILTER.BSH
         replace_nml_template(
-            self.path_manager.base_path
+            self.path_manager.base_path_DART
             / "RUN/script/templates/submit_filter.template.bsh",
             entries_tbr_dict={
                 "CURRENT_DATE": self.time_manager.simulated_time.strftime("%Y%m%d%H"),
@@ -395,11 +421,11 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         )
         # RUN_FILTER.BSH
         replace_nml_template(
-            self.path_manager.base_path
+            self.path_manager.base_path_DART
             / "RUN/script/templates/run_filter.template.bsh",
             entries_tbr_dict={
                 "CORES": str(20),
-                "@ABS_FILTER_PATH": self.path_manager.base_path
+                "@ABS_FILTER_PATH": self.path_manager.base_path_DART
                 / self.path_manager.path_filter,
             },
             output_nml_path=self.path_manager.path_submit_bsh / "run_filter.bsh",

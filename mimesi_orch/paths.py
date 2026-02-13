@@ -21,8 +21,9 @@ class PathManager:
         self.cfg = config
         self.log_paths = log_paths
 
-        # ---- resolve base path ----
-        self.base_path: Path = config.base_path.resolve()
+        # ---- resolve base paths ----
+        self.base_path_ctm: Path = config.base_path_ctm.resolve()
+        self.base_path_DART: Path = config.base_path_DART.resolve()
 
         # ---- resolve static paths ----
         self.env_python = config.env_python
@@ -44,19 +45,22 @@ class PathManager:
     # internal helpers
     # ------------------------------------------------------------------
     
-    def _resolve(self, p: Optional[Path]) -> Path:
+    def _resolve(self, p: Optional[Path], base_path: Optional[Path] = None) -> Path:
         """Resolve a path relative to base_path. If p is None, return base_path."""
-    
-        if p is None:
-            return self.base_path.resolve()
+        if base_path is None:
+            base_path = self.base_path_DART
 
-        return (self.base_path / p).resolve()
+        if p is None:
+            return base_path.resolve()
+
+        return (base_path / p).resolve()
 
     def _check_static_paths(self):
         logger.info("Checking static paths")
 
         paths = {
-            "base_path": self.base_path,
+            "base_path_ctm": self.base_path_ctm,
+            "base_path_DART": self.base_path_DART,
             "env_python": self.env_python,
             "listing_file": self.listing_file,
             "run_submit_model_template": self.run_submit_model_template,
@@ -140,19 +144,19 @@ class PathManager:
         return self.chimere2023_run_dir(mem) / f"end.{date_ymdH}_{NHOURS}_ENS{mem}.nc"
     
     def chimere2023_PAR_BASE_TEMPLATE(self) -> Path:
-        return self.base_path / "chimere.template_ensemble.par"
+        return self.base_path_ctm / "chimere.template_ensemble.par"
     
     def chimere2023_PAR_FILE(self, mem: int) -> Path:
-        return self.base_path / f"chimere.ENS{mem}.par"
+        return self.base_path_ctm / f"chimere.ENS{mem}.par"
     
     def chimere2023_PAR_FILE_RUN_DIR(self, mem: int, START_DATEHOUR: str) -> Path:
         return self.chimere2023_run_dir(mem)/ f"chimere.ENS{mem}_{START_DATEHOUR}.par"
     
     def chimere2023_BASH_SUBMIT_SCRIPT_TEMPLATE(self) -> Path:
-        return self.base_path / f"submit_p_template.sh"
+        return self.base_path_ctm / f"submit_p_template.sh"
     
     def chimere2023_BASH_SUBMIT_SCRIPT(self, mem: int) -> Path:
-        return self.base_path / f"submit_p_{mem}.sh"
+        return self.base_path_ctm / f"submit_p_{mem}.sh"
     
     def chimere2023_BASH_SUBMIT_SCRIPT_RUN_DIR(self, mem: int, START_DATEHOUR: str) -> Path:
         return self.chimere2023_run_dir(mem) / f"submit_p_{mem}_{START_DATEHOUR}.sh"
@@ -212,7 +216,7 @@ class PathManager:
     # ------------------------------------------------------------------
 
     def dart_s5p_base(self) -> Path:
-        return self.base_path / "DART/observations/obs_converters/S5P_TROPOMI_L3"
+        return self.base_path_DART / "observations/obs_converters/S5P_TROPOMI_L3"
 
     def dart_s5p_work(self) -> Path:
         return self.dart_s5p_base() / "work"
@@ -223,17 +227,18 @@ class PathManager:
     def dart_s5p_input(self) -> Path:
         return self.dart_s5p_work() / "input.nml"
 
-    def dart_s5p_data_dir(self) -> Path:
-        return self.dart_s5p_base() / "data/SO2-COBRA"
+    def dart_s5p_data_dir(self, obs_nam: str) -> Path:
+        #return self.dart_s5p_base() / "data/SO2-COBRA"
+        return self.dart_s5p_base() / "data" / obs_nam
 
-    def dart_file_s5p_orbit(self, orbit_filename: str) -> Path:
-        return self.dart_s5p_data_dir() / orbit_filename
+    def dart_file_s5p_orbit(self, orbit_filename: str, obs_nam: str) -> Path:
+        return self.dart_s5p_data_dir(obs_nam) / orbit_filename
 
-    def dart_s5p_output_dir(self) -> Path:
-        return self.dart_s5p_data_dir() / "C03dart"
+    def dart_s5p_output_dir(self, obs_nam: str, collection: str) -> Path:
+        return self.dart_s5p_data_dir(obs_nam) / collection
 
-    def dart_obs_seq(self, seconds: int, days: int) -> Path:
-        return self.dart_s5p_output_dir() / f"obs_seq_{seconds}_{days}.out"
+    def dart_obs_seq(self, seconds: int, days: int, obs_nam: str, collection: str) -> Path:
+        return self.dart_s5p_output_dir(obs_nam, collection) / f"obs_seq_{seconds}_{days}.out"
 
     def get_ic_g1_path(
         self,
