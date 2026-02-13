@@ -1,1 +1,1 @@
-bsub -q cameo_h144 -n 48 -e err.log -o out.log ../../../../miniconda3/bin/python3.10 orchestrator.py -c config_orchestrator.yaml
+bsub -q cameo_h144 -n 48 -e err.log -o out.log ../../../../miniconda3/bin/python3.10 main.py -c config_orchestrator.yaml
