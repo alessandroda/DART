@@ -15,7 +15,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field, field_validator
 from pathlib import Path
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from mimesi_types import ModelType, Scheduler
 
 # ---------------------------------------------------------------------
@@ -221,6 +221,31 @@ class MonitoringConfig(BaseModel):
     job_check_interval: int = Field(gt=0, description="Polling interval in seconds")
 
 
+class RuntimeConfig(BaseModel):
+    """
+    Runtime profile and process-level behaviors.
+    """
+
+    profile: str = "mimesi"
+    log_dir_mode: Literal["path_data", "cwd"] = "path_data"
+    log_dir_name: Optional[str] = None
+
+    @field_validator("profile", mode="before")
+    @classmethod
+    def normalize_profile(cls, v):
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
+
+    @field_validator("log_dir_name", mode="before")
+    @classmethod
+    def normalize_log_dir_name(cls, v):
+        if isinstance(v, str):
+            v = v.strip()
+            return v if v else None
+        return v
+
+
 # ---------------------------------------------------------------------
 # ROOT CONFIG
 # ---------------------------------------------------------------------
@@ -243,6 +268,7 @@ class AppConfig(BaseModel):
     satellite_data: Optional[SatelliteDataConfig] = None
     model_data: Optional[ModelDataConfig] = None
     monitoring: Optional[MonitoringConfig] = None
+    runtime: Optional[RuntimeConfig] = None
     pipeline: Optional[PipelineSelectionConfig] = None
 
     # runtime-only (not from YAML)

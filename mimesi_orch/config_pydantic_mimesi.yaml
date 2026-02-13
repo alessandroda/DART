@@ -54,3 +54,8 @@ logging:
 
 satellite_data:
   search_window_seconds: 1800
+
+runtime:
+  profile: mimesi
+  log_dir_mode: path_data
+  log_dir_name: mimesi_orchestrator_logs
