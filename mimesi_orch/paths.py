@@ -26,9 +26,14 @@ class PathManager:
         self.base_path: Path = config.base_path.resolve()
 
         # ---- resolve static paths ----
-        self.env_python = config.env_python
+        self.env_python = self._resolve(config.env_python)
         self.listing_file = self._resolve(config.listing_file)
-        self.run_submit_model_template = self._resolve(config.run_submit_model_template)
+        run_submit_template = (
+            config.run_submit_model_template
+            if config.run_submit_model_template is not None
+            else config.run_submit_farm_template
+        )
+        self.run_submit_model_template = self._resolve(run_submit_template)
         self.path_submit_bsh = self._resolve(config.path_submit_bsh)
         self.path_filter = self._resolve(config.path_filter)
         self.path_data = self._resolve(config.path_data)
@@ -40,23 +45,31 @@ class PathManager:
                 if config.chimere_par_template is not None
                 else None
         )
-        self._check_static_paths()
         self.path_control_run = self._resolve(config.path_control_run)
         self.path_perturbed_emi = self._resolve(config.path_perturbed_emi)
         self.path_perturbed_meteo = self._resolve(config.path_perturbed_meteo)
+        self._check_static_paths()
 
         #self._check_static_paths()
 
     # ------------------------------------------------------------------
     # internal helpers
     # ------------------------------------------------------------------
-    
-    def _resolve(self, p: Optional[Path]) -> Path:
-        """Resolve a path relative to base_path. If p is None, return base_path."""
-    
-        if p is None:
-            return self.base_path.resolve()
 
+    @classmethod
+    def model_from_pipeline(cls, pipeline_cfg, *, log_paths: bool = True) -> "PathManager":
+        """
+        Build a legacy PathManager from a pipeline-specific config model.
+        """
+        paths_cfg = PathsConfig.model_validate(pipeline_cfg.model_dump())
+        return cls(paths_cfg, log_paths=log_paths)
+    
+    def _resolve(self, p: Optional[Path]) -> Optional[Path]:
+        """Resolve a path relative to base_path. If p is None, return None."""
+        if p is None:
+            return None
+        if p.is_absolute():
+            return p.resolve()
         return (self.base_path / p).resolve()
 
     def _check_static_paths(self):

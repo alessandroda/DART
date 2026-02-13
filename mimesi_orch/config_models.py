@@ -15,7 +15,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field, field_validator
 from pathlib import Path
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from mimesi_types import ModelType, Scheduler
 
 # ---------------------------------------------------------------------
@@ -34,10 +34,12 @@ class PathsConfig(BaseModel):
 
     listing_file: Path
 
-    run_submit_model_template:  Optional[Path] = None
+    run_submit_model_template: Optional[Path] = None
+    run_submit_farm_template: Optional[Path] = None
     path_submit_bsh: Path
     path_filter: Path
     path_data: Path
+    path_control_run: Optional[Path] = None
     chimere_par_template: Optional[Path] = None
     run_submit_replace_perturbations: Optional[Path] = None
     path_perturbed_emi: Optional[Path] = None
@@ -196,6 +198,29 @@ class ModelDataConfig(BaseModel):
     ensemble_list: Optional[list] = None
 
 
+class PipelineSelectionConfig(BaseModel):
+    """
+    Explicit pipeline selection override.
+    """
+
+    name: str
+    config: Optional[dict[str, Any]] = None
+
+
+class MonitoringConfig(BaseModel):
+    """
+    Runtime monitoring and scheduler interaction settings.
+
+    These parameters control how the orchestrator:
+    - monitors submitted jobs
+    - waits for completion
+    - allocates computational resources
+    """
+
+    cores: int = Field(gt=0)
+    job_check_interval: int = Field(gt=0, description="Polling interval in seconds")
+
+
 # ---------------------------------------------------------------------
 # ROOT CONFIG
 # ---------------------------------------------------------------------
@@ -218,25 +243,12 @@ class AppConfig(BaseModel):
     satellite_data: Optional[SatelliteDataConfig] = None
     model_data: Optional[ModelDataConfig] = None
     monitoring: Optional[MonitoringConfig] = None
+    pipeline: Optional[PipelineSelectionConfig] = None
 
     # runtime-only (not from YAML)
     _config_path: Optional[Path] = None
 
     class Config:
         extra = "forbid"
-
-
-class MonitoringConfig(BaseModel):
-    """
-    Runtime monitoring and scheduler interaction settings.
-
-    These parameters control how the orchestrator:
-    - monitors submitted jobs
-    - waits for completion
-    - allocates computational resources
-    """
-
-    cores: int = Field(gt=0)
-    job_check_interval: int = Field(gt=0, description="Polling interval in seconds")
 
 AppConfig.model_rebuild()
