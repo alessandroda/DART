@@ -30,8 +30,10 @@ from orchestrator_utils import (
     check_and_clean_broken_links,
     from_liststr_to_listdict,
     submit_irene,
-    get_list_mems_to_rerun,
-    compute_hourly
+    monitor_job_status,
+    check_restart_files_exist,
+    compute_hourly,
+    monitor_job_dart
 )
 
 
@@ -167,7 +169,6 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
                                    int(date_H), 
                                    self.path_manager.chimere2023_METEO_FILE(dict_mem["MemberID"], self.domain, date_ymdH, 1))
 
-
     def run_model(self):
         """
         Run CHIMERE for the current time step.
@@ -233,19 +234,16 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
             )))
             
         logger.info(f"Checking job status ...")
-        mems_to_rerun = get_list_mems_to_rerun(
-            job_ids=job_ids,
-            scheduler=self.scheduler,
-            model_type=self.model_type,
-            path_manager=self.path_manager,
-            timestamp_model=date_ymdH,
-            no_mems=self.no_mems
+        monitor_job_status(job_ids, self.scheduler, self.model_type)
+        mems_to_rerun = check_restart_files_exist(
+            ic_path = self.path_manager.chimere2023_END_FILE(mem, date_ymdH, 1),
+            model=self.model_type,
+            no_mems=self.no_mems,
             )
         if mems_to_rerun:
             logger.info(f"Check chimere log file at: {self.path_manager.chimere2023_run_dir(mem)}/ENS{mem}_{date_ymdH}.out")
             raise ModelRunError(f"The following chimere ENS run(s) failed (exit code 1): {mems_to_rerun}")
         logger.info(f" Run_model() compled successfully.")
-
 
     def after_model(self):
         pass
@@ -275,7 +273,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         else:
             logger.info(f"[DART] obs_seq created: {obs_path}")
         logger.info('je suis ici. Skipping DART')
-        return
+        
         self.run_dart(obs_seq_name)
 
     def process_satellite_data(self):
@@ -313,7 +311,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         obs_seq_name = f"obs_seq_{self.seconds_obs}_{self.days_obs}.out"
 
         replace_nml_template(
-            self.path_manager.dart_s5p_input_template(),
+            input_nml_path=self.path_manager.dart_s5p_input_template(),
             entries_tbr_dict={
                 "$file_path_s5p": self.path_manager.dart_file_s5p_orbit(orbit_filename, self.obs_name),
                 "$file_out": self.path_manager.dart_obs_seq(
@@ -356,106 +354,90 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         Path(self.output_sim_folder).mkdir(parents=True, exist_ok=True)
 
         replace_nml_template(
-            self.path_manager.base_path_DART
-            / self.path_manager.path_filter
-            / "input_template.nml",
+            input_nml_path=self.path_manager.dart_filter_input_template(),
             entries_tbr_dict={
                 "$obs_sequence_name": obs_seq_name,
                 "$folder_path": self.output_sim_folder,
                 "$folder_obs_path": self.path_manager.dart_s5p_output_dir(self.obs_name, self.collection),
                 "$date_assim": self.time_manager.current_time.strftime("%Y%m%d_%H%M%S"),
-                "$template_farm": self.path_manager.path_data
-                / f"to_DART/ic_g1_{self.seconds_model}_{self.days_model}_0.nc",
-                "$init_time_days": str(self.days_model),
-                "$init_time_seconds": str(self.seconds_model),
-                "$first_obs_days": str(self.days_obs),
-                "$first_obs_seconds": str(self.seconds_obs),
+                "$template_farm": self.path_manager.path_data/ f"to_DART/ic_g1_{self.seconds_model}_{self.days_model}_0.nc",
+                "$init_time_days": str(self.days_model), #computed in base_pipeline
+                "$init_time_seconds": str(self.seconds_model), #computed in base_pipeline
+                "$first_obs_days": str(self.days_obs), #computed when creating obs_seq.out 
+                "$first_obs_seconds": str(self.seconds_obs), #computed when creating obs_seq.out
                 "$no_mems": str(self.no_mems),
                 "$obs_type": str(self.obs_type),
                 "$state_variable_conc": str(self.state_variable_conc),
                 "$state_variable_qty": str(self.state_variable_qty),
             },
-            output_nml_path=self.path_manager.base_path_DART
-            / self.path_manager.path_filter
-            / "input.nml",
+            output_nml_path=self.path_manager.base_path_DART/ self.path_manager.path_filter/ "input.nml",
         )
         # FILTER_INPUT_LIST.TXT
         replace_nml_template(
-            self.path_manager.base_path_DART
-            / self.path_manager.path_filter
-            / "filter_input_list_template.txt",
+            input_nml_path=self.path_manager.dart_filter_input_list_template(),
             entries_tbr_dict={
-                "$folder_path": self.path_manager.path_data / f"to_DART/",
+                "$folder_path": self.path_manager.dart_to_dart_dir(), #need converted out chim: convertion what implies??
                 "$days": str(self.seconds_model),
                 "$seconds": str(self.days_model),
             },
-            output_nml_path=self.path_manager.base_path_DART
-            / self.path_manager.path_filter
-            / "filter_input_list.txt",
+            output_nml_path=self.path_manager.dart_filter_input_list()
         )
-
         # FILTER_OUTPUT_LIST.TXT
         replace_nml_template(
-            self.path_manager.base_path_DART
-            / self.path_manager.path_filter
-            / "filter_output_list_template.txt",
+            input_nml_path=self.path_manager.dart_filter_output_list_template(),
             entries_tbr_dict={
                 "$folder_path": self.output_sim_folder,
                 "$date": self.time_manager.simulated_time.strftime("%Y%m%d%H"),
             },
-            output_nml_path=self.path_manager.base_path_DART
-            / self.path_manager.path_filter
-            / "filter_output_list.txt",
+            output_nml_path=self.path_manager.dart_filter_output_list()
         )
         # SUBMIT_FILTER.BSH
         replace_nml_template(
-            self.path_manager.base_path_DART
-            / "RUN/script/templates/submit_filter.template.bsh",
+            input_nml_path=self.path_manager.dart_run_filter_template(),
             entries_tbr_dict={
-                "CURRENT_DATE": self.time_manager.simulated_time.strftime("%Y%m%d%H"),
-                "CORES": str(20),
-                "QUEUE": self.cresco_queue,
-                "DEST_LOG_PATH": self.output_sim_folder,
+                "@NPROC": f"{self.nb_proc}",
+                "@QUEUED_NODES": f"{self.queue}",
+                "@PROJECT": f"{self.project_name}",
+                "@WALLTIME": f"{self.walltime}",
+                "@MAIL": f"{self.mail}",
+                "@CURRENT_DATE": self.time_manager.simulated_time.strftime("%Y%m%d%H"),
+                "@DEST_LOG_PATH": self.output_sim_folder,
             },
-            output_nml_path=self.path_manager.path_submit_bsh / "submit_filter.bsh",
+            output_nml_path=self.path_manager.dart_run_filter(),
         )
-        # RUN_FILTER.BSH
-        replace_nml_template(
-            self.path_manager.base_path_DART
-            / "RUN/script/templates/run_filter.template.bsh",
-            entries_tbr_dict={
-                "CORES": str(20),
-                "@ABS_FILTER_PATH": self.path_manager.base_path_DART
-                / self.path_manager.path_filter,
-            },
-            output_nml_path=self.path_manager.path_submit_bsh / "run_filter.bsh",
-        )
+        spec = CommandSpec(
+                command=f"ccc_msub ./{self.path_manager.dart_run_filter().name}",
+                directory=self.path_manager.dart_run_filter().parent
+            )
+        job_id = submit_irene(spec)
+        monitor_job_status([job_id], self.scheduler, self.model_type)
+        ### check filter succeded
 
-        job_id = run_command_in_directory_bsub( #da portare a run_command_in_directory
-            "./submit_filter.bsh", self.path_manager.path_submit_bsh, farm=False
-        )
-        time.sleep(10)
-        self.monitor_job_dart(job_id)
+    
+    def after_assimilation(self):
+        """
+        Optional hook executed after the assimilation step.
 
-    def monitor_job_dart(self, job_id):
-        logger.info(f"Monitoring job {job_id}")
-        job_id = job_id.strip()[1:-1]
+        Typical use cases:
+        - mapping analysis fields back to the model format
+        - updating boundary or initial conditions
+        """
+        pass
 
-        while True:
-            if check_job_status_cresco(job_id, which_run="FARM"):
-                print("Job completed successfully.")
-                # Handle successful job completion: move files
-                self.move_analysis_files()
-                replace_priorinflation(
-                    self.path_manager,
-                    self.time_manager.simulated_time.strftime("%Y%m%d%H"),
-                )
-                break
-            else:
-                print("Job is still running. Waiting...")
-                time.sleep(10)
+    def finalize_step(self):
+        """
+        Cleanup + YAML update.
+        """
 
-    def move_analysis_files(self):
+        #modify_yaml_date(
+        #    self.config["_config_path"],
+        #    self.time_manager.simulated_time.strftime("%Y-%m-%d %H:00:00"),
+        #)
+        #self.cleanup_FARM()
+
+        pass
+
+def move_analysis_files(self):
         analysis_sim_folder = (
             self.path_manager.path_data
             / f"analysis/{self.time_manager.simulated_time.strftime('%Y%m%d%H')}"
@@ -494,26 +476,3 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
                         f"Failed to move '{filename}' to '{preassim_sim_folder}' because it already exists."
                     )
 
-    
-    def after_assimilation(self):
-        """
-        Optional hook executed after the assimilation step.
-
-        Typical use cases:
-        - mapping analysis fields back to the model format
-        - updating boundary or initial conditions
-        """
-        pass
-
-    def finalize_step(self):
-        """
-        Cleanup + YAML update.
-        """
-
-        #modify_yaml_date(
-        #    self.config["_config_path"],
-        #    self.time_manager.simulated_time.strftime("%Y-%m-%d %H:00:00"),
-        #)
-        #self.cleanup_FARM()
-
-        pass

@@ -340,6 +340,24 @@ def run_command_in_directory_bsub(
         os.chdir(original_directory)
     return jobid
 
+def monitor_job_dart(self, job_id):
+        logger.info(f"Monitoring job {job_id}")
+        job_id = job_id.strip()[1:-1]
+
+        while True:
+            if check_job_status_cresco(job_id, which_run="FARM"):
+                print("Job completed successfully.")
+                # Handle successful job completion: move files
+                self.move_analysis_files()
+                replace_priorinflation(
+                    self.path_manager,
+                    self.time_manager.simulated_time.strftime("%Y%m%d%H"),
+                )
+                break
+            else:
+                print("Job is still running. Waiting...")
+                time.sleep(10)
+
 def submit_irene(spec: CommandSpec) -> str:
     rc, job_id = run_command_in_directory(spec)
 
@@ -891,19 +909,11 @@ def submit_and_wait(
     return True
 
 
-def get_list_mems_to_rerun(
+def monitor_job_status(
     job_ids: list[str],
     scheduler: Scheduler,
     model_type: ModelType,
-    path_manager: Optional[PathManager] = None,
-    timestamp_model: Optional[str] = None,
-    no_mems: Optional[int] = None
-) -> list[int]:
-
-    #datetime_model_p1 = pd.to_datetime(timestamp_model, format="%Y%m%d%H") + timedelta(
-    #    hours=1
-    #)
-    datetime_model_p1=timestamp_model
+    ):
 
     while True:
         running_jobs = []
@@ -925,35 +935,21 @@ def get_list_mems_to_rerun(
             logger.info(f"Jobs {job_ids} have finished")
             logger.info(f"Checking if runs succeded...")
         
-            return check_restart_files_exist(
-                path_manager=path_manager,
-                model=model_type,
-                datetime_model=datetime_model_p1,
-                no_mems=no_mems,
-            )
+            return
 
         logger.info(f"Jobs still running: {running_jobs}. Waiting...")
         time.sleep(15)
 
 
 def check_restart_files_exist(
-    path_manager: PathManager,
+    ic_path: Path,
     model: ModelType,
     no_mems: int,
-    #datetime_farm: Optional[pd.Timestamp] = None,
-    datetime_model: Optional[str] = None,
 ) -> list[int]:
 
     mems_to_rerun = []
 
     for mem in range(no_mems):
-        #ic_path = path_manager.get_ic_g1_path(
-        #    model=model,
-        #    mem=mem,
-        #    timestamp=datetime,
-        #)
-        ic_path = path_manager.chimere2023_END_FILE(mem, datetime_model, 1)
-
         if ic_path.exists() and ic_path.stat().st_size > 0:
             logger.info(
                 f"{model} | restart_file exists for mem {mem}: {ic_path}"

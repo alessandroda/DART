@@ -5,7 +5,7 @@ paths:
 
   listing_file: observations/obs_converters/S5P_TROPOMI_L3/data/NO2/C03__listing_02.csv
   path_submit_bsh: / #/ccc/work/cont003/gen7232/demoling/chimere_v2023_dart/
-  path_filter: models/FARM/work #need to put GAEL's 
+  path_filter: models/chimere/work 
 
   path_data: /ccc/scratch/cont003/gen7232/demoling/OUT_Chimere/DA_ENSEMBLE_RUNS_test/ #SCRTACH
   path_control_run: /ccc/scratch/cont003/gen7232/demoling/OUT_Chimere/CHIMOUT-EUROCOMEX3_reruned0102
@@ -17,8 +17,8 @@ paths:
 
 
 time:
-  start_time: "2020-02-14 00:00:00"
-  end_time: "2020-02-14 23:00:00"
+  start_time: "2020-02-13 00:00:00"
+  end_time: "2020-02-13 01:00:00"
   dt_seconds: 3600
 
 

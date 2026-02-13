@@ -39,7 +39,7 @@ class PathManager:
         self.path_perturbed_emi = self._resolve(config.path_perturbed_emi)
         self.path_perturbed_meteo = self._resolve(config.path_perturbed_meteo)
 
-        #self._check_static_paths()
+        self._check_static_paths()
 
     # ------------------------------------------------------------------
     # internal helpers
@@ -210,6 +210,31 @@ class PathManager:
 
     def dart_preassim_dir(self, timestamp: str) -> Path:
         return self.path_data / f"preassim/{timestamp}"
+    
+    # ------------------------------------------------------------------
+    # DART – filter
+    # ------------------------------------------------------------------
+    
+    def dart_filter_input_template(self) -> Path:
+        return self.base_path_DART / self.path_filter/ "input_template.nml"
+    
+    def dart_filter_input_list_template(self) -> Path:
+        return self.base_path_DART / self.path_filter / "filter_input_list_template.txt"
+    
+    def dart_filter_output_list_template(self) -> Path:
+        return self.base_path_DART / self.path_filter / "filter_output_list_template.txt"
+    
+    def dart_filter_input_list(self) -> Path:
+        return self.base_path_DART / self.path_filter / "filter_input_list.txt"
+    
+    def dart_filter_output_list(self) -> Path:
+        return self.base_path_DART / self.path_filter / "filter_output_list.txt"
+    
+    def dart_run_filter_template(self) -> Path:
+        return self.base_path_DART / self.path_filter / "run_filter.template.bsh"
+    
+    def dart_run_filter(self) -> Path:
+        return self.base_path_DART / self.path_filter / "run_filter.bsh"
 
     # ------------------------------------------------------------------
     # DART – obs converters (S5P)
