@@ -33,7 +33,10 @@ from orchestrator_utils import (
     monitor_job_status,
     check_restart_files_exist,
     compute_hourly,
-    monitor_job_dart
+    monitor_job_dart,
+    add_missing_variable,
+    write_dart_filter_list,
+    update_pollutant_in_end
 )
 
 
@@ -108,7 +111,6 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
 
         self.scheduler = self.config.cluster.scheduler
         logger.info(f"Using scheduler={self.scheduler}, queue={self.queue}")
-
 
     def before_step(self):
         logger.info(f"---------->>> current time: {self.time_manager.current_time}; start: {self.time_manager.start_time}; end: {self.time_manager.end_time}")
@@ -272,7 +274,6 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
             return
         else:
             logger.info(f"[DART] obs_seq created: {obs_path}")
-        logger.info('je suis ici. Skipping DART')
         
         self.run_dart(obs_seq_name)
 
@@ -346,52 +347,64 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         return obs_seq_name
 
     def run_dart(self, obs_seq_name):
-        logger.info("Running DART")
+        logger.info("---------->>> Running DART")
+        """
+        self.time_manager.end_file_date = self.time_manager.current_time - timedelta(hours=1)
+        end_file_date_ymdH = self.time_manager.end_file_date.strftime("%Y%m%d%H")
 
-        self.output_sim_folder = self.path_manager.dart_posteriors_dir(
-            self.time_manager.simulated_time.strftime("%Y%m%d%H")
+        create:
+        @property
+        def end_file_date(self):
+            return self.current_time - timedelta(hours=1)
+
+        because all chimere files in the title have the starting time ==> change the date_ymdH used in the following
+        """
+        
+        date_ymdH = self.time_manager.simulated_time.strftime("%Y%m%d%H")
+        date_ymdHMS = self.time_manager.simulated_time.strftime("%Y%m%d_%H%M%S")
+        self.path_manager.dart_posteriors_dir(date_ymdH).mkdir(parents=True, exist_ok=True)
+
+        add_missing_variable(
+            no_mems=self.no_mems, 
+            var_to_add='psfc', 
+            domain=self.domain, 
+            out_file_func=self.path_manager.chimere2023_out_file,
+            orig_file_func=self.path_manager.chimere2023_METEO_FILE,
+            date_ymdH=date_ymdH, 
+            NHOURS=1
         )
-        Path(self.output_sim_folder).mkdir(parents=True, exist_ok=True)
 
         replace_nml_template(
             input_nml_path=self.path_manager.dart_filter_input_template(),
             entries_tbr_dict={
                 "$obs_sequence_name": obs_seq_name,
-                "$folder_path": self.output_sim_folder,
+                "$folder_path": self.path_manager.dart_posteriors_dir(date_ymdH),
                 "$folder_obs_path": self.path_manager.dart_s5p_output_dir(self.obs_name, self.collection),
-                "$date_assim": self.time_manager.current_time.strftime("%Y%m%d_%H%M%S"),
-                "$template_farm": self.path_manager.path_data/ f"to_DART/ic_g1_{self.seconds_model}_{self.days_model}_0.nc",
+                "$date_assim": date_ymdHMS,
                 "$init_time_days": str(self.days_model), #computed in base_pipeline
                 "$init_time_seconds": str(self.seconds_model), #computed in base_pipeline
                 "$first_obs_days": str(self.days_obs), #computed when creating obs_seq.out 
                 "$first_obs_seconds": str(self.seconds_obs), #computed when creating obs_seq.out
                 "$no_mems": str(self.no_mems),
                 "$obs_type": str(self.obs_type),
-                "$state_variable_conc": str(self.state_variable_conc),
-                "$state_variable_qty": str(self.state_variable_qty),
             },
-            output_nml_path=self.path_manager.base_path_DART/ self.path_manager.path_filter/ "input.nml",
+            output_nml_path=self.path_manager.dart_filter_input(),
         )
-        # FILTER_INPUT_LIST.TXT
-        replace_nml_template(
-            input_nml_path=self.path_manager.dart_filter_input_list_template(),
-            entries_tbr_dict={
-                "$folder_path": self.path_manager.dart_to_dart_dir(), #need converted out chim: convertion what implies??
-                "$days": str(self.seconds_model),
-                "$seconds": str(self.days_model),
-            },
-            output_nml_path=self.path_manager.dart_filter_input_list()
-        )
-        # FILTER_OUTPUT_LIST.TXT
-        replace_nml_template(
-            input_nml_path=self.path_manager.dart_filter_output_list_template(),
-            entries_tbr_dict={
-                "$folder_path": self.output_sim_folder,
-                "$date": self.time_manager.simulated_time.strftime("%Y%m%d%H"),
-            },
-            output_nml_path=self.path_manager.dart_filter_output_list()
-        )
-        # SUBMIT_FILTER.BSH
+
+        write_dart_filter_list(
+            list_file_func=self.path_manager.dart_filter_input_list(), 
+            out_file_func=self.path_manager.chimere2023_out_file, 
+            no_mems=self.no_mems, 
+            date_ymdH=date_ymdH, 
+            NHOURS=1)
+
+        write_dart_filter_list(
+            list_file_func=self.path_manager.dart_filter_output_list(), 
+            out_file_func=self.path_manager.dart_filter_output_list_file, 
+            no_mems=self.no_mems, 
+            date_ymdH=date_ymdH, 
+            NHOURS=1)
+        
         replace_nml_template(
             input_nml_path=self.path_manager.dart_run_filter_template(),
             entries_tbr_dict={
@@ -400,8 +413,8 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
                 "@PROJECT": f"{self.project_name}",
                 "@WALLTIME": f"{self.walltime}",
                 "@MAIL": f"{self.mail}",
-                "@CURRENT_DATE": self.time_manager.simulated_time.strftime("%Y%m%d%H"),
-                "@DEST_LOG_PATH": self.output_sim_folder,
+                "@CURRENT_DATE": date_ymdH,
+                "@DEST_LOG_PATH": self.path_manager.dart_posteriors_dir(date_ymdH),
             },
             output_nml_path=self.path_manager.dart_run_filter(),
         )
@@ -413,7 +426,6 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         monitor_job_status([job_id], self.scheduler, self.model_type)
         ### check filter succeded
 
-    
     def after_assimilation(self):
         """
         Optional hook executed after the assimilation step.
@@ -422,7 +434,38 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         - mapping analysis fields back to the model format
         - updating boundary or initial conditions
         """
-        pass
+        logger.info("---------->>> Running after_assimilation()")
+        self.move_analysis_files()
+        logger.info("---------->>> Running update_pollutant_in_end()")
+
+        #finish the following and test 
+        """date_ymdH = self.time_manager.simulated_time.strftime("%Y%m%d%H")
+        for mem in range(self.no_mems):
+            update_pollutant_in_end(self.path_manager.dart_filter_output_list_file(mem, date_ymdH, 1), self.path_manager.chimere2023_END_FILE(mem, date_ymdH, 1))
+        """
+    
+    def move_analysis_files(self):
+        date_ymdH = self.time_manager.simulated_time.strftime("%Y%m%d%H")
+        self.path_manager.dart_analysis_dir(date_ymdH).mkdir(parents=True, exist_ok=True)
+        self.path_manager.dart_preassim_dir(date_ymdH).mkdir(parents=True, exist_ok=True)
+        
+        for filename in os.listdir(f"{self.path_manager.path_filter}"):
+            if filename.startswith("analysis_"):
+                try:
+                    shutil.move(
+                        os.path.join(self.path_manager.path_filter, filename),
+                        os.path.join(self.path_manager.dart_analysis_dir(date_ymdH), filename))
+                    logger.info(f"Moved '{filename}' to '{self.path_manager.dart_analysis_dir(date_ymdH)}'")
+                except shutil.Error:
+                    logger.error(f"Failed to move '{filename}' to '{self.path_manager.dart_analysis_dir(date_ymdH)}' because it already exists.")
+            elif filename.startswith("preassim_"):
+                try:
+                    shutil.move(
+                        os.path.join(self.path_manager.path_filter, filename),
+                        os.path.join(self.path_manager.dart_preassim_dir(date_ymdH), filename))
+                    logger.error(f"Moved '{filename}' to '{self.path_manager.dart_preassim_dir(date_ymdH)}'")
+                except shutil.Error:
+                    logger.error(f"Failed to move '{filename}' to '{self.path_manager.dart_preassim_dir(date_ymdH)}' because it already exists.")
 
     def finalize_step(self):
         """
@@ -436,43 +479,4 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         #self.cleanup_FARM()
 
         pass
-
-def move_analysis_files(self):
-        analysis_sim_folder = (
-            self.path_manager.path_data
-            / f"analysis/{self.time_manager.simulated_time.strftime('%Y%m%d%H')}"
-        )
-        Path(analysis_sim_folder).mkdir(parents=True, exist_ok=True)
-        preassim_sim_folder = (
-            self.path_manager.path_data
-            / f"preassim/{self.time_manager.simulated_time.strftime('%Y%m%d%H')}"
-        )
-        Path(preassim_sim_folder).mkdir(parents=True, exist_ok=True)
-        for filename in os.listdir(f"{self.path_manager.path_filter}"):
-            if filename.startswith("analysis_"):
-                try:
-                    shutil.move(
-                        os.path.join(
-                            self.path_manager.path_filter,
-                            filename,
-                        ),
-                        os.path.join(analysis_sim_folder, filename),
-                    )
-                except shutil.Error:
-                    print(
-                        f"Failed to move '{filename}' to '{analysis_sim_folder}' because it already exists."
-                    )
-            elif filename.startswith("preassim_"):
-                try:
-                    shutil.move(
-                        os.path.join(
-                            self.path_manager.path_filter,
-                            filename,
-                        ),
-                        os.path.join(preassim_sim_folder, filename),
-                    )
-                except shutil.Error:
-                    print(
-                        f"Failed to move '{filename}' to '{preassim_sim_folder}' because it already exists."
-                    )
 

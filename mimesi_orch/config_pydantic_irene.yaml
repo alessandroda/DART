@@ -7,7 +7,8 @@ paths:
   path_submit_bsh: / #/ccc/work/cont003/gen7232/demoling/chimere_v2023_dart/
   path_filter: models/chimere/work 
 
-  path_data: /ccc/scratch/cont003/gen7232/demoling/OUT_Chimere/DA_ENSEMBLE_RUNS_test/ #SCRTACH
+  path_data: /ccc/scratch/cont003/gen7232/demoling/OUT_orch_chimdart/ #SCRTACH
+  case_name: first_tests_202002_06-15
   path_control_run: /ccc/scratch/cont003/gen7232/demoling/OUT_Chimere/CHIMOUT-EUROCOMEX3_reruned0102
 
   path_perturbed_emi: /ccc/scratch/cont003/gen7232/demoling/PERTURBED/EMIS_ANT/fixed_scaling/
@@ -17,8 +18,8 @@ paths:
 
 
 time:
-  start_time: "2020-02-13 00:00:00"
-  end_time: "2020-02-13 01:00:00"
+  start_time: "2020-02-14 12:00:00"
+  end_time: "2020-02-14 15:00:00"
   dt_seconds: 3600
 
 
@@ -26,12 +27,7 @@ assimilation:
   run_assimilation_flag: true
   model_type: chimere
   ass_var: c_NO2
-  state_variable_qty: QTY_NO2
   obs_type: SAT_NO2_TROPOMI
-
-  case_dir: test 
-  case_emi_dir: emi #da capire se viene usato 
-  emi_var: NO2 #da capire se viene usato 
   no_mems: 2
 
 

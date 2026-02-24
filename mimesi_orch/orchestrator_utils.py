@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, List, Tuple
+from typing import Any, Optional, List, Tuple, Callable
 import netCDF4
 import xarray as xr
 import math
@@ -1246,5 +1246,88 @@ def compute_hourly(data_path: str, time: int, path_saving_data: Path, path_savin
     else:
         logger.info("Hourly dataset computed")
 
+def add_missing_variable(no_mems: int, var_to_add: str, domain: str, out_file_func: Callable, orig_file_func: Callable, **kwargs):
+    for mem in range(no_mems):
+        out_file_name=out_file_func(mem, **kwargs)
+        orig_file_name=orig_file_func(mem, domain, **kwargs)
+        logger.info(f'Adding {var_to_add} to {out_file_name} from {orig_file_name}')
+        """#ds = xr.open_dataset(f'/ccc/scratch/cont003/gen7232/demoling/OUT_orch_chimdart/OUT_Chimere/first_tests_202002_06-15/ENS{i}/chim_ENS{i}_2020021413_1_out.nc')
+        #vcmeteo = xr.open_dataset(f'/ccc/scratch/cont003/gen7232/demoling/OUT_orch_chimdart/OUT_Chimere/first_tests_202002_06-15/ENS{i}/exdomout_2020021413_1_EUROCOMEX3.nc')
+        ds = xr.open_dataset(out_file_name)
+        meteo = xr.open_dataset(orig_file_name)
+
+        meteo = meteo.rename({"Time": "time_counter", "south_north": "y", "west_east": "x" })
+        meteo = meteo.isel(time_counter=slice(0,1))
+        meteo = meteo.assign_coords(time_counter=ds.time_counter, y=ds.y, x=ds.x)
+
+        ds[var_to_add] = meteo.psfc.astype("float32")
+        #ds.to_netcdf(f'chim_ENS{i}_2020021413_1_out_psfc_float.nc')
+        ds.to_netcdf(out_file_name, mode="a")
+
+        ds.close()
+        meteo.close()"""
+
+        with xr.open_dataset(out_file_name) as ds, xr.open_dataset(orig_file_name) as meteo:
+            meteo = (
+                meteo.rename({"Time": "time_counter", "south_north": "y", "west_east": "x"})
+                    .isel(time_counter=slice(0, 1))
+                    .assign_coords(time_counter=ds.time_counter, y=ds.y, x=ds.x)
+            )
+
+            ds[var_to_add] = meteo.psfc.astype("float32")
+            tmp = str(out_file_name) + ".tmp"
+            ds.to_netcdf(tmp)
+            os.replace(tmp, out_file_name)
+
+
+def write_dart_filter_list(list_file_func: Path, out_file_func: Callable, no_mems: int, **kwargs):
+    try:    
+        list_file_func.write_text(
+            "\n".join(
+                str(out_file_func(mem, **kwargs))
+                for mem in range(no_mems)
+            ) + "\n"
+        )
+        logger.info(f"Wrote: {list_file_func}")
+    except:
+        logger.warning(f"Writing of the following failed: {list_file_func}")
+
+def update_pollutant_in_end(dart_file: Path, end_file: Path, out_file: Path, end_file_updated: Path, pollutant: str):
+    """
+    Replace pollutant values in the restart dataset (end_file) with updates from the filtering (dart_file)
+    Converts ppbv -> molecules/cm³ using 'airm' from original chimere file (out_file).
+    """
+    # Check files
+    for f in [dart_file, end_file, out_file]:
+        if not os.path.exists(f):
+            raise FileNotFoundError(f"{f} is missing")
+
+    # Open datasets
+    dart_ds = xr.open_dataset(dart_file)
+    end_ds = xr.open_dataset(end_file) #by using , mode='r+' changes (end_ds[pollutant].isel(Time=-1).values[:] = poll_molec.values) go directly into this end file
+    out_ds = xr.open_dataset(out_file)
+
+    poll = dart_ds[pollutant]
+    poll = xr.where(poll < 0, 0, poll)
+    # Broadcast airm if shapes differ
+    if poll.shape != out_ds['airm'].shape:
+        logger.warning("Chimere original out file and dart outputs differ in shape")
+        out_ds['airm'] = out_ds['airm'].broadcast_like(poll)
+    
+    # Convert units
+    poll_molec = (1e-9 * poll * out_ds['airm']).astype(end_ds[pollutant].dtype)
+    poll_molec = poll_molec.rename({'y': 'south_north', 'x': 'west_east', 'time_counter': 'Time'})
+    # Replace last time step in end
+    end_ds[pollutant].isel(Time=-1).values[:] = poll_molec.values
+    end_ds.to_netcdf(end_file_updated)
+    logger.info(f"DART's updated {pollutant} successfully replaced into {end_file_updated}")
+
+    # Close datasets
+    dart_ds.close()
+    out_ds.close()
+    end_ds.close()
+
+    return
+    
 
 

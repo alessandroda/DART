@@ -38,7 +38,8 @@ class PathsConfig(BaseModel):
     run_submit_model_template:  Optional[Path] = None
     path_submit_bsh: Path
     path_filter: Path 
-    path_data: Path #dal nome non é chiaro come verrà utilizzato; mi pare siano i risultati, percio perche non path_outputs ? 
+    path_data: Path
+    case_name: Optional[Path] = None
     path_control_run: Optional[Path] = None
 
     run_submit_replace_perturbations: Optional[Path] = None
@@ -92,11 +93,11 @@ class AssimilationConfig(BaseModel):
     """
 
     model_type: ModelType
-    ass_var: str
-    state_variable_qty: str
+    ass_var: Optional[str] = None
+    state_variable_qty: Optional[str] = None
     obs_type: str
 
-    case_dir: str
+    case_dir: Optional[str] = None
     case_emi_dir: Optional[str] = None
     emi_var: Optional[str] = None
 

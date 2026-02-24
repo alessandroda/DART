@@ -73,10 +73,10 @@ class BaseAssimilationPipeline(ABC):
 
         while self.time_manager.current_time <= self.time_manager.end_time:
             # Optional hook: e.g. emission perturbations, cleanup
-            self.before_step()
+            #self.before_step()
 
             # Run the forward model (mandatory)
-            self.run_model()
+            #self.run_model()
 
             # Define the time associated with model outputs
             # (typically current_time + forecast step)
@@ -119,6 +119,7 @@ class BaseAssimilationPipeline(ABC):
             self.time_manager.simulated_time.minute,
             self.time_manager.simulated_time.second,
         )
+        logger.info(f"simulated_time convertion: from {self.time_manager.simulated_time} to {self.days_model}, {self.seconds_model}")
 
     # ------------------------------------------------------------------
     # Optional hooks (no-op by default)

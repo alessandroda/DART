@@ -27,6 +27,7 @@ class PathManager:
 
         # ---- resolve static paths ----
         self.env_python = config.env_python
+        self.case_name = config.case_name
         self.listing_file = self._resolve(config.listing_file)
         self.run_submit_model_template = self._resolve(config.run_submit_model_template)
         self.path_submit_bsh = self._resolve(config.path_submit_bsh)
@@ -38,6 +39,9 @@ class PathManager:
         self.path_control_run = self._resolve(config.path_control_run)
         self.path_perturbed_emi = self._resolve(config.path_perturbed_emi)
         self.path_perturbed_meteo = self._resolve(config.path_perturbed_meteo)
+
+        self.path_data_dart: Path = self.path_data / 'OUT_DART' / self.case_name
+        self.path_data_ctm: Path = self.path_data / 'OUT_Chimere' / self.case_name
 
         self._check_static_paths()
 
@@ -114,7 +118,7 @@ class PathManager:
     # ------------------------------------------------------------------
 
     def chimere2023_run_dir(self, mem: int) -> Path:
-        return self.path_data / f"ENS{mem}"
+        return self.path_data_ctm / f"ENS{mem}"
 
     def chimere2023_WPS(self) -> Path:
         return self.path_control_run / "WPS" 
@@ -176,11 +180,12 @@ class PathManager:
         else:
             return self.path_control_run / f"exdomout_{date_ymd}00_24_{domain}.nc"
     
-    def chimere2023_METEO_FILE(self, mem: int, domain: str, date_ymdH: str, NHOURS: int,) -> Path:
+    def chimere2023_METEO_FILE(self, mem: int, domain: str, date_ymdH: str, NHOURS: int) -> Path:
         return self.chimere2023_run_dir(mem) / f"exdomout_{date_ymdH}_{NHOURS}_{domain}.nc"
     
+    def chimere2023_out_file(self, mem: int, date_ymdH: str, NHOURS: int) -> Path:
+        return self.chimere2023_run_dir(mem) / f"chim_ENS{mem}_{date_ymdH}_{NHOURS}_out.nc"
     
-
 
     # ------------------------------------------------------------------
     # HERMES / emissions
@@ -196,33 +201,30 @@ class PathManager:
     # DART paths
     # ------------------------------------------------------------------
 
-    def dart_to_dart_dir(self) -> Path:
-        return self.path_data / "to_DART"
+    #def dart_to_dart_dir(self) -> Path:
+    #    return self.path_data_ctm / "to_DART"
 
-    def dart_ic(self, mem: int, seconds: int, days: int) -> Path:
-        return self.dart_to_dart_dir() / f"ic_g1_{seconds}_{days}_{mem}.nc"
+    #def dart_ic(self, mem: int, seconds: int, days: int) -> Path:
+    #    return self.dart_to_dart_dir() / f"ic_g1_{seconds}_{days}_{mem}.nc"
 
-    def dart_posteriors_dir(self, timestamp: str) -> Path:
-        return self.path_data / f"posteriors/{timestamp}"
+    def dart_posteriors_dir(self, date_ymdH: str) -> Path:
+        return self.path_data_dart / f"posteriors/{date_ymdH}"
 
-    def dart_analysis_dir(self, timestamp: str) -> Path:
-        return self.path_data / f"analysis/{timestamp}"
+    def dart_analysis_dir(self, date_ymdH: str) -> Path:
+        return self.path_data_dart / f"analysis/{date_ymdH}"
 
-    def dart_preassim_dir(self, timestamp: str) -> Path:
-        return self.path_data / f"preassim/{timestamp}"
+    def dart_preassim_dir(self, date_ymdH: str) -> Path:
+        return self.path_data_dart / f"preassim/{date_ymdH}"
     
     # ------------------------------------------------------------------
     # DART – filter
     # ------------------------------------------------------------------
     
     def dart_filter_input_template(self) -> Path:
-        return self.base_path_DART / self.path_filter/ "input_template.nml"
+        return self.base_path_DART / self.path_filter / "input_template.nml"
     
-    def dart_filter_input_list_template(self) -> Path:
-        return self.base_path_DART / self.path_filter / "filter_input_list_template.txt"
-    
-    def dart_filter_output_list_template(self) -> Path:
-        return self.base_path_DART / self.path_filter / "filter_output_list_template.txt"
+    def dart_filter_input(self) -> Path:
+        return self.base_path_DART / self.path_filter / "input.nml"
     
     def dart_filter_input_list(self) -> Path:
         return self.base_path_DART / self.path_filter / "filter_input_list.txt"
@@ -235,6 +237,9 @@ class PathManager:
     
     def dart_run_filter(self) -> Path:
         return self.base_path_DART / self.path_filter / "run_filter.bsh"
+    
+    def dart_filter_output_list_file(self, mem: int, date_ymdH: str, NHOURS: int) -> Path:
+        return self.dart_posteriors_dir(date_ymdH) / f"chim_ENS{mem}_{date_ymdH}_{NHOURS}_out_posteriors.nc"
 
     # ------------------------------------------------------------------
     # DART – obs converters (S5P)
@@ -252,18 +257,18 @@ class PathManager:
     def dart_s5p_input(self) -> Path:
         return self.dart_s5p_work() / "input.nml"
 
-    def dart_s5p_data_dir(self, obs_nam: str) -> Path:
+    def dart_s5p_data_dir(self, obs_name: str) -> Path:
         #return self.dart_s5p_base() / "data/SO2-COBRA"
-        return self.dart_s5p_base() / "data" / obs_nam
+        return self.dart_s5p_base() / "data" / obs_name
 
-    def dart_file_s5p_orbit(self, orbit_filename: str, obs_nam: str) -> Path:
-        return self.dart_s5p_data_dir(obs_nam) / orbit_filename
+    def dart_file_s5p_orbit(self, orbit_filename: str, obs_name: str) -> Path:
+        return self.dart_s5p_data_dir(obs_name) / orbit_filename
 
-    def dart_s5p_output_dir(self, obs_nam: str, collection: str) -> Path:
-        return self.dart_s5p_data_dir(obs_nam) / collection
+    def dart_s5p_output_dir(self, obs_name: str, collection: str) -> Path:
+        return self.dart_s5p_data_dir(obs_name) / collection
 
-    def dart_obs_seq(self, seconds: int, days: int, obs_nam: str, collection: str) -> Path:
-        return self.dart_s5p_output_dir(obs_nam, collection) / f"obs_seq_{seconds}_{days}.out"
+    def dart_obs_seq(self, seconds: int, days: int, obs_name: str, collection: str) -> Path:
+        return self.dart_s5p_output_dir(obs_name, collection) / f"obs_seq_{seconds}_{days}.out"
 
     def get_ic_g1_path(
         self,

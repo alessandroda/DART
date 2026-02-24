@@ -1,3 +1,5 @@
 source /ccc/cont003/home/lisa/demoling/CHIMDART_env/bin/activate
+module unload intel/20.0.0
+module load intel/20.0.4 mpi/openmpi/4.0.5 netcdf-fortran/4.5.3 nco
 python -u orchestrator_irene.py -c config_pydantic_irene.yaml
 /ccc/cont003/dsku/blanchet/home/user/lisa/descomga/INVERSION/DART_CHIM
