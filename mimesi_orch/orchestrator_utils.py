@@ -377,10 +377,21 @@ def replace_nml_template(
     except Exception as e:
         raise RuntimeError(f"Error writing output file {output_nml_path}") from e
 
+    in_name = Path(input_nml_path).name
+    out_name = Path(output_nml_path).name
+
     logger.info(
-        f"Replacement {input_nml_path} → {output_nml_path} completed successfully."
+        "Replacement %s → %s completed successfully.",
+        in_name,
+        out_name,
     )
 
+    # full paths for debugging
+    logger.debug(
+        "Replacement full paths: %s → %s",
+        input_nml_path,
+        output_nml_path,
+    )
 
 def open_dataset(path: str):
     return xr.open_dataset(path, mask_and_scale=False)
