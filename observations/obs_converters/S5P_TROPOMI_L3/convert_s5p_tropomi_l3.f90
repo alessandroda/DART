@@ -52,6 +52,7 @@ program convert_s5p_tropomi_L2
    integer  :: ncid, nobs, n, i, oday, osec, nused, nlayeri, nlayer, obsindx
    integer  :: iunit, rcio ! integers to read namelist
    logical  :: file_exist, first_obs
+   character(len=129)       :: dated_out_file
    real(r8),allocatable,dimension(:) :: avgk_obs_r8
    real*8                          :: obs_err
 
@@ -64,7 +65,8 @@ program convert_s5p_tropomi_L2
    real                          :: qa_thres = 0.75
    character(len=256)            :: pollutant='NO2'
    logical                       :: superobs=.false.
-   namelist /file_info_nml/ s5p_netcdf_file, s5p_out_file, vertical_ref_height, which_gas, qa_thres, pollutant, superobs
+   logical                       :: use_readable_date_filename = .true.
+   namelist /file_info_nml/ s5p_netcdf_file, s5p_out_file, vertical_ref_height, which_gas, qa_thres, pollutant, superobs, use_readable_date_filename
 
 !-----------------------------------------------------------------------
 ! Namelist with default values
@@ -111,6 +113,16 @@ program convert_s5p_tropomi_L2
    call init_obs(obs,      num_copies, num_qc)
    call init_obs(prev_obs, num_copies, num_qc)
 
+   call tsat_obs%Read(s5p_netcdf_file, pollutant, superobs)
+   nobs = SIZE(tsat_obs%vcd)
+
+   if (use_readable_date_filename .and. nobs > 0) then
+      write(dated_out_file, '(A,"_",I4.4,I2.2,I2.2,"T",I2.2,I2.2,I2.2,".out")') 'obs_seq', &
+         tsat_obs%date_time(1)%year, tsat_obs%date_time(1)%month, tsat_obs%date_time(1)%day, &
+         tsat_obs%date_time(1)%hour, tsat_obs%date_time(1)%minute, tsat_obs%date_time(1)%second
+      s5p_out_file = trim(dated_out_file)
+   endif
+
    inquire(file=s5p_out_file, exist=file_exist)
 
    if ( file_exist ) then
@@ -119,8 +131,6 @@ program convert_s5p_tropomi_L2
       call read_obs_seq(s5p_out_file, 0, 0, 2*nobs, obs_seq)
 
    else
-      call tsat_obs%Read(s5p_netcdf_file, pollutant, superobs)
-      nobs = SIZE(tsat_obs%vcd)
       allocate(used(nobs))
       allocate(tused(nobs))
       allocate(tobs(nobs))
@@ -134,6 +144,13 @@ program convert_s5p_tropomi_L2
          call set_qc_meta_data(obs_seq, i, 'Data QC')
       end do
 
+   endif
+
+   if (.not. allocated(used)) then
+      allocate(used(nobs))
+      allocate(tused(nobs))
+      allocate(tobs(nobs))
+      allocate(sorted_used(nobs))
    endif
 
    ! Set the DART data quality control.  Be consistent with NCEP codes;
@@ -183,6 +200,7 @@ program convert_s5p_tropomi_L2
       ! sort them later by time.
       nused = nused + 1
       used(nused) = n
+      tused(nused) = tsat_obs%date_time(n)%hour*3600 + tsat_obs%date_time(n)%minute*60 + tsat_obs%date_time(n)%second
    end do obsloop1
 
    ! sort by time
@@ -198,8 +216,8 @@ program convert_s5p_tropomi_L2
       avgk_obs_r8(:) = REAL(tsat_obs%kernel_trop(1,:,n), 8)
       obs_err = (REAL(tsat_obs%vcd_errvar(1, 1, n), 8))**0.5
       ! compute time of observation
-      time_obs = set_date(tsat_obs%date_time(i)%year,tsat_obs%date_time(i)%month,tsat_obs%date_time(i)%day, &
-         tsat_obs%date_time(i)%hour, tsat_obs%date_time(i)%minute, tsat_obs%date_time(i)%second)
+      time_obs = set_date(tsat_obs%date_time(n)%year,tsat_obs%date_time(n)%month,tsat_obs%date_time(n)%day, &
+         tsat_obs%date_time(n)%hour, tsat_obs%date_time(n)%minute, tsat_obs%date_time(n)%second)
 
       ! extract actual time of observation in file into oday, osec.
       call get_time(time_obs, osec, oday)
