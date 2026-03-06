@@ -49,7 +49,7 @@ logfile = LOG_DIR / f"{config.assimilation.model_type.value}_DART_{time.strftime
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(processName)s/%(threadName)s] %(levelname)s: %(message)s",
+    format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d]: %(message)s",
     handlers=[
         logging.FileHandler(logfile),
         logging.StreamHandler(),
