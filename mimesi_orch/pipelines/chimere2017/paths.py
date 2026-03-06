@@ -43,7 +43,7 @@ class Chimere2017Paths:
         return f"run_mimesi_ens_{string_to_replace_template}.sh"
 
     def chimere_output_runs_dir(self, mem: int) -> Path:
-        return self.path_data / f"runs_chimere/ITA7/RUNS_{mem}"
+        return self.path_data / f"RUN_{mem}"
 
     # DART + S5P converter
     def dart_posteriors_dir(self, timestamp: str) -> Path:
