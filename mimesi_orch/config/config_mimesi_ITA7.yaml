@@ -11,6 +11,7 @@ assimilation:
 cluster:
   cluster_queue: g100_usr_prod
   scheduler: SLURM
+  project_name: mimesi
 dart:
   analysis_dir: RUN/data_freerun/analysis
   obs_converters_dir: DART/observations/obs_converters/S5P_TROPOMI_L3
@@ -24,7 +25,7 @@ paths:
   base_path: /g100_work/ARPAE_AQM/MIMESI/
   chimere_par_template: catena_aria_test/Chimere/auto_runs/templates/chimere.mimesi-ITA7_template.par
   env_python: miniconda3/bin/python3.13
-  listing_file: DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03__listing.csv
+  listing_file: SAT_OBS/C03__listing.csv
   log_directory: logs_orchestrator
   path_data: runs_chimere/ITA7
   path_filter: DART/models/CHIMERE_v2017r/work_offline
