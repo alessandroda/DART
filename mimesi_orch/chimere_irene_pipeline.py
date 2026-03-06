@@ -36,8 +36,7 @@ from orchestrator_utils import (
     monitor_job_dart,
     add_missing_variable,
     write_dart_filter_list,
-    update_pollutant_in_end,
-    save_diff
+    update_pollutant_in_end
 )
 
 
@@ -267,6 +266,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         orbit_filename = self.process_satellite_data()
         if not orbit_filename:
             logger.info("[DART] No satellite data found, skipping assimilation")
+            self.satdata_found = False
             return
         
         logger.info(f"---------->>> Running run_obs_converter()")
@@ -275,6 +275,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         obs_path = self.path_manager.dart_obs_seq(obs_seq_name, self.obs_name, self.collection)
         if not obs_path.exists():
             logger.info("[DART] convertion was run but all obs were excluded and obs_seq was not created, skipping assimilation")
+            self.satdata_found = False
             return
         else:
             logger.info(f"[DART] obs_seq created: {obs_path}")
@@ -421,18 +422,6 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         job_id = submit_irene(spec)
         monitor_job_status([job_id], self.scheduler, self.model_type)
         self.move_analysis_files()
-
-        logger.info(f"Computing differences between analysis/preassim means ...")
-        # 1. Difference: analysis_mean.nc - preassim_mean.nc
-        analysis_mean = self.path_manager.dart_analysis_dir(date_ymdH) / "analysis_mean.nc"
-        preassim_mean = self.path_manager.dart_preassim_dir(date_ymdH) / "preassim_mean.nc"
-        diff_mean_out = self.path_manager.dart_analysis_dir(date_ymdH) / "analysis_increment_mean.nc"
-
-        if analysis_mean.exists() and preassim_mean.exists():
-            save_diff(analysis_mean, preassim_mean, diff_mean_out, "Mean Analysis Increment")
-        else:
-            logger.warning(f"Skipping mean diff: files not found in {date_ymdH}")
-
         logger.info(f"run_dart() is DONE.")
     
     def move_analysis_files(self):
@@ -475,17 +464,6 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
                                     end_file=self.path_manager.chimere2023_END_FILE(mem, date_ymdH, 1),
                                     out_file=self.path_manager.chimere2023_out_file(mem, date_ymdH, 1),
                                     pollutant='NO2')
-            logger.info(f"Computing differences between posterior vs. original CHIMERE outputs ...")
-            # 2. Difference: Posterior (DART) - Original (CHIMERE) for each ensemble member
-            posterior_file = self.path_manager.dart_filter_output_list_file(mem, date_ymdH, 1)
-            chimere_file = self.path_manager.chimere2023_out_file(mem, date_ymdH, 1)
-            # Saving in the posteriors directory for the specific date
-            diff_mem_out = self.path_manager.dart_posteriors_dir(date_ymdH) / f"diff_posterior_ENS{mem}_{date_ymdH}.nc"
-
-            if posterior_file.exists() and chimere_file.exists():
-                save_diff(posterior_file, chimere_file, diff_mem_out, f"Posterior Diff ENS{mem}")
-            else:
-                logger.debug(f"Skipping member {mem} diff: files missing.")
             
     def finalize_step(self):
         """
@@ -497,7 +475,6 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         #    self.time_manager.simulated_time.strftime("%Y-%m-%d %H:00:00"),
         #)
         #self.cleanup_FARM()
-        
-        self.satdata_found = False
+
         logger.info("Cycle is DONE; starting a new loop!")
 

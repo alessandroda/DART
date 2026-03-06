@@ -8,24 +8,22 @@ paths:
   path_filter: models/chimere/work 
 
   path_data: /ccc/scratch/cont003/gen7232/demoling/OUT_orch_chimdart/ #SCRTACH
-  case_name: full_exercise_20200206_2mems
+  case_name: complex_perturb_emi_202002_06-15
   path_control_run: /ccc/scratch/cont003/gen7232/demoling/OUT_Chimere/CHIMOUT-EUROCOMEX3_reruned0102
 
-  path_perturbed_emi: /ccc/scratch/cont003/gen7232/demoling/PERTURBED/EMIS_ANT/fixed_scaling/
-  path_perturbed_meteo: /ccc/scratch/cont003/gen7232/demoling/PERTURBED/METEO/fixed_scaling/
+  path_perturbed_emi: /ccc/scratch/cont003/gen7232/demoling/PERTURBED/EMIS_ANT/complex/
 
   log_directory: logs_orchestrator
 
 
 time:
-  start_time: "2020-02-06 08:00:00"
-  end_time: "2020-02-06 09:00:00"
+  start_time: "2020-02-14 10:00:00"
+  end_time: "2020-02-14 16:00:00"
   dt_seconds: 3600
 
 
 assimilation:
-  run_assimilation_flag: true
-  update_restart: true
+  run_assimilation_flag: false
   model_type: chimere
   ass_var: c_NO2
   obs_type: SAT_NO2_TROPOMI
@@ -37,7 +35,7 @@ cluster:
   scheduler : SLURM
   project_name: gen7232
   nb_proc: 101
-  walltime: 7200
+  walltime: 86400
   mail: gdemoliner@lisa.ipsl.fr
 
 
@@ -67,9 +65,9 @@ model_data:
   domain: EUROCOMEX3
   chimpart: p
   submit_sequentially: False
-  restart_from_controlrun: False 
-  perturbation_names: ["EmisID", "MeteoID"] # Ensemble Mapping (EmisID : MeteoID)
-  ensemble_list: ["01:02", "02:02"] #["00:00", "00:01", "00:02", "01:00", "01:01", "01:02", "02:00", "02:01", "02:02"]
+  restart_from_controlrun: True 
+  perturbation_names: ["EmisID"] # Ensemble Mapping (EmisID : MeteoID)
+  ensemble_list: ["00", "01", "02", "03", "04"] #["00:00", "00:01", "00:02", "01:00", "01:01", "01:02", "02:00", "02:01", "02:02"]
   dom_west: -15.25
   dom_east: 34.75
   dom_south: 31.75

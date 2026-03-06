@@ -36,12 +36,9 @@ class TimeManager:
         self.end_time = pd.to_datetime(end_time)
         self.current_time = self.start_time
         self.simulated_time = None
-        self.timestamp_farm_run = None
         self.sat_obs = None
         self.dt = pd.Timedelta(dt_seconds, unit="s")
-        self.last_perturbed_day = None
-        self.end_file_date_control_run = self.start_time - timedelta(days=1)
-        self.end_file_date = None
+        self.end_file_datetime = self.current_time - timedelta(hours=1)
 
         self.check_start_ahead_end()
 
@@ -57,6 +54,7 @@ class TimeManager:
         Increments the current time by the delta (dt).
         """
         self.current_time += self.dt
+        logger.info(f"current_time is now {self.current_time}")
 
     @staticmethod
     def round_to_closest_hour(timestamp):
@@ -933,8 +931,6 @@ def monitor_job_status(
 
         if not running_jobs:
             logger.info(f"Jobs {job_ids} have finished")
-            logger.info(f"Checking if runs succeded...")
-        
             return
 
         logger.info(f"Jobs still running: {running_jobs}. Waiting...")
@@ -956,7 +952,7 @@ def check_restart_files_exist(
                 f"({ic_path.stat().st_size} bytes)"
             )
         else:
-            logger.warning(f"{model} | restart_file is missing for mem {mem}: {ic_path}")
+            logger.warning(f"{model} | resatrt_file is missing for mem {mem}: {ic_path}")
             mems_to_rerun.append(mem)
 
     return mems_to_rerun
@@ -1239,6 +1235,7 @@ def compute_hourly(data_path: str, time: int, path_saving_data: Path, path_savin
     if len(data_sel.Times.values) == 0: #when time is saved as float (isel drops Time even with drop=False)
         data_sel = data.sel(Time=slice(data.Time.values[time], data.Time.values[time+1]))
     
+    path_saving_data.parent.mkdir(parents=True, exist_ok=True)
     data_sel.to_netcdf(path_saving_data)
     if path_saving_list:
         path_saving_list.write_text("1\n" + str(path_saving_data) + "\n")
@@ -1268,13 +1265,13 @@ def add_missing_variable(no_mems: int, var_to_add: str, domain: str, out_file_fu
         meteo.close()"""
 
         with xr.open_dataset(out_file_name) as ds, xr.open_dataset(orig_file_name) as meteo:
-            meteo = (
+            meteo_sub = (
                 meteo.rename({"Time": "time_counter", "south_north": "y", "west_east": "x"})
                     .isel(time_counter=slice(0, 1))
                     .assign_coords(time_counter=ds.time_counter, y=ds.y, x=ds.x)
             )
 
-            ds[var_to_add] = meteo.psfc.astype("float32")
+            ds[var_to_add] = meteo_sub[var_to_add].astype("float32")
             tmp = str(out_file_name) + ".tmp"
             ds.to_netcdf(tmp)
             os.replace(tmp, out_file_name)
@@ -1292,7 +1289,7 @@ def write_dart_filter_list(list_file_func: Path, out_file_func: Callable, no_mem
     except:
         logger.warning(f"Writing of the following failed: {list_file_func}")
 
-def update_pollutant_in_end(dart_file: Path, end_file: Path, out_file: Path, end_file_updated: Path, pollutant: str):
+def update_pollutant_in_end(dart_file: Path, end_file: Path, out_file: Path, pollutant: str):
     """
     Replace pollutant values in the restart dataset (end_file) with updates from the filtering (dart_file)
     Converts ppbv -> molecules/cm³ using 'airm' from original chimere file (out_file).
@@ -1303,31 +1300,47 @@ def update_pollutant_in_end(dart_file: Path, end_file: Path, out_file: Path, end
             raise FileNotFoundError(f"{f} is missing")
 
     # Open datasets
-    dart_ds = xr.open_dataset(dart_file)
-    end_ds = xr.open_dataset(end_file) #by using , mode='r+' changes (end_ds[pollutant].isel(Time=-1).values[:] = poll_molec.values) go directly into this end file
-    out_ds = xr.open_dataset(out_file)
+    with xr.open_dataset(dart_file) as dart_ds, xr.open_dataset(end_file) as end_ds, xr.open_dataset(out_file) as out_ds:
 
-    poll = dart_ds[pollutant]
-    poll = xr.where(poll < 0, 0, poll)
-    # Broadcast airm if shapes differ
-    if poll.shape != out_ds['airm'].shape:
-        logger.warning("Chimere original out file and dart outputs differ in shape")
-        out_ds['airm'] = out_ds['airm'].broadcast_like(poll)
+        poll = dart_ds[pollutant].load()
+        airm = out_ds['airm'].load()
+        poll = xr.where(poll < 0, 0, poll)
+        # Broadcast airm if shapes differ
+        if poll.shape != airm.shape:
+            logger.warning("Chimere original out file and dart outputs differ in shape")
+            airm = airm.broadcast_like(poll)
+        
+        # Convert units
+        poll_molec = (1e-9 * poll * airm).astype(end_ds[pollutant].dtype)
+        poll_molec = poll_molec.rename({'y': 'south_north', 'x': 'west_east', 'time_counter': 'Time'})
+        # Replace last time step in end
+        #end_ds[pollutant].isel(Time=-1).values[:] = poll_molec.values
+        end_ds[pollutant].loc[dict(Time=end_ds.Time[-1])] = poll_molec.isel(Time=-1).values
+
+        tmp = str(end_file) + ".tmp"
+        end_ds.to_netcdf(tmp)
     
-    # Convert units
-    poll_molec = (1e-9 * poll * out_ds['airm']).astype(end_ds[pollutant].dtype)
-    poll_molec = poll_molec.rename({'y': 'south_north', 'x': 'west_east', 'time_counter': 'Time'})
-    # Replace last time step in end
-    end_ds[pollutant].isel(Time=-1).values[:] = poll_molec.values
-    end_ds.to_netcdf(end_file_updated)
-    logger.info(f"DART's updated {pollutant} successfully replaced into {end_file_updated}")
+    # Ora che siamo fuori dal 'with', i file sono chiusi e possiamo fare l'os.replace
+    os.replace(tmp, end_file)
+    logger.info(f"DART's updated {pollutant} successfully replaced into {end_file}")
 
-    # Close datasets
-    dart_ds.close()
-    out_ds.close()
-    end_ds.close()
 
-    return
+def save_diff(file_a: Path, file_b: Path, out_path: Path, label: str):
+    """Memory-optimized subtraction using Dask lazy-loading."""
+    try:
+        # 'chunks={}' enables Dask. 
+        # You can also specify specific dimensions like chunks={'time': 1, 'lev': 5}
+        with xr.open_dataset(file_a, chunks={'time': 1}) as ds_a, \
+                xr.open_dataset(file_b, chunks={'time': 1}) as ds_b:
+            
+            # This operation is now "lazy" - no math happens yet
+            diff = ds_a - ds_b
+            
+            # The computation and writing happen chunk-by-chunk to the disk
+            diff.to_netcdf(out_path)
+            
+            logger.info(f"[{label}] Memory-optimized diff saved to {out_path}")
+    except Exception as e:
+        logger.error(f"Failed to compute {label}: {e}")
     
-
 

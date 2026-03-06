@@ -103,6 +103,7 @@ class AssimilationConfig(BaseModel):
 
     no_mems: int = Field(gt=0)
     run_assimilation_flag: bool = True
+    update_restart: bool = None
 
     @field_validator("model_type", mode="before")
     @classmethod

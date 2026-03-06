@@ -174,7 +174,7 @@ class PathManager:
     def chimere2023_EMI_FILE(self, mem: int, domain: str, month: int, weekday) -> Path:
         return self.chimere2023_run_dir(mem) / f"EMIS.{domain}.{month}.{weekday}.s.nc"
     
-    def chimere2023_METEO_FILE_SRC(self, is_pert: bool, domain: str, date_ymd: str, meteo_id: int) -> Path:
+    def chimere2023_METEO_FILE_SRC(self, is_pert: bool, domain: str, date_ymd: str, meteo_id: Optional[int]) -> Path:
         if is_pert:
             return self.path_perturbed_meteo / f"exdomout_{date_ymd}00_24_{domain}.ens0{meteo_id}.nc"
         else:
@@ -267,8 +267,8 @@ class PathManager:
     def dart_s5p_output_dir(self, obs_name: str, collection: str) -> Path:
         return self.dart_s5p_data_dir(obs_name) / collection
 
-    def dart_obs_seq(self, seconds: int, days: int, obs_name: str, collection: str) -> Path:
-        return self.dart_s5p_output_dir(obs_name, collection) / f"obs_seq_{seconds}_{days}.out"
+    def dart_obs_seq(self, obs_seq_name: str, obs_name: str, collection: str) -> Path:
+        return self.dart_s5p_output_dir(obs_name, collection) / obs_seq_name
 
     def get_ic_g1_path(
         self,
