@@ -18,12 +18,26 @@ This folder now contains a pipeline abstraction layer that isolates model-specif
 - New pipeline modules wrap those classes and are instantiated through `factory.build_pipeline(...)`.
 - `config_models.AppConfig` remains valid for legacy YAMLs.
 
+## Current status
+
+- CHIMERE 2017:
+  - Logic copied from legacy `chimere_pipeline.py` into `chimere2017/pipeline.py`.
+  - Pipeline now uses `chimere2017/paths.py` directly.
+  - `chimere2017/paths.py` no longer depends on global `PathManager`.
+- FARM and CHIMERE 2023:
+  - Still use wrappers over legacy implementations and `PathManager`-backed path facades.
+
 ## Next migration steps
 
-1. Move logic from legacy `*_pipeline.py` files into `pipelines/<name>/pipeline.py`.
-2. Replace usage of legacy `PathManager` with pipeline-local path classes.
-3. Remove mixed methods from `paths.py` once all pipelines are migrated.
-4. Optionally migrate to explicit config section:
+1. Apply the same migration pattern to `farm`:
+   - copy logic into `pipelines/farm/pipeline.py`
+   - remove `PathManager` coupling from `pipelines/farm/paths.py`.
+2. Apply the same migration pattern to `chimere2023`:
+   - copy logic into `pipelines/chimere2023/pipeline.py`
+   - remove `PathManager` coupling from `pipelines/chimere2023/paths.py`.
+3. After all pipelines are migrated, convert shared helpers in root `paths.py` into model-agnostic utilities only.
+4. Remove legacy files (`farm_pipeline.py`, `chimere_pipeline.py`, `chimere_irene_pipeline.py`) after import checks and transition period.
+5. Optionally migrate to explicit config section:
 
 ```yaml
 pipeline:

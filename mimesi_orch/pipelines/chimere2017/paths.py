@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 import pandas as pd
 
-from paths import PathManager
 from pipelines.chimere2017.config import Chimere2017PipelineConfig
 from mimesi_types import ModelType
 
@@ -13,7 +12,6 @@ class Chimere2017Paths:
 
     def __init__(self, cfg: Chimere2017PipelineConfig):
         self.cfg = cfg
-        self._manager = PathManager.model_from_pipeline(cfg)
         self.base_path = cfg.base_path.resolve()
         self.env_python = self._resolve(cfg.env_python)
         self.listing_file = self._resolve(cfg.listing_file)
@@ -36,10 +34,6 @@ class Chimere2017Paths:
         if p.is_absolute():
             return p.resolve()
         return (self.base_path / p).resolve()
-
-    @property
-    def manager(self) -> PathManager:
-        return self._manager
 
     # CHIMERE 2017
     def chimere_name_run_sub_ens_bash(self, string_to_replace_template: str) -> str:
