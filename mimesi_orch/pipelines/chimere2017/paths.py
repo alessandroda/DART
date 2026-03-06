@@ -73,5 +73,8 @@ class Chimere2017Paths:
     def get_ic_g1_path(self, model: ModelType, mem: int, timestamp: pd.Timestamp) -> Path:
         if model != ModelType.CHIMERE:
             raise ValueError(f"Chimere2017Paths does not support model type: {model}")
+
         ts = timestamp.strftime("%Y%m%d%H")
-        return self.chimere_output_runs_dir(mem) / f"ic_g1_{ts}.nc"
+        ts_p1 = (timestamp + pd.Timedelta(hours=1)).strftime("%Y%m%d%H")
+
+        return self.chimere_output_runs_dir(mem) / f"end.{ts}_{ts_p1}_ITA7.nc"
