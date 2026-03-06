@@ -7,9 +7,7 @@ from mimesi_types import ModelType
 from pipelines.registry import create_pipeline
 
 # Import modules for registration side effects.
-from pipelines.farm import pipeline as _farm_pipeline  # noqa: F401
 from pipelines.chimere2017 import pipeline as _chimere2017_pipeline  # noqa: F401
-from pipelines.chimere2023 import pipeline as _chimere2023_pipeline  # noqa: F401
 
 
 def infer_pipeline_name(config: AppConfig) -> str:
