@@ -350,15 +350,15 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         )
 
         mems_to_rerun = get_list_mems_to_rerun(
-            job_ids,
-            self.path_manager,
-            timestamp_chimere,
-            self.no_mems,
-            self.scheduler,
-            self.model_type,
+            job_ids=job_ids,
+            scheduler=self.scheduler,
+            model_type=self.model_type,
+            path_manager=self.path_manager,
+            timestamp_model=timestamp_chimere,
+            no_mems=self.no_mems,
         )
 
-        if not mems_to_rerun:
+        if mems_to_rerun:
             raise ModelRunError(f"Ensemble members failed: {mems_to_rerun}")
 
     def process_satellite_data(self):

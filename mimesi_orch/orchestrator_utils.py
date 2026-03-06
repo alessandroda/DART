@@ -781,7 +781,12 @@ def submit_and_wait(
         job_ids = run_command_in_directory_bsub(command, directory)
         time.sleep(10)
     mems_to_rerun = get_list_mems_to_rerun(
-        job_ids, path_manager, timestamp_farm, no_mems
+        job_ids=job_ids,
+        scheduler=Scheduler.LSF,
+        model_type=ModelType.FARM,
+        path_manager=path_manager,
+        timestamp_model=timestamp_farm,
+        no_mems=no_mems,
     )
 
     if mems_to_rerun:
@@ -809,25 +814,18 @@ def submit_and_wait(
 
 
 def get_list_mems_to_rerun(
+    *,
     job_ids: list[str],
     scheduler: Scheduler,
     model_type: ModelType,
     path_manager: Optional[PathManager] = None,
     timestamp_model: Optional[str] = None,
-    no_mems: Optional[int] = None
+    no_mems: Optional[int] = None,
 ) -> list[int]:
     """Block until all jobs in job_ids have finished.
     Return list of ensemble members that did not produce valid outputs.
     Empty list means success.
     """
-    datetime_model_p1 = pd.to_datetime(timestamp_model, format="%Y%m%d%H") + timedelta(
-        hours=1
-    )
-
-    #datetime_model_p1 = pd.to_datetime(timestamp_model, format="%Y%m%d%H") + timedelta(
-    #    hours=1
-    #)
-    datetime_model_p1=timestamp_model
 
     while True:
         running_jobs = []
@@ -848,8 +846,27 @@ def get_list_mems_to_rerun(
         if not running_jobs:
             logger.info(f"Jobs {job_ids} have finished")
             logger.info(f"Checking if runs failed ...")
-        
-            return check_restart_files_exist(
+            if path_manager is None or timestamp_model is None or no_mems is None:
+                logger.warning(
+                    "Skipping output-file validation because path_manager, "
+                    "timestamp_model, or no_mems is missing."
+                )
+                return []
+
+            timestamp_dt = pd.to_datetime(timestamp_model, format="%Y%m%d%H")
+
+            # CHIMERE 2023 runs use end.<start>_<nhours>_ENS*.nc restart files.
+            if model_type == ModelType.CHIMERE and path_manager.path_control_run is not None:
+                return check_restart_files_exist(
+                    path_manager=path_manager,
+                    model=model_type,
+                    datetime_model=timestamp_dt.strftime("%Y%m%d%H"),
+                    no_mems=no_mems,
+                )
+
+            # FARM and CHIMERE 2017 runs are validated through ic_g1 at t+1h.
+            datetime_model_p1 = timestamp_dt + timedelta(hours=1)
+            return check_ic_files_exist(
                 path_manager=path_manager,
                 model=model_type,
                 datetime_model=datetime_model_p1,
@@ -864,18 +881,12 @@ def check_restart_files_exist(
     path_manager: PathManager,
     model: ModelType,
     no_mems: int,
-    #datetime_farm: Optional[pd.Timestamp] = None,
     datetime_model: Optional[str] = None,
 ) -> list[int]:
 
     mems_to_rerun = []
 
     for mem in range(no_mems):
-        #ic_path = path_manager.get_ic_g1_path(
-        #    model=model,
-        #    mem=mem,
-        #    timestamp=datetime,
-        #)
         ic_path = path_manager.chimere2023_END_FILE(mem, datetime_model, 1)
 
         if ic_path.exists() and ic_path.stat().st_size > 0:
@@ -885,6 +896,33 @@ def check_restart_files_exist(
             )
         else:
             logger.warning(f"{model} | restart_file {ic_path} missing for mem {mem}")
+            mems_to_rerun.append(mem)
+
+    return mems_to_rerun
+
+
+def check_ic_files_exist(
+    path_manager: PathManager,
+    model: ModelType,
+    no_mems: int,
+    datetime_model: pd.Timestamp,
+) -> list[int]:
+    mems_to_rerun = []
+
+    for mem in range(no_mems):
+        ic_path = path_manager.get_ic_g1_path(
+            model=model,
+            mem=mem,
+            timestamp=datetime_model,
+        )
+
+        if ic_path.exists() and ic_path.stat().st_size > 0:
+            logger.info(
+                f"{model} | ic_g1 exists for mem {mem} "
+                f"({ic_path.stat().st_size} bytes)"
+            )
+        else:
+            logger.warning(f"{model} | ic_g1 missing for mem {mem}: {ic_path}")
             mems_to_rerun.append(mem)
 
     return mems_to_rerun
@@ -1173,6 +1211,5 @@ def compute_hourly(data_path: str, time: int, path_saving_data: Path, path_savin
         logger.info("Hourly dataset computed and listing created")
     else:
         logger.info("Hourly dataset computed")
-
 
 
