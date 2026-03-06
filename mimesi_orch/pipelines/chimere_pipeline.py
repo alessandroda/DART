@@ -395,6 +395,9 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             self.time_manager.sat_obs.minute,
             self.time_manager.sat_obs.second,
         )
+        existing_obs_seq = {
+            path.name for path in self.path_manager.dart_s5p_output_dir().glob("obs_seq_*.out")
+        }
         obs_seq_name = f"obs_seq_{self.seconds_obs}_{self.days_obs}.out"
 
         replace_nml_template(
@@ -416,7 +419,33 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         except Exception as e:
             logger.error(f"Error running obs converter: {e}")
             return False
-        return obs_seq_name
+
+        generated_obs_seq = [
+            path
+            for path in self.path_manager.dart_s5p_output_dir().glob("obs_seq_*.out")
+            if path.name not in existing_obs_seq
+        ]
+        if generated_obs_seq:
+            return max(generated_obs_seq, key=lambda p: p.stat().st_mtime).name
+
+        expected_obs_seq = self.path_manager.dart_obs_seq(self.seconds_obs, self.days_obs)
+        if expected_obs_seq.exists():
+            return expected_obs_seq.name
+
+        fallback_obs_seq = sorted(
+            self.path_manager.dart_s5p_output_dir().glob("obs_seq_*.out"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        if fallback_obs_seq:
+            logger.warning(
+                "Could not uniquely identify newly generated obs_seq. Using latest file: %s",
+                fallback_obs_seq[0].name,
+            )
+            return fallback_obs_seq[0].name
+
+        logger.error("No obs_seq output found in %s", self.path_manager.dart_s5p_output_dir())
+        return False
 
     def after_model(self):
         pass
@@ -585,10 +614,11 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
         obs_seq_name = self.run_obs_converter(orbit_filename)
 
-        obs_path = (
-            self.path_manager.base_path
-            / f"DART/observations/obs_converters/S5P_TROPOMI_L3/data/SO2-COBRA/C03dart/{obs_seq_name}"
-        )
+        if not obs_seq_name:
+            logger.info("[DART] Observation conversion failed, skipping assimilation")
+            return
+
+        obs_path = self.path_manager.dart_s5p_output_dir() / obs_seq_name
         if not obs_path.exists():
             logger.info("[DART] obs_seq not found, skipping assimilation")
             return
