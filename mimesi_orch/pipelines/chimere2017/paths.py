@@ -59,18 +59,18 @@ class Chimere2017Paths:
         return self.dart_s5p_work() / "input.nml"
 
     def dart_s5p_data_dir(self) -> Path:
-        return self.dart_s5p_base() / "data/SO2-COBRA"
+        return self.base_path / "SAT_OBS"
 
     def dart_file_s5p_orbit(self, orbit_filename: str) -> Path:
-        return self.dart_s5p_data_dir() / orbit_filename
+        return self.base_path() / orbit_filename
 
     def dart_s5p_output_dir(self) -> Path:
         return self.dart_s5p_data_dir() / "C03dart"
 
-    def dart_obs_seq(self, seconds: int, days: int) -> Path:
-        return self.dart_s5p_output_dir() / f"obs_seq_{seconds}_{days}.out"
+    def dart_obs_seq(self, obs_seq_name) -> Path:
+        return self.dart_s5p_output_dir() / obs_seq_name
 
-    def get_ic_g1_path(self, model: ModelType, mem: int, timestamp: pd.Timestamp) -> Path:
+    def get_end_path(self, model: ModelType, mem: int, timestamp: pd.Timestamp) -> Path:
         if model != ModelType.CHIMERE:
             raise ValueError(f"Chimere2017Paths does not support model type: {model}")
 

@@ -372,14 +372,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             return False
 
         orbit_filename["start_time"] = pd.to_datetime(orbit_filename["start_time"])
-        orbit_filename = orbit_filename[orbit_filename["start_time"].dt.hour >= 10]
-
-        if orbit_filename.empty:
-            logger.info(
-                f'No valid orbit file found after 10 AM.{orbit_filename["start_time"]}'
-            )
-            return False
-
+        
         logger.info(f"Orbit file found: {orbit_filename['filename'].values[0]}")
         self.time_manager.sat_obs = pd.to_datetime(
             orbit_filename["start_time"].values[0]
@@ -405,7 +398,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             entries_tbr_dict={
                 "$file_path_s5p": self.paths.dart_file_s5p_orbit(orbit_filename),
                 "$file_out": self.paths.dart_obs_seq(
-                    self.seconds_obs, self.days_obs
+                    obs_seq_name
                 ),
                 "$obs_type": self.obs_type,
             },
