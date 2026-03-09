@@ -136,8 +136,7 @@ class PathManager:
     def chimere_name_run_sub_ens_bash(self, string_to_replace_template) -> Path:
         return f"run_mimesi_ens_{string_to_replace_template}.sh"
 
-    def chimere_output_runs_dir(self, mem: int) -> Path:
-        return self.path_data / f"runs_chimere/ITA7/RUNS_{mem}"
+
     
     # ------------------------------------------------------------------
     # CHIMERE v2023 paths
@@ -269,21 +268,4 @@ class PathManager:
     def dart_obs_seq(self, seconds: int, days: int) -> Path:
         return self.dart_s5p_output_dir() / f"obs_seq_{seconds}_{days}.out"
 
-    def get_ic_g1_path(
-        self,
-        model: ModelType,
-        mem: int,
-        timestamp: pd.Timestamp,
-    ) -> Path:
 
-        ts = timestamp.strftime("%Y%m%d%H")
-        file_name = f"ic_g1_{ts}.nc"
-
-        if model == ModelType.FARM:
-            return self.farm_output_runs_dir(mem, file_name)
-
-        elif model == ModelType.CHIMERE:
-            return self.chimere_output_runs_dir(mem) / file_name
-
-        else:
-            raise ValueError(f"Unsupported model type: {model}")
