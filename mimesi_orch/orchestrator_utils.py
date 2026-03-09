@@ -817,11 +817,11 @@ def get_list_mems_to_rerun(
 
             timestamp_dt = pd.to_datetime(timestamp_model, format="%Y%m%d%H")
 
-            datetime_model_p1 = timestamp_dt + timedelta(hours=1)
+            #datetime_model_p1 = timestamp_dt + timedelta(hours=1)
             return check_ic_files_exist(
                 path_manager=path_manager,
                 model=model_type,
-                datetime_model=datetime_model_p1,
+                datetime_model=timestamp_dt,
                 no_mems=no_mems,
             )
 

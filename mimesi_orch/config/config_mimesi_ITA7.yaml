@@ -4,14 +4,14 @@ assimilation:
   case_emi_dir: emi
   emi_var: NO2
   model_type: CHIMERE
-  no_mems: 3
+  no_mems: 1
   obs_type: SAT_NO2_TROPOMI
-  run_assimilation_flag: false
+  run_assimilation_flag: true
   state_variable_qty: QTY_NO2
 cluster:
   cluster_queue: g100_usr_prod
-  scheduler: SLURM
   project_name: mimesi
+  scheduler: SLURM
 dart:
   analysis_dir: RUN/data_freerun/analysis
   obs_converters_dir: DART/observations/obs_converters/S5P_TROPOMI_L3
@@ -40,4 +40,4 @@ time:
   backup_perturb_days: 2
   dt_seconds: 3600
   end_time: '2026-01-26 00:00:00'
-  start_time: '2026-01-25 07:00:00'
+  start_time: '2026-01-25 12:00:00'
