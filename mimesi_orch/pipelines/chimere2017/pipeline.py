@@ -519,13 +519,13 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
             ds.to_netcdf(temp_out_psfc)
             
-            subprocess.run(["ncks", "-d", "Time,0,0", out_file, out_ts], check=True)
+            # subprocess.run(["ncks", "-d", "Time,0,0", out_file, out_ts], check=True)
             subprocess.run(["ncks", "-d", "Time,0,0", end_file, end_ts], check=True)
 
             subprocess.run(["cdo", "selname,pres,temp,spfc", temp_out_psfc, out_pres_t_spfc], check=True)
             end_file_with_mem = to_dart_dir / f"{end_file.stem}_{mem}.nc"
-            shutil.copy(end_ts, end_file_with_mem)
-
+            subprocess.run(["cdo", f"selname,{self.ass_var}", end_ts, end_file_with_mem], check=True)
+            
             subprocess.run(
                 ["ncks", "-A", out_pres_t_spfc, end_file_with_mem],
                 check=True,

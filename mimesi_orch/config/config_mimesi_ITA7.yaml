@@ -1,5 +1,5 @@
 assimilation:
-  ass_var: c_NO2
+  ass_var: NO2
   case_dir: data_freerun
   case_emi_dir: emi
   emi_var: NO2
