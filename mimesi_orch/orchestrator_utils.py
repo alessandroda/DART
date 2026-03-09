@@ -32,6 +32,16 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+def format_bytes(num_bytes: int) -> str:
+    units = ["bytes", "KB", "MB", "GB", "TB", "PB"]
+    size = float(num_bytes)
+    for unit in units:
+        if size < 1024.0 or unit == units[-1]:
+            if unit == "bytes":
+                return f"{int(size)} {unit}"
+            return f"{size:.2f} {unit}"
+        size /= 1024.0
+
 @dataclass
 class CommandSpec:
     command: str  # executable/script name
@@ -844,7 +854,7 @@ def check_restart_files_exist(
         if end_file.exists() and end_file.stat().st_size > 0:
             logger.info(
                 f"{model} | restart_file {end_file} exists for mem {mem} "
-                f"({end_file.stat().st_size} bytes)"
+                f"({format_bytes(end_file.stat().st_size)})"
             )
         else:
             logger.warning(f"{model} | restart_file {end_file} missing for mem {mem}")
@@ -862,7 +872,6 @@ def check_ic_files_exist(
     mems_to_rerun = []
 
     for mem in range(no_mems):
-        breakpoint()
         ic_path = path_manager.get_chimere_output_path(
             model=model,
             mem=mem,
@@ -874,7 +883,7 @@ def check_ic_files_exist(
         if ic_path.exists() and ic_path.stat().st_size > 0:
             logger.info(
                 f"{model} | ic_g1 exists for mem {mem} "
-                f"({ic_path.stat().st_size} bytes)"
+                f"({format_bytes(ic_path.stat().st_size)})"
             )
         else:
             logger.warning(f"{model} | ic_g1 missing for mem {mem}: {ic_path}")
@@ -893,7 +902,7 @@ def ic_g1_not_existing(
         file_path = path_manager.chimere_output_runs_dir(mem)
         if os.path.exists(file_path):
             logger.info(
-                f"The core {file_name} for mem {mem} exists in the directory {os.path.getsize(file_path)} bytes"
+                f"The core {file_name} for mem {mem} exists in the directory {format_bytes(os.path.getsize(file_path))}"
             )
         else:
             logger.info(
@@ -1166,4 +1175,3 @@ def compute_hourly(data_path: str, time: int, path_saving_data: Path, path_savin
         logger.info("Hourly dataset computed and listing created")
     else:
         logger.info("Hourly dataset computed")
-
