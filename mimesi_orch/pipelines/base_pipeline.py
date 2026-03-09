@@ -23,7 +23,7 @@ from abc import ABC, abstractmethod
 from datetime import timedelta
 import logging
 import pipeline_errors
-from orchestrator_utils import set_date_gregorian
+from time_utils import set_date_gregorian
 
 logger = logging.getLogger(__name__)
 

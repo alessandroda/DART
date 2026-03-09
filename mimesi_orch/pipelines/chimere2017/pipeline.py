@@ -13,7 +13,7 @@ import pandas as pd
 import subprocess
 from pipelines.chimere2017.paths import Chimere2017Paths
 import xarray as xr
-
+from time_utils import set_date_gregorian
 from orchestrator_utils import (
     CommandSpec,
     check_job_status_cresco,
@@ -23,7 +23,6 @@ from orchestrator_utils import (
     replace_nml_template,
     replace_priorinflation,
     searchFile,
-    set_date_gregorian,
     run_command_in_directory,
     run_command_in_directory_bsub,
     submit_and_wait_cineca,

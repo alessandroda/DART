@@ -862,6 +862,7 @@ def check_ic_files_exist(
     mems_to_rerun = []
 
     for mem in range(no_mems):
+        breakpoint()
         ic_path = path_manager.get_chimere_output_path(
             model=model,
             mem=mem,
