@@ -406,7 +406,8 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         existing_obs_seq = {
             path.name for path in self.paths.dart_s5p_output_dir().glob("obs_seq_*.out")
         }
-        obs_seq_name = f"obs_seq_{self.seconds_obs}_{self.days_obs}.out"
+        obs_seq_name = self.time_manager.sat_obs.strftime("obs_seq_%Y%m%dT%H%M%S.out")
+        self.paths.dart_s5p_output_dir().mkdir(parents=True, exist_ok=True)
 
         replace_nml_template(
             self.paths.dart_s5p_input_template(),
@@ -437,7 +438,9 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         if generated_obs_seq:
             return max(generated_obs_seq, key=lambda p: p.stat().st_mtime).name
 
-        expected_obs_seq = self.paths.dart_obs_seq(self.seconds_obs, self.days_obs)
+        expected_obs_seq = self.paths.dart_obs_seq(
+            self.time_manager.sat_obs.strftime("obs_seq_%Y%m%dT%H%M%S.out")
+        )
         if expected_obs_seq.exists():
             return expected_obs_seq.name
 
