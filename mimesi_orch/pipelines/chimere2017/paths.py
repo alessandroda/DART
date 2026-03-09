@@ -70,11 +70,17 @@ class Chimere2017Paths:
     def dart_obs_seq(self, obs_seq_name) -> Path:
         return self.dart_s5p_output_dir() / obs_seq_name
 
-    def get_end_path(self, model: ModelType, mem: int, timestamp: pd.Timestamp) -> Path:
+    def get_chimere_output_path(
+        self,
+        model: ModelType,
+        mem: int,
+        timestamp: pd.Timestamp,
+        prefix: str,
+    ) -> Path:
         if model != ModelType.CHIMERE:
             raise ValueError(f"Chimere2017Paths does not support model type: {model}")
 
         ts = timestamp.strftime("%Y%m%d%H")
         ts_p1 = (timestamp + pd.Timedelta(hours=1)).strftime("%Y%m%d%H")
 
-        return self.chimere_output_runs_dir(mem) / f"end.{ts}_{ts_p1}_ITA7.nc"
+        return self.chimere_output_runs_dir(mem) / f"{prefix}.{ts}_{ts_p1}_ITA7.nc"

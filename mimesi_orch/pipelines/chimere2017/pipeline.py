@@ -12,6 +12,7 @@ import os
 import pandas as pd
 import subprocess
 from pipelines.chimere2017.paths import Chimere2017Paths
+import xarray as xr
 
 from orchestrator_utils import (
     CommandSpec,
@@ -441,7 +442,56 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         return False
 
     def after_model(self):
-        pass
+        to_dart_dir = self.paths.path_data / "to_DART"
+        to_dart_dir.mkdir(parents=True, exist_ok=True)       
+
+        for mem in range(self.no_mems):
+
+            #temporary files
+            temp_out_psfc = to_dart_dir / "out_psfc_mem_{mem}.nc"
+            out_ts = to_dart_dir / "out_ts_mem{mem}.nc"
+            end_ts = to_dart_dir / "end_ts_mem{mem}.nc"
+            out_pres_t_spfc = to_dart_dir / "out_pres_temp_mem{mem}.nc"
+
+            end_file = (self.paths.get_chimere_output_path(self.model_type, mem, self.time_manager.simulated_time, 'end'))
+            out_file = (self.paths.get_chimere_output_path(self.model_type, mem, self.time_manager.simulated_time, 'out'))
+
+            if not end_file.exists():
+                logger.error("No CHIMERE end.*.nc files found after run_model().")
+                return
+
+            if not out_file.exists():
+                logger.error("No CHIMERE out.*.nc files found after run_model().")
+                return
+
+            logger.info("Post-processing CHIMERE output (mem %s)", mem)
+
+            # ------------------------------------------------
+            # Compute psurf
+            # ------------------------------------------------
+            with xr.open_dataset(out_file) as ds:
+                ds = ds.load()
+                k = 0
+                ds["spfc"] = (ds.pres[:, k, :, :] - ds.a_vcoord[k] * 1e5) / ds.b_vcoord[k]
+
+            ds.to_netcdf(temp_out_psfc)
+            
+            subprocess.run(["ncks", "-d", "Time,0,0", out_file, out_ts], check=True)
+            subprocess.run(["ncks", "-d", "Time,0,0", end_file, end_ts], check=True)
+
+            subprocess.run(["cdo", "selname,pres,temp,spfc", temp_out_psfc, out_pres_t_spfc], check=True)
+            end_file_with_mem = to_dart_dir / f"{end_file.stem}_{mem}.nc"
+            shutil.copy(end_ts, end_file_with_mem)
+
+            subprocess.run(
+                ["ncks", "-A", out_pres_t_spfc, end_file_with_mem],
+                check=True,
+            )  
+
+            for f in [temp_out_psfc, out_ts, end_ts, out_pres_t_spfc]:
+                if f.exists():
+                    f.unlink()
+
 
     def run_dart(self, obs_seq_name):
         logger.info("Running DART")

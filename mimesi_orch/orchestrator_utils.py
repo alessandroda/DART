@@ -887,7 +887,7 @@ def check_restart_files_exist(
     mems_to_rerun = []
 
     for mem in range(no_mems):
-        ic_path = path_manager.chimere2023_END_FILE(mem, datetime_model, 1)
+        ic_path = path_manager.get_ic_g1_path(mem, datetime_model, 1)
 
         if ic_path.exists() and ic_path.stat().st_size > 0:
             logger.info(
