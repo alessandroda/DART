@@ -479,10 +479,10 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         for mem in range(self.no_mems):
 
             #temporary files
-            temp_out_psfc = to_dart_dir / "out_psfc_mem_{mem}.nc"
-            out_ts = to_dart_dir / "out_ts_mem{mem}.nc"
-            end_ts = to_dart_dir / "end_ts_mem{mem}.nc"
-            out_pres_t_spfc = to_dart_dir / "out_pres_temp_mem{mem}.nc"
+            temp_out_psfc = to_dart_dir / f"out_psfc_mem_{mem}.nc"
+            out_ts = to_dart_dir / f"out_ts_mem{mem}.nc"
+            end_ts = to_dart_dir / f"end_ts_mem{mem}.nc"
+            out_pres_t_spfc = to_dart_dir / f"out_pres_temp_mem{mem}.nc"
 
             end_file = self.paths.get_chimere_output_path(
                 self.model_type,
