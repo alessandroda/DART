@@ -74,6 +74,9 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
         self.scheduler = self.config.cluster.scheduler
         logger.info(f"Using scheduler={self.scheduler}, queue={self.cineca_queue}")
+        self._pending_orbit_filename = None
+        self._pending_orbit_start = None
+        self._pending_orbit_time = None
 
     def before_step(self):
         self.update_ibc_inputs()
@@ -372,6 +375,25 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         )
         return orbit_filename["filename"].values[0]
 
+    def _find_orbit_for_time(self, target_time):
+        orbit_filename = searchFile(
+            target_time - 0.5 * self.time_manager.dt,
+            target_time + 0.5 * self.time_manager.dt,
+            self.listing,
+        )
+        if orbit_filename.empty:
+            return None
+
+        orbit_filename["start_time"] = pd.to_datetime(orbit_filename["start_time"])
+        start_time = pd.to_datetime(orbit_filename["start_time"].values[0])
+        filename = orbit_filename["filename"].values[0]
+        return filename, start_time
+
+    def _clear_pending_orbit(self):
+        self._pending_orbit_filename = None
+        self._pending_orbit_start = None
+        self._pending_orbit_time = None
+
     def run_obs_converter(self, orbit_filename):
         self.seconds_obs, self.days_obs = set_date_gregorian(
             self.time_manager.sat_obs.year,
@@ -434,6 +456,23 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         return False
 
     def after_model(self):
+        if not self.run_assimilation_flag:
+            logger.info("[DART] Assimilation disabled by config; skipping after_model")
+            return
+
+        target_time = self.time_manager.current_time + self.time_manager.dt
+        orbit_info = self._find_orbit_for_time(target_time)
+        if not orbit_info:
+            logger.info(
+                "[DART] No satellite data for %s, skipping after_model",
+                target_time.strftime("%Y%m%d%H"),
+            )
+            self._clear_pending_orbit()
+            return
+
+        self._pending_orbit_filename, self._pending_orbit_start = orbit_info
+        self._pending_orbit_time = target_time
+
         to_dart_dir = self.paths.path_data / "to_DART"
         to_dart_dir.mkdir(parents=True, exist_ok=True)       
 
@@ -445,8 +484,20 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             end_ts = to_dart_dir / "end_ts_mem{mem}.nc"
             out_pres_t_spfc = to_dart_dir / "out_pres_temp_mem{mem}.nc"
 
-            end_file = (self.paths.get_chimere_output_path(self.model_type, mem, self.time_manager, 'end', 1))
-            out_file = (self.paths.get_chimere_output_path(self.model_type, mem, self.time_manager, 'out', 1))
+            end_file = self.paths.get_chimere_output_path(
+                self.model_type,
+                mem,
+                self.time_manager.current_time,
+                "end",
+                1,
+            )
+            out_file = self.paths.get_chimere_output_path(
+                self.model_type,
+                mem,
+                self.time_manager.current_time,
+                "out",
+                1,
+            )
 
             if not end_file.exists():
                 logger.error("No CHIMERE end.*.nc files found after run_model().")
@@ -642,7 +693,17 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             logger.info("[DART] Assimilation disabled by config")
             return
 
-        orbit_filename = self.process_satellite_data()
+        orbit_filename = None
+        if (
+            self._pending_orbit_time is not None
+            and self._pending_orbit_time == self.time_manager.current_time
+            and self._pending_orbit_filename
+        ):
+            orbit_filename = self._pending_orbit_filename
+            self.time_manager.sat_obs = self._pending_orbit_start
+        else:
+            orbit_filename = self.process_satellite_data()
+        self._clear_pending_orbit()
         if not orbit_filename:
             logger.info("[DART] No satellite data found, skipping assimilation")
             return
