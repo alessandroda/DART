@@ -194,8 +194,6 @@ cd /mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work
     return jobid
 
 
-
-
 def run_command_in_directory(spec: CommandSpec) -> Tuple[int, Optional[str]]:
     logger = logging.getLogger(__name__)
     original_directory = os.getcwd()
@@ -809,16 +807,6 @@ def get_list_mems_to_rerun(
 
             timestamp_dt = pd.to_datetime(timestamp_model, format="%Y%m%d%H")
 
-            # CHIMERE 2023 runs use end.<start>_<nhours>_ENS*.nc restart files.
-            if model_type == ModelType.CHIMERE and path_manager.path_control_run is not None:
-                return check_restart_files_exist(
-                    path_manager=path_manager,
-                    model=model_type,
-                    datetime_model=timestamp_dt.strftime("%Y%m%d%H"),
-                    no_mems=no_mems,
-                )
-
-            # FARM and CHIMERE 2017 runs are validated through ic_g1 at t+1h.
             datetime_model_p1 = timestamp_dt + timedelta(hours=1)
             return check_ic_files_exist(
                 path_manager=path_manager,
@@ -866,7 +854,7 @@ def check_restart_files_exist(
 
 
 def check_ic_files_exist(
-    path_manager: PathManager,
+    path_manager: Chimere2017Paths,
     model: ModelType,
     no_mems: int,
     datetime_model: pd.Timestamp,
@@ -874,10 +862,12 @@ def check_ic_files_exist(
     mems_to_rerun = []
 
     for mem in range(no_mems):
-        ic_path = path_manager.get_ic_g1_path(
+        ic_path = path_manager.get_chimere_output_path(
             model=model,
             mem=mem,
             timestamp=datetime_model,
+            prefix='end',
+            offset=1
         )
 
         if ic_path.exists() and ic_path.stat().st_size > 0:
