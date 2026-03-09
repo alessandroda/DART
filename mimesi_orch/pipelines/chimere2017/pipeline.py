@@ -19,13 +19,11 @@ from orchestrator_utils import (
     check_job_status_cresco,
     get_list_mems_to_rerun,
     modify_yaml_date,
-    filter_dates,
     TimeManager,
     replace_nml_template,
     replace_priorinflation,
     searchFile,
     set_date_gregorian,
-    submit_and_wait,
     run_command_in_directory,
     run_command_in_directory_bsub,
     submit_and_wait_cineca,
@@ -342,12 +340,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         )
 
         job_ids = submit_and_wait_cineca(
-            self.paths,
             command,
-            timestamp_chimere,
-            self.no_mems,
-            self.scheduler,
-            self.model_type,
         )
 
         mems_to_rerun = get_list_mems_to_rerun(
