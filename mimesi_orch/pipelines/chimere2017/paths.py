@@ -77,14 +77,14 @@ class Chimere2017Paths:
         self,
         model: ModelType,
         mem: int,
-        time_manager : TimeManager,
+        timestamp : pd.Timestamp,
         prefix: str,
         offset : int
         ) -> Path:
         if model != ModelType.CHIMERE:
             raise ValueError(f"Chimere2017Paths does not support model type: {model}")
-        ts = time_manager.formatted_time(0, "%Y%m%d%H")
         
-        ts_p_offset = time_manager.formatted_time(offset, "%Y%m%d%H")
+        ts = timestamp.strftime("%Y%m%d%H")
+        ts_p_offset = (timestamp + pd.Timedelta(hours=offset)).strftime("%Y%m%d%H")
 
         return self.chimere_output_runs_dir(mem) / f"{prefix}.{ts}_{ts_p_offset}_ITA7.nc"

@@ -367,12 +367,7 @@ def run_command_in_directory_bsub(
 
 
 def submit_and_wait_cineca(
-    path_manager: PathManager,
     spec: CommandSpec,
-    timestamp_chimere: str,
-    no_mems: int,
-    scheduler: Scheduler,
-    model_type: ModelType,
 ):
 
     rc, job_ids = run_command_in_directory(spec)
