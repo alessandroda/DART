@@ -64,8 +64,8 @@ class Chimere2017Paths:
     def dart_s5p_data_dir(self) -> Path:
         return self.base_path / "SAT_OBS"
 
-    def dart_file_s5p_orbit(self, orbit_filename: str) -> Path:
-        return self.base_path() / orbit_filename
+    def dart_file_s5p_orbit(self, orbit_filename: str) -> Path: 
+        return self.base_path / orbit_filename
 
     def dart_s5p_output_dir(self) -> Path:
         return self.dart_s5p_data_dir() / "C03dart"

@@ -7,9 +7,10 @@
    quantity_files          = '../../../../assimilation_code/modules/observations/atmosphere_quantities_mod.f90'
    obs_type_files          = '../../../../observations/forward_operators/obs_def_reanalysis_bufr_mod.f90',
                               '../../../../observations/forward_operators/obs_def_SAT_NO2_TROPOMI_mod.f90',
-                              '../../../../observations/forward_operators/obs_def_SAT_SO2_TROPOMI_mod.f90'
-                              '../../../../observations/forward_operators/obs_def_SAT_HCHO_TROPOMI_mod.f90'
-   /
+                              '../../../../observations/forward_operators/obs_def_SAT_SO2_TROPOMI_mod.f90',
+                              '../../../../observations/forward_operators/obs_def_SAT_HCHO_TROPOMI_mod.f90',
+
+/
 
 &obs_kind_nml
  /
@@ -59,15 +60,14 @@
    verbose    = .false.
    /
 
-
 &model_grid_nml
-   dom_west  = 4.36, 
-   dom_east  = 19.93,
-   dom_south = 35.20,
-   dom_north = 48.88,
-   nz = 8,
-   dlon = 0.09,
-   dlat = 0.06,
+   dom_west  = -25.075  
+   dom_east  = 45.125    
+   dom_south = 29.95 
+   dom_north = 72.05  
+   nz = 16,
+   dlon = 0.15,
+   dlat = 0.104 !0.1,
    filter_on_model_grid = .true.,
    /
 &obs_def_SAT_NO2_TROPOMI_nml
@@ -77,10 +77,10 @@
    /
 
 &file_info_nml
-   s5p_netcdf_file = '/mnt/mumbai_n3r6/25-12676_MIMESI/SAT_OBS/MIMESI/CSO-superobs/kAiros/S5p/no2/C03__qa075/2025/12/S5p_no2_42394.nc',
-   s5p_out_file = 'obs_seq_40681_153412.out',
+   s5p_netcdf_file = '/g100_work/ARPAE_AQM/MIMESI/SAT_OBS/CSO-superobs/kAiros/S5p/no2/C03__qa075/2026/01/S5p_no2_42933.nc',
+   s5p_out_file = '/g100_work/ARPAE_AQM/MIMESI/SAT_OBS/C03dart/obs_seq_20260125T130501.out',
    vertical_ref_height = 3,
-   which_gas = 'SAT_NO2_TROPOMI',
+   which_gas = 'SAT_NO2_TROPOMI'
    superobs = .true.
    /
 /

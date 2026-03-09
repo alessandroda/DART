@@ -52,7 +52,6 @@ program convert_s5p_tropomi_L2
    integer  :: ncid, nobs, n, i, oday, osec, nused, nlayeri, nlayer, obsindx
    integer  :: iunit, rcio ! integers to read namelist
    logical  :: file_exist, first_obs
-   character(len=129)       :: dated_out_file
    real(r8),allocatable,dimension(:) :: avgk_obs_r8
    real*8                          :: obs_err
 
@@ -116,12 +115,6 @@ program convert_s5p_tropomi_L2
    call tsat_obs%Read(s5p_netcdf_file, pollutant, superobs)
    nobs = SIZE(tsat_obs%vcd)
 
-   if (use_readable_date_filename .and. nobs > 0) then
-      write(dated_out_file, '(A,"_",I4.4,I2.2,I2.2,"T",I2.2,I2.2,I2.2,".out")') 'obs_seq', &
-         tsat_obs%date_time(1)%year, tsat_obs%date_time(1)%month, tsat_obs%date_time(1)%day, &
-         tsat_obs%date_time(1)%hour, tsat_obs%date_time(1)%minute, tsat_obs%date_time(1)%second
-      s5p_out_file = trim(dated_out_file)
-   endif
 
    inquire(file=s5p_out_file, exist=file_exist)
 
