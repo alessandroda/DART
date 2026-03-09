@@ -1,3 +1,14 @@
+"""
+DEPRECATED: legacy global path manager.
+
+This module is kept for backward compatibility while non-pipeline modules
+(`main.py`, `io_utils.py`, `orchestrator_utils.py`) are migrated to
+pipeline-scoped path objects.
+
+Do not add new dependencies on this module. Prefer pipeline-local path APIs
+such as `pipelines/chimere2017/paths.py`.
+"""
+
 from pathlib import Path
 import logging
 import pandas as pd
@@ -11,6 +22,9 @@ logger = logging.getLogger(__name__)
 class PathManager:
     """
     Centralized filesystem API for MIMESI.
+
+    Deprecated: retained for compatibility with legacy call sites.
+    Prefer pipeline-local path managers for new code.
 
     Responsibilities:
     - Resolve all paths from configuration

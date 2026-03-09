@@ -85,6 +85,6 @@ class Chimere2017Paths:
             raise ValueError(f"Chimere2017Paths does not support model type: {model}")
         ts = time_manager.formatted_time(0, "%Y%m%d%H")
         
-        ts_p1 = time_manager.formatted_time(1, "%Y%m%d%H")
+        ts_p1 = time_manager.formatted_time(offset, "%Y%m%d%H")
 
         return self.chimere_output_runs_dir(mem) / f"{prefix}.{ts}_{ts_p1}_ITA7.nc"
