@@ -453,8 +453,8 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             end_ts = to_dart_dir / "end_ts_mem{mem}.nc"
             out_pres_t_spfc = to_dart_dir / "out_pres_temp_mem{mem}.nc"
 
-            end_file = (self.paths.get_chimere_output_path(self.model_type, mem, self.time_manager.simulated_time, 'end'))
-            out_file = (self.paths.get_chimere_output_path(self.model_type, mem, self.time_manager.simulated_time, 'out'))
+            end_file = (self.paths.get_chimere_output_path(self.model_type, mem, self.time_manager, 'end', 1))
+            out_file = (self.paths.get_chimere_output_path(self.model_type, mem, self.time_manager, 'out', 1))
 
             if not end_file.exists():
                 logger.error("No CHIMERE end.*.nc files found after run_model().")

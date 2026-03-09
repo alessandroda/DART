@@ -63,6 +63,26 @@ class TimeManager:
         """
         self.current_time += self.dt
 
+
+    def shifted_time(self, step_offset: int = 0) -> pd.Timestamp:
+        """
+        Return current_time shifted by N assimilation timesteps.
+
+        step_offset=0 -> current_time
+        step_offset=1 -> current_time + dt
+        step_offset=-1 -> current_time - dt
+        """
+        return self.current_time + (step_offset * self.dt)
+
+    def formatted_time(
+        self,
+        step_offset: int = 0,
+        time_format: str = "%Y%m%d%H",
+    ) -> str:
+        """Return a shifted timestamp already formatted as string."""
+        return self.shifted_time(step_offset).strftime(time_format)
+
+
     @staticmethod
     def round_to_closest_hour(timestamp):
         if timestamp.minute >= 30:
