@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional, List, Tuple
 import netCDF4
+from pipelines.chimere2017.paths import Chimere2017Paths
 import xarray as xr
 import math
 import numpy as np
@@ -898,24 +899,34 @@ def get_list_mems_to_rerun(
 
 
 def check_restart_files_exist(
-    path_manager: PathManager,
+    path_manager: Chimere2017Paths,
     model: ModelType,
     no_mems: int,
     datetime_model: Optional[str] = None,
 ) -> list[int]:
 
+    if datetime_model is None:
+        raise ValueError("datetime_model is required when checking restart files")
+
+
     mems_to_rerun = []
 
     for mem in range(no_mems):
-        ic_path = path_manager.get_ic_g1_path(mem, datetime_model, 1)
+        end_file = path_manager.get_chimere_output_path(
+            model=model,
+            mem=mem,
+            timestamp=datetime_model,
+            prefix="end",
+            offset=1,
+        )
 
-        if ic_path.exists() and ic_path.stat().st_size > 0:
+        if end_file.exists() and end_file.stat().st_size > 0:
             logger.info(
-                f"{model} | restart_file {ic_path} exists for mem {mem} "
-                f"({ic_path.stat().st_size} bytes)"
+                f"{model} | restart_file {end_file} exists for mem {mem} "
+                f"({end_file.stat().st_size} bytes)"
             )
         else:
-            logger.warning(f"{model} | restart_file {ic_path} missing for mem {mem}")
+            logger.warning(f"{model} | restart_file {end_file} missing for mem {mem}")
             mems_to_rerun.append(mem)
 
     return mems_to_rerun
