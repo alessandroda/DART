@@ -47,13 +47,25 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 logfile = LOG_DIR / f"{config.assimilation.model_type.value}_DART_{time.strftime('%Y%m%d_%H%M%S')}.log"
 
+log_datefmt = "%Y-%m-%d %H:%M:%S"
+file_formatter = logging.Formatter(
+    "%(asctime)s %(levelname)s %(name)s [%(filename)s:%(lineno)d] %(message)s",
+    datefmt=log_datefmt,
+)
+console_formatter = logging.Formatter(
+    "%(asctime)s %(levelname)s %(message)s",
+    datefmt=log_datefmt,
+)
+
+file_handler = logging.FileHandler(logfile)
+file_handler.setFormatter(file_formatter)
+
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(console_formatter)
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d]: %(message)s",
-    handlers=[
-        logging.FileHandler(logfile),
-        logging.StreamHandler(),
-    ],
+    handlers=[file_handler, console_handler],
 )
 
 logger = logging.getLogger(__name__)
