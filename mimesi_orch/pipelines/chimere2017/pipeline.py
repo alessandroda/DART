@@ -557,17 +557,10 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             if self.config.monitoring is not None
             else 20
         )
-        t1 = self.time_manager.simulated_time.strftime("%Y%m%d%H")
-        tp = (self.time_manager.simulated_time + pd.Timedelta(hours=1)).strftime(
-            "%Y%m%d%H"
-        )
-        end_file = self.paths.get_chimere_output_path(
-            self.model_type,
-            0,
-            self.time_manager.current_time,
-            "end",
-            1,
-        )
+        input_start_time = self.time_manager.simulated_time - self.time_manager.dt
+        input_end_time = self.time_manager.simulated_time
+        t1 = input_start_time.strftime("%Y%m%d%H")
+        tp = input_end_time.strftime("%Y%m%d%H")
         template_farm_path = self.paths.path_data / "to_DART" / f"end.{t1}_{tp}_0.nc"
 
         replace_nml_template(
@@ -578,7 +571,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 "$obs_sequence_name": obs_seq_name,
                 "$folder_path": self.output_sim_folder,
                 "$folder_obs_path": self.paths.dart_s5p_output_dir(),
-                "$date_assim": self.time_manager.current_time.strftime("%Y%m%d_%H%M%S"),
+                "$date_assim": self.time_manager.simulated_time.strftime("%Y%m%d_%H%M%S"),
                 "$template_farm": template_farm_path,
                 "$init_time_days": str(self.days_model),
                 "$init_time_seconds": str(self.seconds_model),
@@ -606,6 +599,12 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             output_nml_path=self.paths.base_path
             / self.paths.path_filter
             / "filter_input_list.txt",
+        )
+        logger.info(
+            "[DART] filter_input_list interval start=%s end=%s simulated_time=%s",
+            input_start_time.strftime("%Y-%m-%d %H:%M:%S"),
+            input_end_time.strftime("%Y-%m-%d %H:%M:%S"),
+            self.time_manager.simulated_time.strftime("%Y-%m-%d %H:%M:%S"),
         )
 
         # FILTER_OUTPUT_LIST.TXT
