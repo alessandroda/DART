@@ -557,8 +557,8 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             if self.config.monitoring is not None
             else 20
         )
-        t1 = self.time_manager.current_time.strftime("%Y%m%d%H")
-        tp = (self.time_manager.current_time + pd.Timedelta(hours=1)).strftime(
+        t1 = self.time_manager.simulated_time.strftime("%Y%m%d%H")
+        tp = (self.time_manager.simulated_time + pd.Timedelta(hours=1)).strftime(
             "%Y%m%d%H"
         )
         end_file = self.paths.get_chimere_output_path(

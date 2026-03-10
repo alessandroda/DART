@@ -51,6 +51,22 @@ class BaseAssimilationPipeline(ABC):
         """
         self.time_manager = time_manager
 
+    @staticmethod
+    def _fmt_timestamp(value) -> str:
+        if value is None:
+            return "None"
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+
+    def _log_time_context(self, phase: str) -> None:
+        logger.info(
+            "[TIME] %s current_time=%s simulated_time=%s dt=%s end_time=%s",
+            phase,
+            self._fmt_timestamp(self.time_manager.current_time),
+            self._fmt_timestamp(self.time_manager.simulated_time),
+            self.time_manager.dt,
+            self._fmt_timestamp(self.time_manager.end_time),
+        )
+
     def run_pipeline(self):
         """
         Run the full time loop of the pipeline.
@@ -74,6 +90,8 @@ class BaseAssimilationPipeline(ABC):
 
         while self.time_manager.current_time <= self.time_manager.end_time:
             try:
+                self._log_time_context("step_start")
+
                 # Optional hook: e.g. emission perturbations, cleanup
                 self.before_step()
 
@@ -88,16 +106,30 @@ class BaseAssimilationPipeline(ABC):
                 #self.time_manager.simulated_time = (
                 #    self.time_manager.current_time + hours_simulated
                 #)
+                self._log_time_context("after_model_set_simulated_time")
 
 
                 # Convert simulated_time to (days, seconds) for DA systems
                 self.set_days_seconds_model()
+                logger.info(
+                    "[TIME] gregorian_conversion simulated_time=%s days=%s seconds=%s",
+                    self._fmt_timestamp(self.time_manager.simulated_time),
+                    self.days_model,
+                    self.seconds_model,
+                )
 
                 # Optional hook: prepare model outputs for assimilation
                 self.after_model()
 
-                logger.info(f"Increment time")
+                logger.info(
+                    "[TIME] increment current_time %s -> %s",
+                    self._fmt_timestamp(self.time_manager.current_time),
+                    self._fmt_timestamp(
+                        self.time_manager.current_time + self.time_manager.dt
+                    ),
+                )
                 self.time_manager.increment_time()
+                self._log_time_context("after_increment_before_assimilation")
 
                 # Perform data assimilation if applicable
                 try:
@@ -110,6 +142,7 @@ class BaseAssimilationPipeline(ABC):
 
                 # Optional hook: cleanup, logging, archiving
                 self.finalize_step()
+                self._log_time_context("step_end")
 
             except pipeline_errors.FatalPipelineError as e:
                 logger.critical(f"[PIPELINE] Fatal error: {e}")
