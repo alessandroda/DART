@@ -642,22 +642,11 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             )
 
         replace_nml_template(
-            self.paths.base_path
-            / "RUN/script/templates/submit_filter.template.bsh",
+            self.paths.base_path / self.paths.path_submit_bsh / "submit_filter.template.bsh",
             entries_tbr_dict=submit_filter_entries,
             output_nml_path=self.paths.path_submit_bsh / "submit_filter.bsh",
         )
-        # RUN_FILTER.BSH
-        replace_nml_template(
-            self.paths.base_path
-            / "RUN/script/templates/run_filter.template.bsh",
-            entries_tbr_dict={
-                "CORES": str(filter_cores),
-                "@ABS_FILTER_PATH": self.paths.base_path
-                / self.paths.path_filter,
-            },
-            output_nml_path=self.paths.path_submit_bsh / "run_filter.bsh",
-        )
+        
 
         if self.scheduler == Scheduler.SLURM:
             job_ids = submit_and_wait_cineca(
