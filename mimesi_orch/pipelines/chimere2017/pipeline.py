@@ -484,18 +484,10 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         for mem in range(self.no_mems):
 
             #temporary files
-            temp_out_psfc = to_dart_dir / f"out_psfc_mem_{mem}.nc"
-            out_ts = to_dart_dir / f"out_ts_mem{mem}.nc"
-            end_ts = to_dart_dir / f"end_ts_mem{mem}.nc"
-            out_pres_t_spfc = to_dart_dir / f"out_pres_temp_mem{mem}.nc"
+            temp_out_psfc = to_dart_dir / f"tmp_psfc_mem_{mem}.nc"
+            tmp_ts = to_dart_dir / f"tmp_ts_mem_{mem}.nc"
+            tmp_pres = to_dart_dir / f"tmp_pres_temp_mem{mem}.nc"
 
-            end_file = self.paths.get_chimere_output_path(
-                self.model_type,
-                mem,
-                self.time_manager.current_time,
-                "end",
-                1,
-            )
             out_file = self.paths.get_chimere_output_path(
                 self.model_type,
                 mem,
@@ -504,10 +496,6 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 1,
             )
 
-            if not end_file.exists():
-                logger.error("No CHIMERE end.*.nc files found after run_model().")
-                return
-
             if not out_file.exists():
                 logger.error("No CHIMERE out.*.nc files found after run_model().")
                 return
@@ -515,32 +503,54 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             logger.info("Post-processing CHIMERE output (mem %s)", mem)
 
             # ------------------------------------------------
-            # Compute psurf
+            # Select LAST timestep (IMPORTANT)
             # ------------------------------------------------
-            with xr.open_dataset(out_file) as ds:
+            subprocess.run(
+                ["ncks", "-d", "Time,-1", out_file, tmp_ts],
+                check=True,
+            )
+
+            # ------------------------------------------------
+            # Compute surface pressure
+            # ------------------------------------------------
+            with xr.open_dataset(tmp_ts) as ds:
                 ds = ds.load()
                 k = 0
-                ds["spfc"] = (ds.pres[:, k, :, :] - ds.a_vcoord[k] * 1e5) / ds.b_vcoord[k]
+                ds["psfc"] = (ds.pres[:, k, :, :] - ds.a_vcoord[k] * 1e5) / ds.b_vcoord[k]
 
             ds.to_netcdf(temp_out_psfc)
-            
-            # subprocess.run(["ncks", "-d", "Time,0,0", out_file, out_ts], check=True)
-            subprocess.run(["ncks", "-d", "Time,0,0", end_file, end_ts], check=True)
 
-            subprocess.run(["cdo", "selname,pres,temp,spfc", temp_out_psfc, out_pres_t_spfc], check=True)
+            # ------------------------------------------------
+            # Extract met fields needed by DART
+            # ------------------------------------------------
+            subprocess.run(
+                ["cdo", "selname,pres,temp,psfc,lat,lon", temp_out_psfc, tmp_pres],
+                check=True,
+            )
+
             t1 = self.time_manager.current_time.strftime("%Y%m%d%H")
             tp = (self.time_manager.current_time + pd.Timedelta(hours=1)).strftime(
                 "%Y%m%d%H"
             )
-            end_file_with_mem = to_dart_dir / f"end.{t1}_{tp}_{mem}.nc"
-            subprocess.run(["cdo", f"selname,{self.ass_var}", end_ts, end_file_with_mem], check=True)
+            out_file_with_mem = to_dart_dir / f"out.{t1}_{tp}_{mem}.nc"
+            subprocess.run(["cdo", f"selname,{self.ass_var}", tmp_ts, out_file_with_mem], check=True)
 
             subprocess.run(
-                ["ncks", "-A", out_pres_t_spfc, end_file_with_mem],
+                ["ncks", "-A", tmp_pres, out_file_with_mem],
                 check=True,
             )  
-
-            for f in [temp_out_psfc, out_ts, end_ts, out_pres_t_spfc]:
+            subprocess.run([
+                "ncatted", "-O",
+                "-a", "_FillValue,NO2,o,f,NaN",
+                out_file_with_mem
+            ], check=True)
+            # Remove ALL missing_value attributes
+            subprocess.run([
+            "ncatted", "-O",
+            "-a", "missing_value,,d,,",
+            out_file_with_mem
+            ], check=True)            
+            for f in [temp_out_psfc, tmp_ts, tmp_pres]:
                 if f.exists():
                     f.unlink()
 
@@ -561,7 +571,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         input_end_time = self.time_manager.simulated_time
         t1 = input_start_time.strftime("%Y%m%d%H")
         tp = input_end_time.strftime("%Y%m%d%H")
-        template_farm_path = self.paths.path_data / "to_DART" / f"end.{t1}_{tp}_0.nc"
+        template_chimere_path = self.paths.path_data / "to_DART" / f"out.{t1}_{tp}_0.nc"
 
         replace_nml_template(
             self.paths.base_path
@@ -572,7 +582,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 "$folder_path": self.output_sim_folder,
                 "$folder_obs_path": self.paths.dart_s5p_output_dir(),
                 "$date_assim": self.time_manager.simulated_time.strftime("%Y%m%d_%H%M%S"),
-                "$template_farm": template_farm_path,
+                "$template_chimere": template_chimere_path,
                 "$init_time_days": str(self.days_model),
                 "$init_time_seconds": str(self.seconds_model),
                 "$first_obs_days": str(self.days_obs),

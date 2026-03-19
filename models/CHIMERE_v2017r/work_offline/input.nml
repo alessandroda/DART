@@ -2,7 +2,7 @@
    /
 
 &algorithm_info_nml
-   qceff_table_filename = '/mnt/mumbai_n3r6/25-12676_MIMESI/DART/models/CHIMERE_v2017r/work_offline/qceff_table.csv'
+   qceff_table_filename = ''
    /
 
 &perfect_model_obs_nml
@@ -47,38 +47,38 @@
    output_state_file_list       = 'filter_output_list.txt'
    output_interval              = 1,
    output_members               = .true.
-   num_output_state_members     = 17,
+   num_output_state_members     = 5,
    output_mean                  = .true.
    output_sd                    = .true.
    write_all_stages_at_end      = .false.
 
-   ens_size                     = 17,
+   ens_size                     = 5,
    num_groups                   = 1,
    ! AD'A we should try with this setting to not genereate 50 ensemble
-   perturb_from_single_instance = .false.,
-   perturbation_amplitude       = 0.5,
-   distributed_state            = .false.
+   perturb_from_single_instance = .true.,
+   perturbation_amplitude       = 0.1,
+   distributed_state            = .true.
 
    async                        = 0,
    adv_ens_command              = "",
 
-   obs_sequence_in_name         = "/mnt/mumbai_n4r5/dausilio/projects/DART/observations/obs_converters/S5P_TROPOMI_L3/work/obs_seq_48255_153416.out",
-   obs_sequence_out_name        = "/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/IRIDE_ens/posteriors/20210115_132400/obs_seq_20210115_132400.final",
-   num_output_obs_members       = 16,
-   init_time_days               = 153416,
+   obs_sequence_in_name         = "/g100_work/ARPAE_AQM/MIMESI/SAT_OBS/C03dart/obs_seq_20260125T130501.out",
+   obs_sequence_out_name        = "/g100_work/ARPAE_AQM/MIMESI/runs_chimere/ITA7/posteriors/2026012513/obs_seq_20260125_130000.final",
+   num_output_obs_members       = 1,
+   init_time_days               = 155252,
    init_time_seconds            = 46800,
-   first_obs_days               = 153416,
-   first_obs_seconds            = 48255,
+   first_obs_days               = 155252,
+   first_obs_seconds            = 47101,
    last_obs_days                = -1,
    last_obs_seconds             = -1,
 
-   inf_flavor                  = 0,                       0,
-   inf_initial_from_restart    = .false.,                 .false.,
-   inf_sd_initial_from_restart = .false.,                 .false.,
+   inf_flavor                  =  0,                       0,
+   inf_initial_from_restart    = .true.,                  .true.,
+   inf_sd_initial_from_restart = .true.,                  .true.,
    inf_deterministic           = .true.,                  .true.,
-   inf_initial                 = 1.0,                    1.0,
+   inf_initial                 = 1.05,                    1.0,
    inf_lower_bound             = 1.0,                     1.0,
-   inf_upper_bound             = 100.0,                   1000000.0,
+   inf_upper_bound             = 100.0,                   100.0,
    inf_damping                 = 0.9,                     1.0,
    inf_sd_initial              = 0.6,                     0.0,
    inf_sd_lower_bound          = 0.6,                     0.0,
@@ -96,16 +96,16 @@
 
 
 &assim_tools_nml
-   cutoff                          = 0.0025
+   cutoff                          = 0.025
    sort_obs_inc                    = .false.,
    spread_restoration              = .false.,
    sampling_error_correction       = .false.,
-   adaptive_localization_threshold = 50,
+   adaptive_localization_threshold = -1,
    adaptive_cutoff_floor = 0.001,
    distribute_mean                 = .true.
    output_localization_diagnostics = .false.,
    localization_diagnostics_file   = 'localization_diagnostics',
-   print_every_nth_obs             = 100,
+   print_every_nth_obs             = 1,
    /
 
 &cov_cutoff_nml
@@ -130,7 +130,7 @@
 
 &location_nml
    horiz_dist_only             = .false.,
-   vert_normalization_height   = 720000.0,
+   vert_normalization_height   = 3.0,
    approximate_distance        = .false.,
    nlon                        = 51,
    nlat                        = 51,
@@ -138,13 +138,13 @@
    /
 
 &model_nml
-   chimere_template_filename = '/mnt/mumbai_n3r6/25-12676_MIMESI/kAiros/out.2025121500_2025121600_ITA7.nc',
-   state_variables  = 'pres',     'QTY_PRESSURE','NA', 'NA', 'UPDATE'
-                      'NO2', 'QTY_NO2', 'NA', 'NA', 'UPDATE'
+   chimere_template_filename = '/g100_work/ARPAE_AQM/MIMESI/runs_chimere/ITA7/to_DART/out.2026012512_2026012513_0.nc'
+   state_variables  = 'pres',     'QTY_PRESSURE',0.0, 'NA', 'UPDATE'
+                      'psfc',     'QTY_SURFACE_PRESSURE',0.0, 'NA', 'UPDATE'
+                      'NO2', 'QTY_NO2', 0.0, 'NA', 'UPDATE'
    time_step_days      = 0,
-   time_step_seconds   = 5000,
-   vertical_localization_coord = 'LEVEL'
-
+!A.D using DA_SATOFFLINE approach
+   time_step_seconds   = 5000
    /
 
 &utilities_nml
@@ -198,32 +198,46 @@
    /
 
 &model_mod_check_nml
-   input_state_files    = '/mnt/mumbai_n3r6/25-12676_MIMESI/kAiros/out.2025121500_2025121600_ITA7.nc'
-   output_state_files   = 'kairos_check_output.nc'
+   input_state_files    = ../CAMEO/to_DART/model_54000_153391.nc'
+   output_state_files   = 'mmc_output.nc'
    test1thru            = 0
-   run_tests            = 1,2,3,4,5,6,7
+   run_tests            = 1,2,3,4,5,7
    x_ind                = 100000
-   loc_of_interest      = 9.00000000  47.39000000, 3
-   quantity_of_interest = 'QTY_NO2'
-   interp_test_dx       = 0.2
-   interp_test_dy       = 0.2
-   interp_test_dz       = 1
-   interp_test_xrange   = 4, 19
+   loc_of_interest      = 9.00000000  47.39000000, 2000
+   quantity_of_interest = 'QTY_SO2'
+   interp_test_dx       = 0.5
+   interp_test_dy       = 0.5
+   interp_test_dz       = 100
+   interp_test_xrange   = 4, 20
    interp_test_yrange   = 35, 48
-   interp_test_zrange   = 1.0, 2.0
+   interp_test_zrange   = 0.0, 10000
    verbose              = .true.
-   interp_test_vertcoord = 'VERTISLEVEL'
    /
 
 &quality_control_nml
    input_qc_threshold       =  3.0,
-   outlier_threshold        = -1.0,
+   outlier_threshold        =  40.0,
    /
-&obs_def_SAT_NO2_TROPOMI_nml
-   /
+
+&fill_inflation_restart_nml
+
+   write_prior_inf    = .TRUE.
+   prior_inf_mean     = 1.01
+   prior_inf_sd       = 0.6
+
+   write_post_inf     = .FALSE.
+   post_inf_mean      = 1.0
+   post_inf_sd        = 0.6
+
+   single_file        = .FALSE.
+   input_state_files  = ''
+   verbose            = .FALSE.
+/
 
 &obs_def_SAT_SO2_TROPOMI_nml
    unit_conversion = 'ppb',
+   /
+&obs_def_SAT_NO2_TROPOMI_nml
    /
 /
 
