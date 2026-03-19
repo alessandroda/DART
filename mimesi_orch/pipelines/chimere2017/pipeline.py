@@ -670,6 +670,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             if not running_jobs:
                 print("Job completed successfully.")
                 self.move_analysis_files()
+                self.move_preassim_files()
                 replace_priorinflation(
                     self.paths,
                     self.time_manager.simulated_time.strftime("%Y%m%d%H"),
@@ -680,43 +681,154 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             time.sleep(10)
 
     def move_analysis_files(self):
-        analysis_sim_folder = (
-            self.paths.path_data
-            / f"analysis/{self.time_manager.simulated_time.strftime('%Y%m%d%H')}"
+        analysis_sim_folder = self.paths.dart_analysis_dir(
+            self.time_manager.simulated_time.strftime("%Y%m%d%H")
         )
-        Path(analysis_sim_folder).mkdir(parents=True, exist_ok=True)
-        preassim_sim_folder = (
-            self.paths.path_data
-            / f"preassim/{self.time_manager.simulated_time.strftime('%Y%m%d%H')}"
+        analysis_sim_folder.mkdir(parents=True, exist_ok=True)
+
+        for filename in os.listdir(self.paths.path_filter):
+            if not filename.startswith("analysis_"):
+                continue
+
+            src = Path(self.paths.path_filter) / filename
+            dest = analysis_sim_folder / filename
+            try:
+                shutil.move(src, dest)
+            except shutil.Error:
+                print(
+                    f"Failed to move '{filename}' to '{analysis_sim_folder}' because it already exists."
+                )
+
+    def move_preassim_files(self):
+        preassim_sim_folder = self.paths.dart_preassim_dir(
+            self.time_manager.simulated_time.strftime("%Y%m%d%H")
         )
-        Path(preassim_sim_folder).mkdir(parents=True, exist_ok=True)
-        for filename in os.listdir(f"{self.paths.path_filter}"):
-            if filename.startswith("analysis_"):
-                try:
-                    shutil.move(
-                        os.path.join(
-                            self.paths.path_filter,
-                            filename,
-                        ),
-                        os.path.join(analysis_sim_folder, filename),
+        preassim_sim_folder.mkdir(parents=True, exist_ok=True)
+
+        for filename in os.listdir(self.paths.path_filter):
+            if not filename.startswith("preassim_"):
+                continue
+
+            src = Path(self.paths.path_filter) / filename
+            dest = preassim_sim_folder / filename
+            try:
+                shutil.move(src, dest)
+            except shutil.Error:
+                print(
+                    f"Failed to move '{filename}' to '{preassim_sim_folder}' because it already exists."
+                )
+
+    def after_assimilation(self):
+        if not self.run_assimilation_flag:
+            logger.info("[DART] Assimilation disabled, skipping after_assimilation")
+            return
+
+        assimilation_time = self.time_manager.simulated_time
+        if assimilation_time is None:
+            logger.info("[DART] simulated_time is not set, skipping after_assimilation")
+            return
+
+        prior_start_time = assimilation_time - self.time_manager.dt
+        posterior_dir = self.paths.dart_posteriors_dir(
+            assimilation_time.strftime("%Y%m%d%H")
+        )
+
+        if not posterior_dir.exists():
+            logger.info(
+                "[DART] No posterior directory for %s, skipping after_assimilation",
+                assimilation_time.strftime("%Y%m%d%H"),
+            )
+            return
+
+        for mem in range(self.no_mems):
+            posterior_file = (
+                posterior_dir
+                / f"out.posterior_{assimilation_time.strftime('%Y%m%d%H')}_{mem}.nc"
+            )
+            if not posterior_file.exists():
+                logger.info(
+                    "[DART] Posterior file missing for mem %s: %s. Skipping member.",
+                    mem,
+                    posterior_file,
+                )
+                continue
+
+            prior_chimere_folder = self.paths.chimere_output_runs_dir(mem)
+            prior_chimere_folder.mkdir(parents=True, exist_ok=True)
+            prior_backup_dir = prior_chimere_folder / "prior"
+            prior_backup_dir.mkdir(parents=True, exist_ok=True)
+
+            prior_from_chimere_file = self.paths.get_chimere_output_path(
+                self.model_type,
+                mem,
+                prior_start_time,
+                "end",
+                1,
+            )
+            if not prior_from_chimere_file.exists():
+                raise FatalPipelineError(
+                    "CHIMERE prior file not found for "
+                    f"mem {mem}: {prior_from_chimere_file}"
+                )
+
+            backup_prior_file = prior_backup_dir / prior_from_chimere_file.name
+            if backup_prior_file.exists():
+                backup_prior_file.unlink()
+            shutil.move(prior_from_chimere_file, backup_prior_file)
+
+            result_tmp = prior_chimere_folder / f"{prior_from_chimere_file.stem}.tmp.nc"
+            try:
+                with xr.open_dataset(backup_prior_file) as ds:
+                    ds = ds.load()
+                with xr.open_dataset(posterior_file) as ds_posterior:
+                    ds_posterior = ds_posterior.load()
+
+                if self.ass_var not in ds:
+                    raise FatalPipelineError(
+                        f"Variable {self.ass_var} not found in CHIMERE prior file {backup_prior_file}"
                     )
-                except shutil.Error:
-                    print(
-                        f"Failed to move '{filename}' to '{analysis_sim_folder}' because it already exists."
+                if self.ass_var not in ds_posterior:
+                    raise FatalPipelineError(
+                        f"Variable {self.ass_var} not found in DART posterior file {posterior_file}"
                     )
-            elif filename.startswith("preassim_"):
-                try:
-                    shutil.move(
-                        os.path.join(
-                            self.paths.path_filter,
-                            filename,
-                        ),
-                        os.path.join(preassim_sim_folder, filename),
+
+                prior_var = ds[self.ass_var]
+                posterior_var = ds_posterior[self.ass_var]
+
+                if prior_var.dims != posterior_var.dims:
+                    raise FatalPipelineError(
+                        f"Dimension mismatch for {self.ass_var}: "
+                        f"CHIMERE dims={prior_var.dims}, "
+                        f"DART dims={posterior_var.dims}"
                     )
-                except shutil.Error:
-                    print(
-                        f"Failed to move '{filename}' to '{preassim_sim_folder}' because it already exists."
+
+                if prior_var.shape != posterior_var.shape:
+                    raise FatalPipelineError(
+                        f"Shape mismatch for {self.ass_var}: "
+                        f"CHIMERE shape={prior_var.shape}, "
+                        f"DART shape={posterior_var.shape}"
                     )
+
+                for dim_name in prior_var.dims:
+                    if dim_name in ds.coords and dim_name in ds_posterior.coords:
+                        if not ds[dim_name].identical(ds_posterior[dim_name]):
+                            raise FatalPipelineError(
+                                f"Coordinate mismatch for {self.ass_var} on dim {dim_name}: "
+                                f"CHIMERE coord differs from DART coord"
+                            )
+
+                ds[self.ass_var].values = posterior_var.values
+                ds.to_netcdf(result_tmp)
+                shutil.move(result_tmp, prior_from_chimere_file)
+                logger.info(
+                    "[DART] Updated CHIMERE prior for mem %s with posterior %s -> %s",
+                    mem,
+                    posterior_file.name,
+                    prior_from_chimere_file.name,
+                )
+            finally:
+                if result_tmp.exists():
+                    result_tmp.unlink()
 
     def run_assimilation_if_needed(self):
         """
