@@ -11,7 +11,7 @@ import time
 import logging
 import pandas as pd
 import re
-from mimesi_orch.pipeline_errors import SchedulerError
+from pipeline_errors import SchedulerError
 from mimesi_types import ModelType, Scheduler
 from paths import PathManager
 from scheduler import submit_job, wait_for_slurm_jobs
@@ -127,7 +127,7 @@ def check_job_status_cresco(job_id, **kwargs):
         return True  # Job not found or already completed
 
 
-def submit_slurm_job(case, option):
+def submit_slurm_job(case, option, cluster_queue, account, filters_job_logs, path_filter):
     job_name = f"DART{case}"
     error_file = f"err_{case}_{option}.log"
     output_file = f"out_{case}_{option}.log"
@@ -137,17 +137,18 @@ def submit_slurm_job(case, option):
 
     slurm_script = f"""#!/bin/sh
 
-
-#SBATCH --job-name={job_name}
+#SBATCH --partition=cluster_queue
+#SBATCH --account=account
+#SBATCH --time=00:20:00
 #SBATCH --nodes=1
-#SBATCH --nodelist=node3
-#SBATCH --cpus-per-task=17
-#SBATCH --error=/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/{error_file}
-#SBATCH --output=/mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work/{output_file}
+#SBATCH --ntasks=12
+#SBATCH --mem=16G
+#SBATCH --job-name=job_name
+#SBATCH --error=filters_job_logs/{error_file}
+#SBATCH --output=filters_job_logs/{output_file}
 
 
-conda activate /home/dausilio/miniconda3/envs/dartenv
-cd /mnt/mumbai_n4r5/dausilio/projects/DART/models/FARM/work
+cd path_filter
 {command_execute}
 """
 
@@ -377,10 +378,21 @@ def replace_nml_template(
     except Exception as e:
         raise RuntimeError(f"Error writing output file {output_nml_path}") from e
 
+    in_name = Path(input_nml_path).name
+    out_name = Path(output_nml_path).name
+
     logger.info(
-        f"Replacement {input_nml_path} → {output_nml_path} completed successfully."
+        "Replacement %s → %s completed successfully.",
+        in_name,
+        out_name,
     )
 
+    # full paths for debugging
+    logger.debug(
+        "Replacement full paths: %s → %s",
+        input_nml_path,
+        output_nml_path,
+    )
 
 def open_dataset(path: str):
     return xr.open_dataset(path, mask_and_scale=False)
@@ -803,7 +815,7 @@ def get_list_mems_to_rerun(
 
         for jobid in job_ids:
             if scheduler == Scheduler.SLURM:
-                finished = check_job_status_slurm(
+                finished = check_job_statout.slurm(
                     jobid, which_run=model_type.value.upper()
                 )
             else:

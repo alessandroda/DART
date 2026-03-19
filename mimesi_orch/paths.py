@@ -34,7 +34,11 @@ class PathManager:
         self.run_submit_replace_perturbations = self._resolve(
             config.run_submit_replace_perturbations
         )
-
+        self.chimere_par_template = (
+                self._resolve(config.chimere_par_template)
+                if config.chimere_par_template is not None
+                else None
+        )
         self._check_static_paths()
 
     # ------------------------------------------------------------------
@@ -57,9 +61,12 @@ class PathManager:
             "path_filter": self.path_filter,
             "path_data": self.path_data,
             "run_submit_replace_perturbations": self.run_submit_replace_perturbations,
+            "chimere_par_template" : self.chimere_par_template
         }
 
         for name, path in paths.items():
+            if path is None:
+                continue
             if not path.exists():
                 raise FileNotFoundError(f"[PathManager] {name} not found: {path}")
             if self.log_paths:
@@ -127,10 +134,10 @@ class PathManager:
     # ------------------------------------------------------------------
 
     def dart_s5p_base(self) -> Path:
-        return self.base_path / "DART/observations/obs_converters/S5P_TROPOMI_L3"
+        return self.base_path / "SAT_OBS"
 
     def dart_s5p_work(self) -> Path:
-        return self.dart_s5p_base() / "work"
+        return self.base_path() / "DART/observations/obs_converters/S5P_TROPOMI_L3/"
 
     def dart_s5p_input_template(self) -> Path:
         return self.dart_s5p_work() / "input_template.nml"
@@ -139,17 +146,39 @@ class PathManager:
         return self.dart_s5p_work() / "input.nml"
 
     def dart_s5p_data_dir(self) -> Path:
-        return self.dart_s5p_base() / "data/SO2-COBRA"
+        return self.dart_s5p_base() / "DART_obs"
 
     def dart_file_s5p_orbit(self, orbit_filename: str) -> Path:
-        return self.dart_s5p_data_dir() / orbit_filename
+        return self.dart_s5p_base() / orbit_filename
 
     def dart_s5p_output_dir(self) -> Path:
-        return self.dart_s5p_data_dir() / "C03dart"
+        return self.dart_s5p_data_dir() 
 
-    def dart_obs_seq(self, seconds: int, days: int) -> Path:
-        return self.dart_s5p_output_dir() / f"obs_seq_{seconds}_{days}.out"
+    def dart_obs_seq_name(
+        self,
+        *,
+        sat_obs: pd.Timestamp | None = None,
+        seconds: int | None = None,
+        days: int | None = None,
+    ) -> str:
+        if sat_obs is not None:
+            return f"obs_seq_{sat_obs.strftime('%Y%m%dT%H%M%S')}.out"
+        if seconds is not None and days is not None:
+            return f"obs_seq_{seconds}_{days}.out"
+        raise ValueError("Provide sat_obs or both seconds and days for obs_seq naming")
 
+    def dart_obs_seq(
+        self,
+        *,
+        sat_obs: pd.Timestamp | None = None,
+        seconds: int | None = None,
+        days: int | None = None,
+    ) -> Path:
+        return self.dart_s5p_output_dir() / self.dart_obs_seq_name(
+            sat_obs=sat_obs,
+            seconds=seconds,
+            days=days,
+        )
     def get_ic_g1_path(
         self,
         model: ModelType,

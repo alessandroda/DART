@@ -8,7 +8,7 @@ from orchestrator_utils import TimeManager
 from pipelines.chimere_pipeline import Chimere2017DartPipeline
 from config_models import AppConfig
 from paths import PathManager
-
+from io_utils import I0,I1,I2,I3
 
 parser = argparse.ArgumentParser(description="Python orchestrator")
 parser.add_argument(
@@ -22,6 +22,7 @@ with open(CONFIG_PATH, "r") as f:
     cfg = yaml.safe_load(f)
 
 config = AppConfig.model_validate(cfg)
+config._config_path = Path(CONFIG_PATH)
 path_manager = PathManager(config.paths)
 
 LOG_DIR = Path(path_manager.path_data) / "mimesi_orchestrator_logs"
@@ -31,19 +32,31 @@ logfile = LOG_DIR / f"{config.assimilation.model_type.value}_DART_{time.strftime
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(processName)s/%(threadName)s] %(levelname)s: %(message)s",
+    format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d]: %(message)s",
     handlers=[
         logging.FileHandler(logfile),
         logging.StreamHandler(),
     ],
 )
 
-logger = logging.getLogger(__name__)
 
-logger.info(f"Starting {config.assimilation.model_type.value}–DART orchestrator")
-logger.info(f"Config file: {CONFIG_PATH}")
-logger.info(f"Run dir: {config.paths.path_data}")
-logger.info(f"Log file: {logfile}")
+logger = logging.getLogger(__name__)
+logger.info(
+    "\n"
+    "███    ███ ██ ███    ███ ███████ ███████ ██\n"
+    "████  ████ ██ ████  ████ ██      ██      ██\n"
+    "██ ████ ██ ██ ██ ████ ██ █████   ███████ ██\n"
+    "██  ██  ██ ██ ██  ██  ██ ██           ██ ██\n"
+    "██      ██ ██ ██      ██ ███████ ███████ ██"
+)
+logger.info("[PIPELINE] =======================================")
+logger.info("")
+logger.info(f"[PIPELINE] Starting {config.assimilation.model_type.value}–DART orchestrator")
+logger.info(f"[PIPELINE] Config file: {CONFIG_PATH}")
+logger.info(f"[PIPELINE] Run dir: {config.paths.path_data}")
+logger.info(f"[PIPELINE] Log file: {logfile}")
+logger.info("[PIPELINE] =======================================")
+
 
 time_manager = TimeManager(
     start_time=config.time.start_time,
