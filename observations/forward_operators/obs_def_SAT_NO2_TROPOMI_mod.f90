@@ -65,7 +65,7 @@
 module obs_def_SAT_NO2_TROPOMI_mod
 
    use typeSizes
-   use        types_mod, only : r8, MISSING_R8, r4, MISSING_R4
+   use        types_mod, only : r8, MISSING_R8, r4, MISSING_R4, metadatalength
    use    utilities_mod, only : register_module, error_handler, E_ERR, E_MSG, &
       nmlfileunit, do_nml_file, do_nml_term, ascii_file_format, &
       check_namelist_read, find_namelist_in_file
@@ -84,9 +84,6 @@ module obs_def_SAT_NO2_TROPOMI_mod
 
    public ::  get_expected_SAT_NO2_TROPOMI, write_tropomi_no2,read_tropomi_no2, set_obs_def_no2_tropomi
 
-   integer, parameter               :: max_model_levs = 17
-   integer, parameter               :: max_model_p_levs = 18
-
 ! version controlled file description for error handling, do not edit
    character(len=256), parameter :: source   = &
       "$URL$"
@@ -102,9 +99,28 @@ module obs_def_SAT_NO2_TROPOMI_mod
    real(r8), parameter :: density = 1000.0_r8   ! water density in kg/m^3
 
    integer :: max_pressure_intervals = 1000   ! increase as needed
-   real(r8)   :: farm_heights(17) =(/ &
-      20., 65., 125., 210., 325., 480., 690., 975., 1360., 1880., 2580., 3525., 4805., &
-      6290., 8040., 9790., 11790./)
+   !----------------------------------------------------------------------
+   ! Vertical sampling configuration (model-independent)
+   !----------------------------------------------------------------------
+
+   ! Maximum supported vertical levels (compile-time bounds)
+   integer, parameter :: max_model_levs   = 9
+   integer, parameter :: max_model_p_levs = 10   ! typically n_model_levs + 1
+
+   ! Active number of vertical levels (runtime, configurable via namelist)
+   integer :: n_model_levs   = 9
+   integer :: n_model_p_levs = 10
+
+   ! Vertical sampling heights [m]
+   ! Defaults reproduce the original FARM configuration
+   real(r8) :: model_vcoord(max_model_levs)
+
+   ! FARM default heights (kept for backward compatibility)
+   real(r8), parameter :: farm_heights_default(17) = (/ &
+      20._r8,   65._r8,  125._r8,  210._r8,  325._r8,  480._r8,  690._r8,  975._r8, &
+      1360._r8, 1880._r8, 2580._r8, 3525._r8, 4805._r8, 6290._r8, 8040._r8, &
+      9790._r8,11790._r8 /)
+
 ! default samples the atmosphere between the surface and 200 hPa
 ! at the model level numbers.  if model_levels is set false,
 ! then the default samples at 40 heights, evenly divided in
@@ -123,9 +139,12 @@ module obs_def_SAT_NO2_TROPOMI_mod
    real(r8),dimension(max_obs) :: amf
    character(len=6), parameter :: S5Pstring = 'FO_params'
    character(len=126) :: unit_conversion = 'ugm3'
+   character(len=126) :: pressure_units = 'hPa'
    logical :: amf_correction = .false.
+   integer :: vertical_coord_type = VERTISHEIGHT
 
-   namelist /obs_def_SAT_NO2_TROPOMI_nml/ unit_conversion, amf_correction
+   namelist /obs_def_SAT_NO2_TROPOMI_nml/ unit_conversion, amf_correction, &
+      n_model_levs, n_model_p_levs, model_vcoord, vertical_coord_type, pressure_units
 
 contains
 
@@ -154,11 +173,12 @@ contains
    end subroutine initialize_module
 
 
+
 !------------------------------------------------------------------------------
    subroutine get_expected_SAT_NO2_TROPOMI(state_handle, ens_size, location, key, obs_sat, amf_ratio, val, istatus)
 !------------------------------------------------------------------------------
 !------------------------------------------------------------------------------
-!  Author: Alessandro D'Ausilio ,  Version 0: 08/03/2024
+!  Author: Alessandro D'Ausilio ,  Version 0: 08/01/2026
 !  Model refers to FARM
 !  tropomi refers to satellite data
 !
@@ -195,7 +215,6 @@ contains
       ! !Vertical for LayerAverage
       ! logical                          :: return_now
       ! if ( .not. module_initialized ) call initialize_module
-
       val = 0.0_r8
 !     Get location information
       mloc = get_location(location)
@@ -224,11 +243,11 @@ contains
       !     FARM pressure field at pixel position
       model_p = 0.0_r8
       model_levels: do
-         if(nz == max_model_p_levs) then
+         if(nz == n_model_p_levs) then
             istatus = 0
             exit model_levels
          end if
-         locS = set_location(mloc(1),mloc(2),farm_heights(nz),VERTISHEIGHT)
+         locS = set_location(mloc(1),mloc(2),model_vcoord(nz),vertical_coord_type)
          call interpolate(state_handle, ens_size, locS, QTY_PRESSURE, model_p(:, nz), p_col_istatus)
          if (any(p_col_istatus /= 0)) return
          nz = nz + 1
@@ -246,12 +265,12 @@ contains
       nz = 1
       !     FARM species field at pixel position
       model_levels_conc: do
-         if(nz == max_model_levs) then
+         if(nz == n_model_levs) then
             istatus = 0
             num_levs = nz - 1
             exit model_levels_conc
          end if
-         locS = set_location(mloc(1),mloc(2),farm_heights(nz),VERTISHEIGHT)
+         locS = set_location(mloc(1),mloc(2),model_vcoord(nz),vertical_coord_type)
          call interpolate(state_handle, ens_size, locS, QTY_NO2, model_conc(:, nz), int_conc_status)
          ! call track_status(ens_size, int_conc_status, model_conc(:, nz), istatus, return_now)
          ! if(return_now) return
@@ -272,7 +291,9 @@ contains
       !First level
       model_p(:,1)=sp(:)
       !Change Units hPa-> Pa
-      model_p=model_p*100
+      if (trim(pressure_units) == 'hPa') then
+         model_p = model_p * 100.0
+      endif
       !......................................................
 
 
@@ -290,11 +311,11 @@ contains
       dyv = 0.0_r8
       nwv = 0
       wwv  = 0.0_r8
-      call ComputeWeight(max_model_levs,tropomi_dim,model_p(1, :),tropomi_pres_local(1,:),                   & !input
+      call ComputeWeight(n_model_levs,tropomi_dim,model_p(1, :),tropomi_pres_local(1,:),                   & !input
          iiv(:),jjv(:),dxv(:),dyv(:),nwv,wwv(:))
       model_conc_2d_kl = 0.0_r8
       do imem = 1, ens_size
-         call ApplyWeightedSum(max_model_levs, tropomi_dim, nwv, iiv(:), jjv(:), wwv(:), dxv(:), &
+         call ApplyWeightedSum(n_model_levs, tropomi_dim, nwv, iiv(:), jjv(:), wwv(:), dxv(:), &
             model_conc(imem,:), model_conc_2d_kl(imem, :))
       enddo
 
@@ -316,30 +337,30 @@ contains
       end do
       if (amf_correction) then
 
-        amf_model = 0.0_r8
-        do imem = 1, ens_size
+         amf_model = 0.0_r8
+         do imem = 1, ens_size
             call AirMassFactorModel(tropomi_amf_local, tropomi_dim, model_conc_vcd(imem), model_conc_2d_kl(imem, :), amf_model(imem))
-        end do
+         end do
 
-        amf_mean = sum(amf_model) / size(amf_model)
-        amf_ratio = tropomi_amf_local / amf_mean
+         amf_mean = sum(amf_model) / size(amf_model)
+         amf_ratio = tropomi_amf_local / amf_mean
 
-        !amf_ratio = 1.0_r8
-        obs_sat = obs_sat * amf_ratio
-        if (ANY(obs_sat <= 0.0_r8)) then
+         !amf_ratio = 1.0_r8
+         obs_sat = obs_sat * amf_ratio
+         if (ANY(obs_sat <= 0.0_r8)) then
             return
-        endif
-        val = model_conc_vcd * tropomi_amf_local/amf_model
-        !val = model_conc_vcd
-        if (ANY(val <=0.0_r8)) then
+         endif
+         val = model_conc_vcd * tropomi_amf_local/amf_model
+         !val = model_conc_vcd
+         if (ANY(val <=0.0_r8)) then
             return
-        endif
-        else
-        val = model_conc_vcd
-        amf_ratio = 1.0_r8
-        endif
+         endif
+      else
+         val = model_conc_vcd
+         amf_ratio = 1.0_r8
+      endif
       istatus = 0
-      end subroutine get_expected_SAT_NO2_TROPOMI
+   end subroutine get_expected_SAT_NO2_TROPOMI
 
    subroutine read_tropomi_no2(key, ifile, fform)
       integer, intent(out) :: key
