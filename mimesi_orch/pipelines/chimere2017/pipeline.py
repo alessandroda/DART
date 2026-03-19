@@ -16,7 +16,6 @@ import xarray as xr
 from time_utils import set_date_gregorian
 from orchestrator_utils import (
     CommandSpec,
-    check_job_status_cresco,
     check_job_status_slurm,
     get_list_mems_to_rerun,
     modify_yaml_date,
@@ -25,7 +24,6 @@ from orchestrator_utils import (
     replace_priorinflation,
     searchFile,
     run_command_in_directory,
-    run_command_in_directory_bsub,
     submit_and_wait_cineca,
 )
 
@@ -557,6 +555,10 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
     def run_dart(self, obs_seq_name):
         logger.info("Running DART")
+        if self.scheduler != Scheduler.SLURM:
+            raise FatalPipelineError(
+                f"Chimere2017 DART pipeline only supports SLURM, got {self.scheduler}"
+            )
 
         self.output_sim_folder = self.paths.dart_posteriors_dir(
             self.time_manager.simulated_time.strftime("%Y%m%d%H")
@@ -634,21 +636,9 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         submit_filter_entries = {
             "CORES": str(filter_cores),
             "CURRENT_DATE": self.time_manager.simulated_time.strftime("%Y%m%d%H"),
+            "SBATCH_PARTITION": self.cineca_queue,
+            "DEST_LOG_PATH": self.output_sim_folder,
         }
-        if self.scheduler == Scheduler.SLURM:
-            submit_filter_entries.update(
-                {
-                    "SBATCH_PARTITION": self.cineca_queue,
-                    "DEST_LOG_PATH": self.output_sim_folder,
-                }
-            )
-        else:
-            submit_filter_entries.update(
-                {
-                    "QUEUE": self.cineca_queue,
-                    "DEST_LOG_PATH": self.output_sim_folder,
-                }
-            )
 
         replace_nml_template(
             self.paths.base_path / self.paths.path_submit_bsh / "templates/run_mimesi-filter_template.bsh",
@@ -656,63 +646,38 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             output_nml_path=self.paths.path_submit_bsh / "submit_filter.bsh",
         )
         
-
-        if self.scheduler == Scheduler.SLURM:
-            job_ids = submit_and_wait_cineca(
-                CommandSpec(
-                    command="./submit_filter.bsh",
-                    directory=self.paths.path_submit_bsh,
-                )
+        submit_filter_script = self.paths.path_submit_bsh / "submit_filter.bsh"
+        job_ids = submit_and_wait_cineca(
+            CommandSpec(
+                command="sbatch",
+                directory=self.paths.path_submit_bsh,
+                args=[str(submit_filter_script)],
             )
-            time.sleep(10)
-            self.monitor_job_dart(job_ids)
-        else:
-            job_id = run_command_in_directory_bsub(
-                "./submit_filter.bsh", self.paths.path_submit_bsh, farm=False
-            )
-            time.sleep(10)
-            self.monitor_job_dart(job_id)
+        )
+        time.sleep(10)
+        self.monitor_job_dart(job_ids)
 
     def monitor_job_dart(self, job_id):
-        if self.scheduler == Scheduler.SLURM:
-            job_ids = job_id if isinstance(job_id, (list, tuple)) else [job_id]
-            logger.info(f"Monitoring SLURM jobs {job_ids}")
+        job_ids = job_id if isinstance(job_id, (list, tuple)) else [job_id]
+        logger.info(f"Monitoring SLURM jobs {job_ids}")
 
-            while True:
-                running_jobs = []
-                for jid in job_ids:
-                    if not check_job_status_slurm(jid, which_run="DART"):
-                        running_jobs.append(jid)
+        while True:
+            running_jobs = []
+            for jid in job_ids:
+                if not check_job_status_slurm(jid, which_run="DART"):
+                    running_jobs.append(jid)
 
-                if not running_jobs:
-                    print("Job completed successfully.")
-                    self.move_analysis_files()
-                    replace_priorinflation(
-                        self.paths,
-                        self.time_manager.simulated_time.strftime("%Y%m%d%H"),
-                    )
-                    break
+            if not running_jobs:
+                print("Job completed successfully.")
+                self.move_analysis_files()
+                replace_priorinflation(
+                    self.paths,
+                    self.time_manager.simulated_time.strftime("%Y%m%d%H"),
+                )
+                break
 
-                print(f"Jobs still running: {running_jobs}. Waiting...")
-                time.sleep(10)
-        else:
-            logger.info(f"Monitoring job {job_id}")
-            if isinstance(job_id, (list, tuple)):
-                job_id = job_id[0]
-            job_id = job_id.strip()[1:-1]
-
-            while True:
-                if check_job_status_cresco(job_id, which_run="DART"):
-                    print("Job completed successfully.")
-                    self.move_analysis_files()
-                    replace_priorinflation(
-                        self.paths,
-                        self.time_manager.simulated_time.strftime("%Y%m%d%H"),
-                    )
-                    break
-                else:
-                    print("Job is still running. Waiting...")
-                    time.sleep(10)
+            print(f"Jobs still running: {running_jobs}. Waiting...")
+            time.sleep(10)
 
     def move_analysis_files(self):
         analysis_sim_folder = (
