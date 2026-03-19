@@ -16,7 +16,6 @@ import xarray as xr
 from time_utils import set_date_gregorian
 from orchestrator_utils import (
     CommandSpec,
-    check_job_status_slurm,
     get_list_mems_to_rerun,
     modify_yaml_date,
     TimeManager,
@@ -662,12 +661,13 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         logger.info(f"Monitoring SLURM jobs {job_ids}")
 
         while True:
-            running_jobs = []
+            active_jobs = {}
             for jid in job_ids:
-                if not check_job_status_slurm(jid, which_run="DART"):
-                    running_jobs.append(jid)
+                job_state = self._get_slurm_job_state(str(jid))
+                if job_state not in {"COMPLETED", "NOT_FOUND"}:
+                    active_jobs[str(jid)] = job_state
 
-            if not running_jobs:
+            if not active_jobs:
                 print("Job completed successfully.")
                 self.move_analysis_files()
                 self.move_preassim_files()
@@ -677,8 +677,23 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 )
                 break
 
-            print(f"Jobs still running: {running_jobs}. Waiting...")
+            status_summary = ", ".join(
+                f"{jid}:{state}" for jid, state in active_jobs.items()
+            )
+            print(f"Jobs still active: {status_summary}. Waiting...")
             time.sleep(10)
+
+    def _get_slurm_job_state(self, job_id: str) -> str:
+        result = subprocess.run(
+            ["squeue", "-j", job_id, "-h", "-o", "%T"],
+            capture_output=True,
+            text=True,
+        )
+
+        state = result.stdout.strip()
+        if not state:
+            return "COMPLETED"
+        return state.splitlines()[0].strip().upper()
 
     def move_analysis_files(self):
         analysis_sim_folder = self.paths.dart_analysis_dir(
