@@ -658,10 +658,12 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         
 
         if self.scheduler == Scheduler.SLURM:
+            submit_filter_script = self.paths.path_submit_bsh / "submit_filter.bsh"
             job_ids = submit_and_wait_cineca(
                 CommandSpec(
-                    command="./submit_filter.bsh",
+                    command="sbatch",
                     directory=self.paths.path_submit_bsh,
+                    args = [str(submit_filter_script)],
                 )
             )
             time.sleep(10)
