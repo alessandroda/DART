@@ -48,6 +48,15 @@ class Chimere2017Paths:
     # DART + S5P converter
     def dart_posteriors_dir(self, timestamp: str) -> Path:
         return self.path_data / f"posteriors/{timestamp}"
+    
+    def dart_prior_dir(self, timestamp: str) -> Path:
+        return self.path_data / f"prior/{timestamp}"
+
+    def dart_analysis_dir(self, timestamp: str) -> Path:
+        return self.path_data / f"analysis/{timestamp}"
+
+    def dart_preassim_dir(self, timestamp: str) -> Path:
+        return self.path_data / f"preassim/{timestamp}"
 
     def dart_s5p_base(self) -> Path:
         return self.base_path / "DART/observations/obs_converters/S5P_TROPOMI_L3"
