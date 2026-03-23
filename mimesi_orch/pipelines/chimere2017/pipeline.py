@@ -521,7 +521,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             # Extract met fields needed by DART
             # ------------------------------------------------
             subprocess.run(
-                ["cdo", "selname,pres,temp,psfc,lat,lon", temp_out_psfc, tmp_pres],
+                ["cdo", "selname,pres,temp,psfc,lat,lon,Times", temp_out_psfc, tmp_pres],
                 check=True,
             )
 
