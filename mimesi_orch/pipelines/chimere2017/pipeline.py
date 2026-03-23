@@ -890,6 +890,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
                 prior_times = _extract_times(ds)
                 posterior_times = _extract_times(ds_posterior)
+                time_index = -1
                 if prior_times is not None and posterior_times is not None:
                     if len(posterior_times) != 1:
                         raise FatalPipelineError(
@@ -900,13 +901,36 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                             f"Invalid DART time value for {self.ass_var}: {posterior_times}"
                         )
                     if pd.isna(prior_times[-1]) or prior_times[-1] != posterior_times[0]:
-                        raise FatalPipelineError(
-                            f"Time mismatch for {self.ass_var}: "
-                            f"CHIMERE last time={prior_times[-1]}, "
-                            f"DART time={posterior_times[0]}"
-                        )
+                        matches = [
+                            idx
+                            for idx, t in enumerate(prior_times)
+                            if t == posterior_times[0]
+                        ]
+                        if not matches:
+                            raise FatalPipelineError(
+                                f"Time mismatch for {self.ass_var}: "
+                                f"CHIMERE times={prior_times}, "
+                                f"DART time={posterior_times[0]}"
+                            )
+                        time_index = matches[-1]
+                    else:
+                        time_index = len(prior_times) - 1
+                elif prior_times is not None and posterior_times is None:
+                    time_index = len(prior_times) - 1
 
-                ds[self.ass_var].values[-1, :, :, :] = posterior_var.values
+                if prior_times is not None:
+                    logger.debug(
+                        "[DART] Time match for %s: index=%s CHIMERE_time=%s DART_time=%s",
+                        self.ass_var,
+                        time_index,
+                        prior_times[time_index] if len(prior_times) > 0 else None,
+                        posterior_times[0] if posterior_times is not None else None,
+                    )
+
+                posterior_values = posterior_var.values
+                if posterior_values.shape[0] == 1:
+                    posterior_values = posterior_values[0]
+                ds[self.ass_var].values[time_index, :, :, :] = posterior_values
                 ds.to_netcdf(result_tmp)
                 os.replace(result_tmp, prior_from_chimere_file)
                 logger.info(
