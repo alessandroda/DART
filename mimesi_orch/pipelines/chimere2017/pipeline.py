@@ -29,6 +29,30 @@ from orchestrator_utils import (
 
 logger = logging.getLogger(__name__)
 
+_CDFCHECK_5D_PREFIX = (
+    "Warning (cdfCheckVars): 5 dimensional variables are not supported"
+)
+
+
+def _run_cdo_suppress_5d(args):
+    result = subprocess.run(
+        ["cdo", *args],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.stderr:
+        lines = [line.strip() for line in result.stderr.splitlines() if line.strip()]
+        filtered = [
+            line for line in lines if not line.startswith(_CDFCHECK_5D_PREFIX)
+        ]
+        if filtered:
+            logger.warning("cdo warnings: %s", " | ".join(filtered))
+        else:
+            logger.debug("cdo warnings suppressed: %s", " | ".join(lines))
+    return result
+
 
 class Chimere2017DartPipeline(BaseAssimilationPipeline):
     def __init__(
@@ -520,9 +544,8 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             # ------------------------------------------------
             # Extract met fields needed by DART
             # ------------------------------------------------
-            subprocess.run(
-                ["cdo", "selname,pres,temp,psfc,lat,lon,Times", temp_out_psfc, tmp_pres],
-                check=True,
+            _run_cdo_suppress_5d(
+                ["selname,pres,temp,psfc,lat,lon,Times", temp_out_psfc, tmp_pres]
             )
 
             t1 = self.time_manager.current_time.strftime("%Y%m%d%H")
@@ -530,7 +553,9 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 "%Y%m%d%H"
             )
             out_file_with_mem = to_dart_dir / f"out.{t1}_{tp}_{mem}.nc"
-            subprocess.run(["cdo", f"selname,{self.ass_var}", tmp_ts, out_file_with_mem], check=True)
+            _run_cdo_suppress_5d(
+                [f"selname,{self.ass_var}", tmp_ts, out_file_with_mem]
+            )
 
             subprocess.run(
                 ["ncks", "-A", tmp_pres, out_file_with_mem],
@@ -818,11 +843,31 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                         f"DART dims={posterior_var.dims}"
                     )
 
-                if prior_var.shape != posterior_var.shape:
+                time_dim = prior_var.dims[0]
+                if time_dim != "Time":
                     raise FatalPipelineError(
-                        f"Shape mismatch for {self.ass_var}: "
+                        f"Unexpected time dim for {self.ass_var}: {time_dim}"
+                    )
+
+                prior_spatial = prior_var.shape[1:]
+                posterior_spatial = posterior_var.shape[1:]
+                if prior_spatial != posterior_spatial:
+                    raise FatalPipelineError(
+                        f"Shape mismatch for {self.ass_var} (non-time dims): "
                         f"CHIMERE shape={prior_var.shape}, "
                         f"DART shape={posterior_var.shape}"
+                    )
+
+                if posterior_var.shape[0] != 1:
+                    raise FatalPipelineError(
+                        f"Unexpected DART time dimension for {self.ass_var}: "
+                        f"{posterior_var.shape[0]} (expected 1)"
+                    )
+
+                if prior_var.shape[0] < 1:
+                    raise FatalPipelineError(
+                        f"Unexpected CHIMERE time dimension for {self.ass_var}: "
+                        f"{prior_var.shape[0]}"
                     )
 
                 for dim_name in prior_var.dims:
@@ -833,7 +878,35 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                                 f"CHIMERE coord differs from DART coord"
                             )
 
-                ds[self.ass_var].values = posterior_var.values
+                def _extract_times(dataset):
+                    if "time" in dataset:
+                        return pd.to_datetime(dataset["time"].values)
+                    if "Times" in dataset:
+                        raw = dataset["Times"].values
+                        if hasattr(raw, "dtype") and raw.dtype.kind in {"S", "U"}:
+                            raw = [t.decode() if isinstance(t, (bytes, bytearray)) else t for t in raw]
+                        return pd.to_datetime(raw, errors="coerce")
+                    return None
+
+                prior_times = _extract_times(ds)
+                posterior_times = _extract_times(ds_posterior)
+                if prior_times is not None and posterior_times is not None:
+                    if len(posterior_times) != 1:
+                        raise FatalPipelineError(
+                            f"Unexpected DART time values for {self.ass_var}: {posterior_times}"
+                        )
+                    if pd.isna(posterior_times[0]):
+                        raise FatalPipelineError(
+                            f"Invalid DART time value for {self.ass_var}: {posterior_times}"
+                        )
+                    if pd.isna(prior_times[-1]) or prior_times[-1] != posterior_times[0]:
+                        raise FatalPipelineError(
+                            f"Time mismatch for {self.ass_var}: "
+                            f"CHIMERE last time={prior_times[-1]}, "
+                            f"DART time={posterior_times[0]}"
+                        )
+
+                ds[self.ass_var].values[-1, :, :, :] = posterior_var.values
                 ds.to_netcdf(result_tmp)
                 os.replace(result_tmp, prior_from_chimere_file)
                 logger.info(
