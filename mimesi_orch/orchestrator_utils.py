@@ -366,7 +366,14 @@ def replace_nml_template(
         raise RuntimeError(f"Error writing output file {output_nml_path}") from e
 
     logger.info(
-        f"Replacement {input_nml_path} → {output_nml_path} completed successfully."
+        "Replacement %s → %s completed successfully.",
+        os.path.basename(input_nml_path),
+        os.path.basename(output_nml_path),
+    )
+    logger.debug(
+        "Replacement %s → %s completed successfully.",
+        input_nml_path,
+        output_nml_path,
     )
 
 
