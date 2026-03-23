@@ -871,16 +871,14 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                                 f"CHIMERE coord differs from DART coord"
                             )
 
-                def _extract_times(dataset):
-                    if "Times" in dataset:
-                        raw = dataset["Times"].values
-                        if hasattr(raw, "dtype") and raw.dtype.kind in {"S", "U"}:
-                            raw = [t.decode() if isinstance(t, (bytes, bytearray)) else t for t in raw]
+                def _extract_times(dataset, name_time):
+                    if name_time in dataset:
+                        raw = dataset[name_time].values
                         return pd.to_datetime(raw, errors="coerce")
                     return None
-
-                prior_times = _extract_times(ds)
-                posterior_times = _extract_times(ds_posterior)
+                
+                prior_times = _extract_times(ds, 'Times')
+                posterior_times = _extract_times(ds_posterior, 'time')
                 time_index = -1
                 if prior_times is not None and posterior_times is not None:
                     if len(posterior_times) != 1:
