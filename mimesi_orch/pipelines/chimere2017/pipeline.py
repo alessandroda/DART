@@ -785,12 +785,13 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                     "CHIMERE prior file not found for "
                     f"mem {mem}: {prior_from_chimere_file}"
                 )
+            
+            breakpoint()
 
             backup_prior_file = prior_backup_dir / prior_from_chimere_file.name
             if backup_prior_file.exists():
                 backup_prior_file.unlink()
-            shutil.move(prior_from_chimere_file, backup_prior_file)
-
+            shutil.copy2(prior_from_chimere_file, backup_prior_file)
             result_tmp = prior_chimere_folder / f"{prior_from_chimere_file.stem}.tmp.nc"
             try:
                 with xr.open_dataset(backup_prior_file) as ds:
@@ -834,7 +835,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
                 ds[self.ass_var].values = posterior_var.values
                 ds.to_netcdf(result_tmp)
-                shutil.move(result_tmp, prior_from_chimere_file)
+                os.replace(result_tmp, prior_from_chimere_file)
                 logger.info(
                     "[DART] Updated CHIMERE prior for mem %s with posterior %s -> %s",
                     mem,

@@ -56,7 +56,7 @@
    num_groups                   = 1,
    ! AD'A we should try with this setting to not genereate 50 ensemble
    perturb_from_single_instance = .true.,
-   perturbation_amplitude       = 0.1,
+   perturbation_amplitude       = 0.005,
    distributed_state            = .false.
 
    async                        = 0,
@@ -238,6 +238,17 @@
    unit_conversion = 'ppb',
    /
 &obs_def_SAT_NO2_TROPOMI_nml
+unit_conversion = 'ppb'
+amf_correction = .false.
+n_model_levs = 9
+n_model_p_levs = 10
+model_vcoord = 1,2,3,4,5,6,7,8,9
+! VERTISLEVEL       = 1
+! VERTISPRESSURE    = 2
+! VERTISHEIGHT      = 3
+! VERTISSURFACE     = -1
+vertical_coord_type = 1
+pressure_units = 'Pa'
    /
 /
 
