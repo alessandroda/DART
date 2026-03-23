@@ -872,10 +872,21 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                             )
 
                 def _extract_times(dataset, name_time):
-                    if name_time in dataset:
-                        raw = dataset[name_time].values
-                        return pd.to_datetime(raw, errors="coerce")
-                    return None
+                    if name_time not in dataset:
+                        return None
+
+                    raw = dataset[name_time].values
+
+                    # --- CHIMERE case (bytes like b'2026-01-25_12:00:00')
+                    if raw.dtype == object or isinstance(raw.flat[0], (bytes, str)):
+                        decoded = [
+                            (t.decode() if isinstance(t, bytes) else str(t)).replace("_", " ")
+                            for t in raw
+                        ]
+                        return pd.to_datetime(decoded, errors="coerce")
+
+                    # --- Standard case (DART / xarray time)
+                    return pd.to_datetime(dataset[name_time].values, errors="coerce")
                 
                 prior_times = _extract_times(ds, 'Times')
                 posterior_times = _extract_times(ds_posterior, 'time')
