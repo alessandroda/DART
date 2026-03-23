@@ -836,13 +836,6 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 prior_var = ds[self.ass_var]
                 posterior_var = ds_posterior[self.ass_var]
 
-                if prior_var.dims != posterior_var.dims:
-                    raise FatalPipelineError(
-                        f"Dimension mismatch for {self.ass_var}: "
-                        f"CHIMERE dims={prior_var.dims}, "
-                        f"DART dims={posterior_var.dims}"
-                    )
-
                 time_dim = prior_var.dims[0]
                 if time_dim != "Time":
                     raise FatalPipelineError(
@@ -879,8 +872,6 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                             )
 
                 def _extract_times(dataset):
-                    if "time" in dataset:
-                        return pd.to_datetime(dataset["time"].values)
                     if "Times" in dataset:
                         raw = dataset["Times"].values
                         if hasattr(raw, "dtype") and raw.dtype.kind in {"S", "U"}:
