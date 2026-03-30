@@ -792,48 +792,47 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                     posterior_file,
                 )
                 continue
+            breakpoint()
+            restart_chimere_folder = self.paths.chimere_output_runs_dir(mem)
+            restart_chimere_folder.mkdir(parents=True, exist_ok=True)
+            restart_backup_dir = restart_chimere_folder / "restart_backup"
+            restart_backup_dir.mkdir(parents=True, exist_ok=True)
 
-            prior_chimere_folder = self.paths.chimere_output_runs_dir(mem)
-            prior_chimere_folder.mkdir(parents=True, exist_ok=True)
-            prior_backup_dir = prior_chimere_folder / "prior"
-            prior_backup_dir.mkdir(parents=True, exist_ok=True)
-
-            prior_from_chimere_file = self.paths.get_chimere_output_path(
+            restart_from_chimere_file = self.paths.get_chimere_output_path(
                 self.model_type,
                 mem,
                 prior_start_time,
                 "end",
                 1,
             )
-            if not prior_from_chimere_file.exists():
+            if not restart_from_chimere_file.exists():
                 raise FatalPipelineError(
-                    "CHIMERE prior file not found for "
-                    f"mem {mem}: {prior_from_chimere_file}"
+                    "CHIMERE restart file not found for "
+                    f"mem {mem}: {restart_from_chimere_file}"
                 )
             
-            breakpoint()
 
-            backup_prior_file = prior_backup_dir / prior_from_chimere_file.name
-            if backup_prior_file.exists():
-                backup_prior_file.unlink()
-            shutil.copy2(prior_from_chimere_file, backup_prior_file)
-            result_tmp = prior_chimere_folder / f"{prior_from_chimere_file.stem}.tmp.nc"
+            backup_restart_file = restart_backup_dir / restart_from_chimere_file.name
+            if backup_restart_file.exists():
+                backup_restart_file.unlink()
+            shutil.copy2(restart_from_chimere_file, backup_restart_file)
+            result_tmp = restart_chimere_folder / f"{restart_from_chimere_file.stem}.tmp.nc"
             try:
-                with xr.open_dataset(backup_prior_file) as ds:
-                    ds = ds.load()
+                with xr.open_dataset(backup_restart_file) as ds_restart:
+                    ds_restart = ds_restart.load()
                 with xr.open_dataset(posterior_file) as ds_posterior:
                     ds_posterior = ds_posterior.load()
 
-                if self.ass_var not in ds:
+                if self.ass_var not in ds_restart:
                     raise FatalPipelineError(
-                        f"Variable {self.ass_var} not found in CHIMERE prior file {backup_prior_file}"
+                        f"Variable {self.ass_var} not found in CHIMERE restart file {backup_restart_file}"
                     )
                 if self.ass_var not in ds_posterior:
                     raise FatalPipelineError(
                         f"Variable {self.ass_var} not found in DART posterior file {posterior_file}"
                     )
 
-                prior_var = ds[self.ass_var]
+                prior_var = ds_restart[self.ass_var]
                 posterior_var = ds_posterior[self.ass_var]
 
                 time_dim = prior_var.dims[0]
@@ -864,74 +863,15 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                     )
 
                 for dim_name in prior_var.dims:
-                    if dim_name in ds.coords and dim_name in ds_posterior.coords:
+                    if dim_name in ds_restart.coords and dim_name in ds_posterior.coords:
                         if not ds[dim_name].identical(ds_posterior[dim_name]):
                             raise FatalPipelineError(
                                 f"Coordinate mismatch for {self.ass_var} on dim {dim_name}: "
                                 f"CHIMERE coord differs from DART coord"
                             )
-
-                def _extract_times(dataset, name_time):
-                    if name_time not in dataset:
-                        return None
-
-                    raw = dataset[name_time].values
-
-                    # --- CHIMERE case (bytes like b'2026-01-25_12:00:00')
-                    if raw.dtype == object or isinstance(raw.flat[0], (bytes, str)):
-                        decoded = [
-                            (t.decode() if isinstance(t, bytes) else str(t)).replace("_", " ")
-                            for t in raw
-                        ]
-                        return pd.to_datetime(decoded, errors="coerce")
-
-                    # --- Standard case (DART / xarray time)
-                    return pd.to_datetime(dataset[name_time].values, errors="coerce")
-                
-                prior_times = _extract_times(ds, 'Times')
-                posterior_times = _extract_times(ds_posterior, 'time')
-                time_index = -1
-                if prior_times is not None and posterior_times is not None:
-                    if len(posterior_times) != 1:
-                        raise FatalPipelineError(
-                            f"Unexpected DART time values for {self.ass_var}: {posterior_times}"
-                        )
-                    if pd.isna(posterior_times[0]):
-                        raise FatalPipelineError(
-                            f"Invalid DART time value for {self.ass_var}: {posterior_times}"
-                        )
-                    if pd.isna(prior_times[-1]) or prior_times[-1] != posterior_times[0]:
-                        matches = [
-                            idx
-                            for idx, t in enumerate(prior_times)
-                            if t == posterior_times[0]
-                        ]
-                        if not matches:
-                            raise FatalPipelineError(
-                                f"Time mismatch for {self.ass_var}: "
-                                f"CHIMERE times={prior_times}, "
-                                f"DART time={posterior_times[0]}"
-                            )
-                        time_index = matches[-1]
-                    else:
-                        time_index = len(prior_times) - 1
-                elif prior_times is not None and posterior_times is None:
-                    time_index = len(prior_times) - 1
-
-                if prior_times is not None:
-                    logger.debug(
-                        "[DART] Time match for %s: index=%s CHIMERE_time=%s DART_time=%s",
-                        self.ass_var,
-                        time_index,
-                        prior_times[time_index] if len(prior_times) > 0 else None,
-                        posterior_times[0] if posterior_times is not None else None,
-                    )
-
-                posterior_values = posterior_var.values
-                if posterior_values.shape[0] == 1:
-                    posterior_values = posterior_values[0]
-                ds[self.ass_var].values[time_index, :, :, :] = posterior_values
-                ds.to_netcdf(result_tmp)
+                                
+                            ds_restart[self.ass_var].values[-1, :, :, :] = posterior_var.values[0, :, :, :] * ds_restart['airm'].values[-1, :, :, :] * 1e-9
+                ds_restart.to_netcdf(result_tmp)
                 os.replace(result_tmp, prior_from_chimere_file)
                 logger.info(
                     "[DART] Updated CHIMERE prior for mem %s with posterior %s -> %s",

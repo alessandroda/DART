@@ -96,7 +96,7 @@ class BaseAssimilationPipeline(ABC):
                 self.before_step()
 
                 # Run the forward model (mandatory)
-                # self.run_model()
+                self.run_model()
 
                 # Define the time associated with model outputs
                 # (typically current_time + forecast step)
