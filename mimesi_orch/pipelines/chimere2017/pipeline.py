@@ -106,28 +106,53 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         """
         Build the current cycle window.
 
-        This preserves the existing 1-hour stepping while attaching
-        the observation metadata that later refactors will consume.
+        Windows start and end on model hour boundaries. Observations are
+        assigned to the nearest cycle end using the +/- 30 minute rule.
         """
         start_time = self.time_manager.current_time
-        end_time = start_time + self.time_manager.dt
-        orbit_info = self._find_orbit_for_time(end_time)
+        half_dt = self.time_manager.dt / 2
+        day_end = start_time.replace(
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
+        ) + timedelta(days=1)
+        run_limit = min(day_end, self.time_manager.end_time + self.time_manager.dt)
 
-        if orbit_info:
-            orbit_filename, obs_time = orbit_info
-            return AssimWindow(
-                start_time=start_time,
-                end_time=end_time,
-                run_hours=1,
-                has_assimilation=True,
-                obs_time=obs_time,
-                orbit_filename=orbit_filename,
+        slot_time = start_time + self.time_manager.dt
+        while slot_time <= run_limit:
+            orbit_matches = searchFile(
+                slot_time - half_dt,
+                slot_time + half_dt,
+                self.listing,
+            )
+            if not orbit_matches.empty:
+                orbit_matches = orbit_matches.copy()
+                orbit_matches["start_time"] = pd.to_datetime(
+                    orbit_matches["start_time"]
+                )
+                orbit_matches = orbit_matches.sort_values("start_time")
+                orbit_row = orbit_matches.iloc[0]
+                run_hours = int((slot_time - start_time) / self.time_manager.dt)
+                return AssimWindow(
+                    start_time=start_time,
+                    end_time=slot_time,
+                    run_hours=run_hours,
+                    has_assimilation=True,
+                    obs_time=pd.to_datetime(orbit_row["start_time"]),
+                    orbit_filename=orbit_row["filename"],
+                )
+            slot_time += self.time_manager.dt
+
+        if run_limit <= start_time:
+            raise FatalPipelineError(
+                f"Invalid run limit for assimilation window: start={start_time} end={run_limit}"
             )
 
         return AssimWindow(
             start_time=start_time,
-            end_time=end_time,
-            run_hours=1,
+            end_time=run_limit,
+            run_hours=int((run_limit - start_time) / self.time_manager.dt),
             has_assimilation=False,
         )
 
@@ -169,17 +194,56 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             f"Daily BOUN list not found in any IBC dir: {daily_list_name}"
         )
 
+    def _get_same_day_window_bounds(self):
+        if self.current_window is None:
+            raise FatalPipelineError("Assimilation window is not initialized")
+
+        start_time = self.current_window.start_time
+        end_time = self.current_window.end_time
+        if end_time <= start_time:
+            raise FatalPipelineError(
+                f"Invalid assimilation window: start={start_time} end={end_time}"
+            )
+
+        daily_start = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        daily_end = daily_start + timedelta(days=1)
+        if end_time > daily_end:
+            raise FatalPipelineError(
+                "Cross-day assimilation windows are not supported yet: "
+                f"start={start_time} end={end_time}"
+            )
+
+        start_ts = start_time.strftime("%Y%m%d%H")
+        end_ts = end_time.strftime("%Y%m%d%H")
+        start_index = start_time.hour
+        end_index = start_index + self.current_window.run_hours
+        return start_time, end_time, daily_start, daily_end, start_ts, end_ts, start_index, end_index
+
+    def _slice_time_window(self, source_path: Path, output_path: Path, start_index: int, end_index: int):
+        try:
+            subprocess.run(
+                [
+                    "ncks",
+                    "-O",
+                    "-d",
+                    f"Time,{start_index},{end_index}",
+                    str(source_path),
+                    str(output_path),
+                ],
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            raise FatalPipelineError(
+                f"ncks failed extracting Time,{start_index},{end_index} from {source_path}"
+            ) from e
+
     def update_ibc_inputs(self):
         """
-        Update INI/BOUN list files and extract hourly BOUN files for CHIMERE runs.
+        Update INI/BOUN list files and extract same-day BOUN files for CHIMERE runs.
         """
-        current_time = self.time_manager.current_time
-        start_ts = current_time.strftime("%Y%m%d%H")
-        end_ts = (current_time + timedelta(hours=1)).strftime("%Y%m%d%H")
-        hour_index = current_time.hour
-
-        daily_start = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
-        daily_end = daily_start + timedelta(days=1)
+        _, _, daily_start, daily_end, start_ts, end_ts, start_index, end_index = (
+            self._get_same_day_window_bounds()
+        )
 
         daily_list_name = f"BOUN_CONCS.{daily_start:%Y%m%d%H}_{daily_end:%Y%m%d%H}_ITA7.list"
         
@@ -207,25 +271,15 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             mem_ibc_dir = self.paths.path_data / f"RUN_{mem}/IBC"
             mem_ibc_dir.mkdir(parents=True, exist_ok=True)
 
-            hourly_boun_nc = (
+            window_boun_nc = (
                 mem_ibc_dir / f"BOUN_CONCS.{start_ts}_{end_ts}_ITA7.nc"
             )
-            try:
-                subprocess.run(
-                    [
-                        "ncks",
-                        "-O",
-                        "-d",
-                        f"Time,{hour_index},{hour_index+1}",
-                        str(daily_boun_path),
-                        str(hourly_boun_nc),
-                    ],
-                    check=True,
-                )
-            except subprocess.CalledProcessError as e:
-                raise FatalPipelineError(
-                    f"ncks failed extracting hour {hour_index} from {daily_boun_path}"
-                ) from e
+            self._slice_time_window(
+                daily_boun_path,
+                window_boun_nc,
+                start_index,
+                end_index,
+            )
 
             replace_nml_template(
                 input_nml_path=str(boun_template),
@@ -254,13 +308,9 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             )
 
     def update_meteo_inputs(self):
-        current_time = self.time_manager.current_time
-        start_ts = current_time.strftime("%Y%m%d%H")
-        end_ts = (current_time + timedelta(hours=1)).strftime("%Y%m%d%H")
-        hour_index = current_time.hour
-
-        daily_start = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
-        daily_end = daily_start + timedelta(days=1)
+        _, _, daily_start, daily_end, start_ts, end_ts, start_index, end_index = (
+            self._get_same_day_window_bounds()
+        )
 
         meteo_dir = self.paths.path_data / "ATM"
         meteo_daily_name = (
@@ -271,40 +321,27 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             raise FatalPipelineError(f"Daily meteo netcdf not found: {meteo_daily_path}")
 
         meteo_dir.mkdir(parents=True, exist_ok=True)
-        hourly_meteo_nc = meteo_dir / f"exdomout.{start_ts}_{end_ts}_ITA7.nc"
-        try:
-            subprocess.run(
-                [
-                    "ncks",
-                    "-O",
-                    "-d",
-                    f"Time,{hour_index},{hour_index+1}",
-                    str(meteo_daily_path),
-                    str(hourly_meteo_nc),
-                ],
-                check=True,
-            )
-        except subprocess.CalledProcessError as e:
-            raise FatalPipelineError(
-                f"ncks failed extracting hour {hour_index} from {meteo_daily_path}"
-            ) from e
+        window_meteo_nc = meteo_dir / f"exdomout.{start_ts}_{end_ts}_ITA7.nc"
+        self._slice_time_window(
+            meteo_daily_path,
+            window_meteo_nc,
+            start_index,
+            end_index,
+        )
 
     def update_emission_inputs(self):
-        current_time = self.time_manager.current_time
-        start_ts = current_time.strftime("%Y%m%d%H")
-        end_ts = (current_time + timedelta(hours=1)).strftime("%Y%m%d%H")
-        hour_index = current_time.hour
-
-        daily_start = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
-        daily_end = daily_start + timedelta(days=1)
+        _, _, daily_start, daily_end, start_ts, end_ts, start_index, end_index = (
+            self._get_same_day_window_bounds()
+        )
         daily_stamp = f"{daily_start:%Y%m%d%H}_{daily_end:%Y%m%d%H}"
 
         logger.info(
-            "[EMISSIONS] Preparing hourly files for %s -> %s from daily window %s (hour_index=%d)",
+            "[EMISSIONS] Preparing files for %s -> %s from daily window %s (Time=%d:%d)",
             start_ts,
             end_ts,
             daily_stamp,
-            hour_index,
+            start_index,
+            end_index,
         )
 
         for mem in range(self.no_mems):
@@ -322,29 +359,19 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                     f"Daily emission netcdf not found for member {mem}: {emi_daily_path}"
                 )
 
-            hourly_emi_nc = mem_emi_dir / f"AEMISSIONS.{start_ts}_{end_ts}_ITA7.nc"
+            window_emi_nc = mem_emi_dir / f"AEMISSIONS.{start_ts}_{end_ts}_ITA7.nc"
             logger.info(
-                "[EMISSIONS] Member %s extracting hourly emission file %s from %s",
+                "[EMISSIONS] Member %s extracting emission file %s from %s",
                 mem,
-                hourly_emi_nc.name,
+                window_emi_nc.name,
                 emi_daily_path,
             )
-            try:
-                subprocess.run(
-                    [
-                        "ncks",
-                        "-O",
-                        "-d",
-                        f"Time,{hour_index},{hour_index+1}",
-                        str(emi_daily_path),
-                        str(hourly_emi_nc),
-                    ],
-                    check=True,
-                )
-            except subprocess.CalledProcessError as e:
-                raise FatalPipelineError(
-                    f"ncks failed extracting hour {hour_index} from {emi_daily_path}"
-                ) from e
+            self._slice_time_window(
+                emi_daily_path,
+                window_emi_nc,
+                start_index,
+                end_index,
+            )
 
     def replace_perturb_into_original_emissions(self):
         current_time = self.time_manager.current_time
