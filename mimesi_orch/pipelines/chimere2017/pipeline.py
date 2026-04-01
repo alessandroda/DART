@@ -537,6 +537,9 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         """
         Run CHIMERE for the current time step.
         """
+        if self.current_window is None:
+            raise FatalPipelineError("Assimilation window is not initialized")
+
         logger.info(f"[STEP] Running CHIMERE model at {self.time_manager.current_time}")
 
         timestamp_arg_run_chimere = self.time_manager.current_time.strftime(
@@ -558,7 +561,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 / self.paths.run_submit_model_template,
                 entries_tbr_dict={
                     "@mimesi_dh_inizio": "0",  # this becomes variable
-                    "@mimesi_nhours_list": "1",  # this becomes variable
+                    "@mimesi_nhours_list": str(self.current_window.run_hours),
                     "@mimesi_ens_size": self.no_mems,
                     "@mimesi_lancia_script": lancia_script
                 },
@@ -696,9 +699,11 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             logger.info("[DART] Assimilation disabled by config; skipping after_model")
             return
 
-        target_time = self.time_manager.current_time + self.time_manager.dt
-        orbit_info = self._find_orbit_for_time(target_time)
-        if not orbit_info:
+        if self.current_window is None:
+            raise FatalPipelineError("Assimilation window is not initialized")
+
+        target_time = self.current_window.end_time
+        if not self.current_window.has_assimilation:
             logger.info(
                 "[DART] No satellite data for %s, skipping after_model",
                 target_time.strftime("%Y%m%d%H"),
@@ -706,7 +711,8 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             self._clear_pending_orbit()
             return
 
-        self._pending_orbit_filename, self._pending_orbit_start = orbit_info
+        self._pending_orbit_filename = self.current_window.orbit_filename
+        self._pending_orbit_start = self.current_window.obs_time
         self._pending_orbit_time = target_time
 
         to_dart_dir = self.paths.path_data / "to_DART"
@@ -758,10 +764,8 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 ["selname,pres,temp,psfc,lat,lon,Times", temp_out_psfc, tmp_pres]
             )
 
-            t1 = self.time_manager.current_time.strftime("%Y%m%d%H")
-            tp = (self.time_manager.current_time + pd.Timedelta(hours=1)).strftime(
-                "%Y%m%d%H"
-            )
+            t1 = self.current_window.start_time.strftime("%Y%m%d%H")
+            tp = self.current_window.end_time.strftime("%Y%m%d%H")
             out_file_with_mem = to_dart_dir / f"out.{t1}_{tp}_{mem}.nc"
             _run_cdo_suppress_5d(
                 [f"selname,{self.ass_var}", tmp_ts, out_file_with_mem]
@@ -793,6 +797,8 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             raise FatalPipelineError(
                 f"Chimere2017 DART pipeline only supports SLURM, got {self.scheduler}"
             )
+        if self.current_window is None:
+            raise FatalPipelineError("Assimilation window is not initialized")
 
         self.output_sim_folder = self.paths.dart_posteriors_dir(
             self.time_manager.simulated_time.strftime("%Y%m%d%H")
@@ -803,8 +809,8 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             if self.config.monitoring is not None
             else 20
         )
-        input_start_time = self.time_manager.simulated_time - self.time_manager.dt
-        input_end_time = self.time_manager.simulated_time
+        input_start_time = self.current_window.start_time
+        input_end_time = self.current_window.end_time
         t1 = input_start_time.strftime("%Y%m%d%H")
         tp = input_end_time.strftime("%Y%m%d%H")
         template_chimere_path = self.paths.path_data / "to_DART" / f"out.{t1}_{tp}_0.nc"
@@ -974,13 +980,21 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         if not self.run_assimilation_flag:
             logger.info("[DART] Assimilation disabled, skipping after_assimilation")
             return
+        if self.current_window is None:
+            raise FatalPipelineError("Assimilation window is not initialized")
 
         assimilation_time = self.time_manager.simulated_time
         if assimilation_time is None:
             logger.info("[DART] simulated_time is not set, skipping after_assimilation")
             return
 
-        prior_start_time = assimilation_time - self.time_manager.dt
+        if not self.current_window.has_assimilation:
+            logger.info(
+                "[DART] Current window has no assimilation, skipping after_assimilation"
+            )
+            return
+
+        prior_start_time = self.current_window.start_time
         posterior_dir = self.paths.dart_posteriors_dir(
             assimilation_time.strftime("%Y%m%d%H")
         )
@@ -1134,9 +1148,14 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         if not self.run_assimilation_flag:
             logger.info("[DART] Assimilation disabled by config")
             return
+        if self.current_window is None:
+            raise FatalPipelineError("Assimilation window is not initialized")
 
         orbit_filename = None
-        if (
+        if self.current_window.has_assimilation and self.current_window.orbit_filename:
+            orbit_filename = self.current_window.orbit_filename
+            self.time_manager.sat_obs = self.current_window.obs_time
+        elif (
             self._pending_orbit_time is not None
             and self._pending_orbit_time == self.time_manager.current_time
             and self._pending_orbit_filename
