@@ -22,6 +22,7 @@ class Chimere2017Paths:
         self.path_filter = self._resolve(cfg.path_filter)
         self.path_data = self._resolve(cfg.path_data)
         self.path_control_run = None
+        self.path_perturbed_emi = self._resolve(cfg.path_perturbed_emi)
         self.run_submit_model_template = (
             self._resolve(cfg.run_submit_model_template)
             if cfg.run_submit_model_template is not None
@@ -33,7 +34,9 @@ class Chimere2017Paths:
             else None
         )
 
-    def _resolve(self, p: Path) -> Path:
+    def _resolve(self, p: Path | None) -> Path:
+        if p is None:
+            return None
         if p.is_absolute():
             return p.resolve()
         return (self.base_path / p).resolve()

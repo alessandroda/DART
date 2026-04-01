@@ -16,7 +16,7 @@ class Chimere2017PipelineConfig(BaseModel):
     path_data: Path
     chimere_par_template: Path | None
     run_submit_replace_perturbations: Path | None
-
+    path_perturbed_emi: Path | None = None
     ass_var: str
     state_variable_qty: str
     obs_type: str
@@ -49,7 +49,9 @@ class Chimere2017PipelineConfig(BaseModel):
             obs_type=app.assimilation.obs_type,
             case_dir=app.assimilation.case_dir,
             case_emi_dir=app.assimilation.case_emi_dir,
+            emi_perturbation_dir=app.assimilation.emi_perturbation_dir,
             emi_var=app.assimilation.emi_var,
+            path_perturbed_emi=app.paths.path_perturbed_emi,
             no_mems=app.assimilation.no_mems,
             run_assimilation_flag=app.assimilation.run_assimilation_flag,
             cluster_queue=app.cluster.cluster_queue,

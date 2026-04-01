@@ -1,7 +1,8 @@
 assimilation:
   ass_var: NO2
-  case_dir: data_freerun
-  case_emi_dir: EMISSION
+  case_dir: ITA7
+  case_emi_dir: basecase/data_ITA7_ITA7
+  emi_perturbation_dir : NO2_2000
   emi_var: NO2
   model_type: CHIMERE
   no_mems: 2
@@ -29,6 +30,7 @@ paths:
   log_directory: logs_orchestrator
   path_data: runs_chimere/ITA7
   path_filter: DART/models/CHIMERE_v2017r/work_offline
+  path_perturbed_emi: perturbations/emi_mems
   path_submit_bsh: catena_aria_test/Chimere/auto_runs
   run_submit_model_template: catena_aria_test/Chimere/auto_runs/templates/run_mimesi-ITA7_template.sh
   run_submit_replace_perturbations: DART/mimesi_orch/perturbation/bash_emissions/submit_replace_perturb_into_original_emission_arg.sh
@@ -40,4 +42,4 @@ time:
   backup_perturb_days: 2
   dt_seconds: 3600
   end_time: '2026-01-25 12:00:00'
-  start_time: '2026-01-25 01:00:00'
+  start_time: '2026-01-25 00:00:00'

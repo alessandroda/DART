@@ -61,7 +61,6 @@ class PathManager:
         )
         self.path_control_run = self._resolve(config.path_control_run)
         self.path_perturbed_emi = self._resolve(config.path_perturbed_emi)
-        self.path_perturbed_meteo = self._resolve(config.path_perturbed_meteo)
         self._check_static_paths()
 
         #self._check_static_paths()
@@ -100,7 +99,6 @@ class PathManager:
             "run_submit_replace_perturbations": self.run_submit_replace_perturbations,
             "path_control_run": self.path_control_run,
             "path_perturbed_emi": self.path_perturbed_emi,
-            "path_perturbed_meteo": self.path_perturbed_meteo
         }
 
         for name, path in paths.items():

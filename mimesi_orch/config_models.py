@@ -43,7 +43,6 @@ class PathsConfig(BaseModel):
     chimere_par_template: Optional[Path] = None
     run_submit_replace_perturbations: Optional[Path] = None
     path_perturbed_emi: Optional[Path] = None
-    path_perturbed_meteo: Optional[Path] = None
     log_directory: Optional[Path] = None
 
     @field_validator("*", mode="before")
@@ -98,6 +97,7 @@ class AssimilationConfig(BaseModel):
 
     case_dir: str
     case_emi_dir: Optional[str] = None
+    emi_perturbation_dir : Optional[str] = None
     emi_var: Optional[str] = None
 
     no_mems: int = Field(gt=0)

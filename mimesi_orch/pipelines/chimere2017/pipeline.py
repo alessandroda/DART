@@ -2,7 +2,7 @@ from datetime import timedelta
 from pathlib import Path
 import shutil
 import time
-
+import numpy as np
 from pipeline_errors import FatalPipelineError, ModelRunError
 from mimesi_types import Scheduler
 from config_models import AppConfig
@@ -87,7 +87,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         self.state_variable_qty = a.state_variable_qty
         self.run_assimilation_flag = a.run_assimilation_flag
         self.case_emi_dir = a.case_emi_dir
-
+        self.emi_perturbation_dir=a.emi_perturbation_dir
         self.cineca_queue = self.config.cluster.cluster_queue
 
         self.backup_perturb_days = self.config.time.backup_perturb_days
@@ -99,8 +99,11 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         self._pending_orbit_filename = None
         self._pending_orbit_start = None
         self._pending_orbit_time = None
+        self._generated_daily_emission_files: list[Path] = []
+        self._generated_daily_emission_stamp: str | None = None
 
     def before_step(self):
+        self.replace_perturb_into_original_emissions()
         self.update_ibc_inputs()
         self.update_meteo_inputs()
         self.update_emission_inputs()
@@ -268,19 +271,15 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         daily_stamp = f"{daily_start:%Y%m%d%H}_{daily_end:%Y%m%d%H}"
 
         for mem in range(self.no_mems):
-            perturbed_root = self.paths.path_data / f"RUN_{mem}/{self.case_emi_dir}_{mem}"
+            perturbed_root = self.paths.path_data / f"RUN_{mem}/EMISSION_{mem}"
             if perturbed_root is None:
                 raise FatalPipelineError("paths.path_perturbed_emi is not configured")
-            if self.case_emi_dir is None:
-                raise FatalPipelineError("assimilation.case_emi_dir is not configured")
 
-            mem_emi_dir = self.paths.path_data / f"RUN_{mem}" / f"{self.case_emi_dir}_{mem}"
+
+            mem_emi_dir = self.paths.path_data / f"RUN_{mem}" / f"EMISSION_{mem}"
             mem_emi_dir.mkdir(parents=True, exist_ok=True)
 
-            emi_daily_path = (
-                perturbed_root
-                / f"AEMISSIONS.{daily_stamp}_ITA7.nc"
-            )
+            emi_daily_path = mem_emi_dir / f"AEMISSIONS.{daily_stamp}_ITA7.nc"
             if not emi_daily_path.exists():
                 raise FatalPipelineError(
                     f"Daily emission netcdf not found for member {mem}: {emi_daily_path}"
@@ -305,7 +304,91 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 ) from e
 
     def replace_perturb_into_original_emissions(self):
-        pass
+        current_time = self.time_manager.current_time
+        if current_time.hour != 0:
+            return
+
+        perturbed_root = self.paths.path_perturbed_emi
+        if perturbed_root is None:
+            raise FatalPipelineError("paths.path_perturbed_emi is not configured")
+        if self.case_emi_dir is None:
+            raise FatalPipelineError("assimilation.case_emi_dir is not configured")
+        if self.emi_var is None:
+            raise FatalPipelineError("assimilation.emi_var is not configured")
+
+        daily_start = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        daily_end = daily_start + timedelta(days=1)
+        date = daily_start.strftime("%Y%m%d%H")
+        datep1 = daily_end.strftime("%Y%m%d%H")
+        daily_stamp = f"{date}_{datep1}"
+        file_original_name = f"AEMISSIONS.{daily_stamp}_ITA7.nc"
+
+        base_file = self.paths.path_data / self.case_emi_dir / file_original_name
+        if not base_file.exists():
+            raise FatalPipelineError(f"Base emission file not found: {base_file}")
+
+        generated_files: list[Path] = []
+        for mem in range(self.no_mems):
+            file_dest_dir = self.paths.path_data / f"RUN_{mem}" / f"EMISSION_{mem}"
+            file_dest_dir.mkdir(parents=True, exist_ok=True)
+            output_file = file_dest_dir / file_original_name
+
+            perturbed_file = (
+                perturbed_root
+                / f"emi_{mem}"
+                / self.emi_perturbation_dir
+                / f"AEMISSIONS.{daily_stamp}_ITA7_{mem}.nc"
+            )
+            if not perturbed_file.exists():
+                raise FatalPipelineError(
+                    f"Perturbed emission file not found for member {mem}: {perturbed_file}"
+                )
+
+            with xr.open_dataset(base_file) as ds_base, xr.open_dataset(perturbed_file) as ds_perturbed:
+                ds_base = ds_base.load()
+                ds_perturbed = ds_perturbed.load()
+
+                if self.emi_var not in ds_base:
+                    raise FatalPipelineError(
+                        f"Variable {self.emi_var} not found in base emission file {base_file}"
+                    )
+                if self.emi_var not in ds_perturbed:
+                    raise FatalPipelineError(
+                        f"Variable {self.emi_var} not found in perturbed emission file {perturbed_file}"
+                    )
+
+                orig = ds_base[self.emi_var].values
+                pert = ds_perturbed[self.emi_var].values
+                if np.array_equal(orig, pert):
+                    logger.warning(
+                        "[EMISSIONS] Member %s has identical %s values in %s",
+                        mem,
+                        self.emi_var,
+                        perturbed_file,
+                    )
+
+            shutil.copy2(base_file, output_file)
+            try:
+                subprocess.run(
+                    [
+                        "ncks",
+                        "-A",
+                        "-v",
+                        self.emi_var,
+                        str(perturbed_file),
+                        str(output_file),
+                    ],
+                    check=True,
+                )
+            except subprocess.CalledProcessError as e:
+                raise FatalPipelineError(
+                    f"ncks failed replacing {self.emi_var} from {perturbed_file} into {output_file}"
+                ) from e
+
+            generated_files.append(output_file)
+
+        self._generated_daily_emission_files = generated_files
+        self._generated_daily_emission_stamp = daily_stamp
 
     def finalize_step(self):
         """
@@ -316,6 +399,18 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             self.config._config_path,
             self.time_manager.simulated_time.strftime("%Y-%m-%d %H:00:00"),
         )
+
+
+        if (
+            self._generated_daily_emission_files
+            and self.time_manager.current_time.hour == 0
+        ):
+            for file_path in self._generated_daily_emission_files:
+                if file_path.exists():
+                    file_path.unlink()
+            self._generated_daily_emission_files = []
+            self._generated_daily_emission_stamp = None
+
     def _prepare_chimere_run_assets(self) -> tuple[Path, Path]:
         
         run_dir = self.paths.path_submit_bsh / "runs"
@@ -865,6 +960,9 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 backup_restart_file.unlink()
             shutil.copy2(restart_from_chimere_file, backup_restart_file)
             result_tmp = restart_chimere_folder / f"{restart_from_chimere_file.stem}.tmp.nc"
+            result_var_tmp = (
+                restart_chimere_folder / f"{restart_from_chimere_file.stem}.{self.ass_var}.tmp.nc"
+            )
             try:
                 with xr.open_dataset(backup_restart_file) as ds_restart:
                     ds_restart = ds_restart.load()
@@ -912,7 +1010,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
                 for dim_name in prior_var.dims:
                     if dim_name in ds_restart.coords and dim_name in ds_posterior.coords:
-                        if not ds[dim_name].identical(ds_posterior[dim_name]):
+                        if not ds_restart[dim_name].identical(ds_posterior[dim_name]):
                             raise FatalPipelineError(
                                 f"Coordinate mismatch for {self.ass_var} on dim {dim_name}: "
                                 f"CHIMERE coord differs from DART coord"
@@ -923,10 +1021,30 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 # from ppb to molec(species)/molec(air) is 1e-9
                 # from molec/m3 to molec/cm3 is 1e-6
                 # factor is 1e-15
-                ds_restart[self.ass_var].values[-1, :, :, :] = posterior_var.values[0, :, :, :] * ds_restart['airm'].values[-1, :, :, :] * 1e-15
-                ds_restart.to_netcdf(result_tmp,
+                updated_values = (
+                    posterior_var.values[0, :, :, :]
+                    * ds_restart["airm"].values[-1, :, :, :]
+                    * 1e-15
+                )
+                ds_update = ds_restart[[self.ass_var]].copy(deep=True)
+                ds_update[self.ass_var].values[-1, :, :, :] = updated_values
+                ds_update.to_netcdf(
+                    result_var_tmp,
                     format="NETCDF3_64BIT",
-                    engine="netcdf4")
+                    engine="netcdf4",
+                )
+                shutil.copy2(backup_restart_file, result_tmp)
+                subprocess.run(
+                    [
+                        "ncks",
+                        "-A",
+                        "-v",
+                        self.ass_var,
+                        str(result_var_tmp),
+                        str(result_tmp),
+                    ],
+                    check=True,
+                )
                 os.replace(result_tmp, restart_from_chimere_file)
                 logger.info(
                     "[DART] Updated CHIMERE prior for mem %s with posterior %s -> %s",
@@ -935,8 +1053,8 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                     restart_from_chimere_file.name,
                 )
             finally:
-                if result_tmp.exists():
-                    result_tmp.unlink()
+                if result_var_tmp.exists():
+                    result_var_tmp.unlink()
 
     def run_assimilation_if_needed(self):
         """
