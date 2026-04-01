@@ -14,7 +14,6 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
 
-from paths import PathManager
 from scheduler import Scheduler, submit_job, wait_for_slurm_jobs
 
 

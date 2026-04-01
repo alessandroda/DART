@@ -878,7 +878,8 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 self.move_analysis_files()
                 self.move_preassim_files()
                 replace_priorinflation(
-                    self.paths,
+                    self.paths.base_path,
+                    self.paths.path_filter,
                     self.time_manager.simulated_time.strftime("%Y%m%d%H"),
                 )
                 break

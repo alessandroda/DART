@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Protocol
 import netCDF4
 import xarray as xr
 import math
@@ -18,7 +18,6 @@ import re
 from pipeline_errors import SchedulerError
 from pipeline_errors import SchedulerError
 from mimesi_types import ModelType, Scheduler
-from paths import PathManager
 import shlex
 from scheduler import submit_job, wait_for_slurm_jobs
 from typing import Iterable, Optional, Union
@@ -29,6 +28,17 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pipelines.chimere2017.paths import Chimere2017Paths
+
+
+class FarmPathManagerLike(Protocol):
+    base_path: Path
+    path_filter: Path
+    run_submit_farm_template: Path
+
+
+class ChimereOutputPathsLike(Protocol):
+    def chimere_output_runs_dir(self, mem: int) -> Path:
+        ...
 
 logger = logging.getLogger(__name__)
 
@@ -739,7 +749,7 @@ def modify_yaml_date(file_path, new_date):
 
 
 def submit_and_wait(
-    path_manager: PathManager,
+    path_manager: FarmPathManagerLike,
     commands_with_directories: list,
     timestamp_farm: str,
     no_mems: int,
@@ -787,7 +797,7 @@ def get_list_mems_to_rerun(
     job_ids: list[str],
     scheduler: Scheduler,
     model_type: ModelType,
-    path_manager: Optional[PathManager] = None,
+    path_manager: Optional[object] = None,
     timestamp_model: Optional[str] = None,
     no_mems: Optional[int] = None,
 ) -> list[int]:
@@ -900,7 +910,7 @@ def check_ic_files_exist(
 
 
 def ic_g1_not_existing(
-    path_manager: PathManager, datetime_farm: pd.Timestamp, no_mems: int
+    path_manager: ChimereOutputPathsLike, datetime_farm: pd.Timestamp, no_mems: int
 ):
     timestamp_farm_p1 = datetime_farm.strftime("%Y%m%d%H")
     file_name = f"ic_g1_{timestamp_farm_p1}.nc"
@@ -919,12 +929,13 @@ def ic_g1_not_existing(
     return mems_to_rerun
 
 
-def replace_priorinflation(path_manager: PathManager, timestamp_farm: str):
+def replace_priorinflation(base_path: Path, path_filter: Path, timestamp_farm: str):
     """
     Replaces the priorinflation files in the FARM model's working directory.
 
     Args:
-        path_manager (PathManager): Object containing the base path.
+        base_path (Path): Base workspace path.
+        path_filter (Path): DART/filter work directory, relative or absolute.
         timestamp_farm (str): Timestamp for logging purposes.
     """
     # Define file names
@@ -934,7 +945,7 @@ def replace_priorinflation(path_manager: PathManager, timestamp_farm: str):
     }
 
     # Define working directory
-    work_path = Path(path_manager.base_path / path_manager.path_filter)
+    work_path = path_filter if path_filter.is_absolute() else base_path / path_filter
 
     logger.info(
         f"Starting renaming of priorinflation files for next run: {timestamp_farm}"
@@ -1012,7 +1023,7 @@ def check_job_status_slurm(job_id, **kwargs):
 
 def get_list_mems_to_rerun_slurm(
     job_ids: list[str],
-    path_manager: PathManager,
+    path_manager: ChimereOutputPathsLike,
     timestamp_model: str,
     no_mems: int,
 ) -> list[int]:

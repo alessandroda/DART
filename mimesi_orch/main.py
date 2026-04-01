@@ -6,14 +6,20 @@ import yaml
 from pathlib import Path
 from orchestrator_utils import TimeManager
 from config_models import AppConfig
-from paths import PathManager
 from pipelines.factory import build_pipeline
 
 
-def _resolve_log_dir(config: AppConfig, path_manager: PathManager) -> Path:
+def _resolve_config_path(base_path: Path, value: Path) -> Path:
+    if value.is_absolute():
+        return value
+    return base_path / value
+
+
+def _resolve_log_dir(config: AppConfig) -> Path:
+    path_data = _resolve_config_path(config.paths.base_path, config.paths.path_data)
     runtime = config.runtime
     if runtime is None:
-        return Path(path_manager.path_data) / "mimesi_orchestrator_logs"
+        return path_data / "mimesi_orchestrator_logs"
 
     log_dir_name = runtime.log_dir_name
     if not log_dir_name:
@@ -24,7 +30,7 @@ def _resolve_log_dir(config: AppConfig, path_manager: PathManager) -> Path:
 
     if runtime.log_dir_mode == "cwd":
         return Path.cwd() / log_dir_name
-    return Path(path_manager.path_data) / log_dir_name
+    return path_data / log_dir_name
 
 
 parser = argparse.ArgumentParser(description="Python orchestrator")
@@ -40,9 +46,8 @@ with open(CONFIG_PATH, "r") as f:
 
 config = AppConfig.model_validate(cfg)
 config._config_path = Path(CONFIG_PATH)
-path_manager = PathManager(config.paths)
 
-LOG_DIR = _resolve_log_dir(config, path_manager)
+LOG_DIR = _resolve_log_dir(config)
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 logfile = LOG_DIR / f"{config.assimilation.model_type.value}_DART_{time.strftime('%Y%m%d_%H%M%S')}.log"
