@@ -8,7 +8,7 @@ from mimesi_types import ModelType
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from orchestrator_utils import TimeManager
+    from pipeline_time import TimeManager
 
 class Chimere2017Paths:
     """Model-scoped path API for CHIMERE 2017."""

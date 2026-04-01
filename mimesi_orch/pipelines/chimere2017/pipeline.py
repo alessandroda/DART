@@ -18,13 +18,13 @@ from orchestrator_utils import (
     CommandSpec,
     get_list_mems_to_rerun,
     modify_yaml_date,
-    TimeManager,
     replace_nml_template,
     replace_priorinflation,
     searchFile,
     run_command_in_directory,
     submit_and_wait_cineca,
 )
+from pipeline_time import TimeManager
 
 
 logger = logging.getLogger(__name__)

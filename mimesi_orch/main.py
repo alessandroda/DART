@@ -4,7 +4,7 @@ import logging
 import yaml
 
 from pathlib import Path
-from orchestrator_utils import TimeManager
+from pipeline_time import TimeManager
 from config_models import AppConfig
 from pipelines.factory import build_pipeline
 
