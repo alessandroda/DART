@@ -270,6 +270,14 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         daily_end = daily_start + timedelta(days=1)
         daily_stamp = f"{daily_start:%Y%m%d%H}_{daily_end:%Y%m%d%H}"
 
+        logger.info(
+            "[EMISSIONS] Preparing hourly files for %s -> %s from daily window %s (hour_index=%d)",
+            start_ts,
+            end_ts,
+            daily_stamp,
+            hour_index,
+        )
+
         for mem in range(self.no_mems):
             perturbed_root = self.paths.path_data / f"RUN_{mem}/EMISSION_{mem}"
             if perturbed_root is None:
@@ -286,6 +294,12 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 )
 
             hourly_emi_nc = mem_emi_dir / f"AEMISSIONS.{start_ts}_{end_ts}_ITA7.nc"
+            logger.info(
+                "[EMISSIONS] Member %s extracting hourly emission file %s from %s",
+                mem,
+                hourly_emi_nc.name,
+                emi_daily_path,
+            )
             try:
                 subprocess.run(
                     [
@@ -306,6 +320,10 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
     def replace_perturb_into_original_emissions(self):
         current_time = self.time_manager.current_time
         if current_time.hour != 0:
+            logger.debug(
+                "[EMISSIONS] Skipping daily emission replacement at %s because hour != 00",
+                current_time.strftime("%Y-%m-%d %H:%M:%S"),
+            )
             return
 
         perturbed_root = self.paths.path_perturbed_emi
@@ -327,6 +345,14 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         if not base_file.exists():
             raise FatalPipelineError(f"Base emission file not found: {base_file}")
 
+        logger.info(
+            "[EMISSIONS] Building daily perturbed emission files for %s using base=%s perturbations=%s variable=%s",
+            daily_stamp,
+            base_file,
+            perturbed_root,
+            self.emi_var,
+        )
+
         generated_files: list[Path] = []
         for mem in range(self.no_mems):
             file_dest_dir = self.paths.path_data / f"RUN_{mem}" / f"EMISSION_{mem}"
@@ -343,6 +369,14 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 raise FatalPipelineError(
                     f"Perturbed emission file not found for member {mem}: {perturbed_file}"
                 )
+
+            logger.info(
+                "[EMISSIONS] Member %s replacing %s into %s from %s",
+                mem,
+                self.emi_var,
+                output_file,
+                perturbed_file,
+            )
 
             with xr.open_dataset(base_file) as ds_base, xr.open_dataset(perturbed_file) as ds_perturbed:
                 ds_base = ds_base.load()
@@ -388,6 +422,11 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             generated_files.append(output_file)
 
         self._generated_daily_emission_files = generated_files
+        logger.info(
+            "[EMISSIONS] Generated %d daily perturbed emission files for %s",
+            len(generated_files),
+            daily_stamp,
+        )
         self._generated_daily_emission_stamp = daily_stamp
 
     def finalize_step(self):
