@@ -20,9 +20,9 @@ Key design principles
 """
 
 from abc import ABC, abstractmethod
-from datetime import timedelta
 import logging
 import pipeline_errors
+from pipeline_time import AssimWindow
 from time_utils import set_date_gregorian
 
 logger = logging.getLogger(__name__)
@@ -50,6 +50,7 @@ class BaseAssimilationPipeline(ABC):
             time stepping, and simulated timestamps.
         """
         self.time_manager = time_manager
+        self.current_window: AssimWindow | None = None
 
     @staticmethod
     def _fmt_timestamp(value) -> str:
@@ -65,6 +66,20 @@ class BaseAssimilationPipeline(ABC):
             self._fmt_timestamp(self.time_manager.simulated_time),
             self.time_manager.dt,
             self._fmt_timestamp(self.time_manager.end_time),
+        )
+
+    def build_assim_window(self) -> AssimWindow:
+        """
+        Build the timing window for the current cycle.
+
+        The default implementation preserves the existing hourly behavior.
+        Pipelines can override this to model longer free-forecast windows.
+        """
+        return AssimWindow(
+            start_time=self.time_manager.current_time,
+            end_time=self.time_manager.current_time + self.time_manager.dt,
+            run_hours=1,
+            has_assimilation=False,
         )
 
     def run_pipeline(self):
@@ -91,6 +106,14 @@ class BaseAssimilationPipeline(ABC):
         while self.time_manager.current_time <= self.time_manager.end_time:
             try:
                 self._log_time_context("step_start")
+                self.current_window = self.build_assim_window()
+                logger.info(
+                    "[TIME] window start=%s end=%s run_hours=%s has_assimilation=%s",
+                    self._fmt_timestamp(self.current_window.start_time),
+                    self._fmt_timestamp(self.current_window.end_time),
+                    self.current_window.run_hours,
+                    self.current_window.has_assimilation,
+                )
 
                 # Optional hook: e.g. emission perturbations, cleanup
                 self.before_step()
@@ -100,9 +123,7 @@ class BaseAssimilationPipeline(ABC):
 
                 # Define the time associated with model outputs
                 # (typically current_time + forecast step)
-                self.time_manager.simulated_time = (
-                    self.time_manager.current_time + timedelta(hours=1)
-                )
+                self.time_manager.simulated_time = self.current_window.end_time
                 #self.time_manager.simulated_time = (
                 #    self.time_manager.current_time + hours_simulated
                 #)

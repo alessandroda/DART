@@ -24,7 +24,7 @@ from orchestrator_utils import (
     run_command_in_directory,
     submit_and_wait_cineca,
 )
-from pipeline_time import TimeManager
+from pipeline_time import AssimWindow, TimeManager
 
 
 logger = logging.getLogger(__name__)
@@ -101,6 +101,35 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         self._pending_orbit_time = None
         self._generated_daily_emission_files: list[Path] = []
         self._generated_daily_emission_stamp: str | None = None
+
+    def build_assim_window(self) -> AssimWindow:
+        """
+        Build the current cycle window.
+
+        This preserves the existing 1-hour stepping while attaching
+        the observation metadata that later refactors will consume.
+        """
+        start_time = self.time_manager.current_time
+        end_time = start_time + self.time_manager.dt
+        orbit_info = self._find_orbit_for_time(end_time)
+
+        if orbit_info:
+            orbit_filename, obs_time = orbit_info
+            return AssimWindow(
+                start_time=start_time,
+                end_time=end_time,
+                run_hours=1,
+                has_assimilation=True,
+                obs_time=obs_time,
+                orbit_filename=orbit_filename,
+            )
+
+        return AssimWindow(
+            start_time=start_time,
+            end_time=end_time,
+            run_hours=1,
+            has_assimilation=False,
+        )
 
     def before_step(self):
         self.replace_perturb_into_original_emissions()
