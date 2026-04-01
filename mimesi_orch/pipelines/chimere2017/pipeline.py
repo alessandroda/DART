@@ -102,7 +102,8 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
     def before_step(self):
         self.update_ibc_inputs()
-        self.update_meteo_input()
+        self.update_meteo_inputs()
+        self.update_emission_inputs()
 
     def cleanup_CHIMERE2017(self):
         pass
@@ -220,7 +221,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 ),
             )
 
-    def update_meteo_input(self):
+    def update_meteo_inputs(self):
         current_time = self.time_manager.current_time
         start_ts = current_time.strftime("%Y%m%d%H")
         end_ts = (current_time + timedelta(hours=1)).strftime("%Y%m%d%H")
@@ -256,6 +257,52 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 f"ncks failed extracting hour {hour_index} from {meteo_daily_path}"
             ) from e
 
+    def update_emission_inputs(self):
+        current_time = self.time_manager.current_time
+        start_ts = current_time.strftime("%Y%m%d%H")
+        end_ts = (current_time + timedelta(hours=1)).strftime("%Y%m%d%H")
+        hour_index = current_time.hour
+
+        daily_start = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        daily_end = daily_start + timedelta(days=1)
+        daily_stamp = f"{daily_start:%Y%m%d%H}_{daily_end:%Y%m%d%H}"
+
+        for mem in range(self.no_mems):
+            perturbed_root = self.paths.path_data / f"RUN_{mem}/{self.case_emi_dir}_{mem}"
+            if perturbed_root is None:
+                raise FatalPipelineError("paths.path_perturbed_emi is not configured")
+            if self.case_emi_dir is None:
+                raise FatalPipelineError("assimilation.case_emi_dir is not configured")
+
+            mem_emi_dir = self.paths.path_data / f"RUN_{mem}" / f"{self.case_emi_dir}_{mem}"
+            mem_emi_dir.mkdir(parents=True, exist_ok=True)
+
+            emi_daily_path = (
+                perturbed_root
+                / f"AEMISSIONS.{daily_stamp}_ITA7.nc"
+            )
+            if not emi_daily_path.exists():
+                raise FatalPipelineError(
+                    f"Daily emission netcdf not found for member {mem}: {emi_daily_path}"
+                )
+
+            hourly_emi_nc = mem_emi_dir / f"AEMISSIONS.{start_ts}_{end_ts}_ITA7.nc"
+            try:
+                subprocess.run(
+                    [
+                        "ncks",
+                        "-O",
+                        "-d",
+                        f"Time,{hour_index},{hour_index+1}",
+                        str(emi_daily_path),
+                        str(hourly_emi_nc),
+                    ],
+                    check=True,
+                )
+            except subprocess.CalledProcessError as e:
+                raise FatalPipelineError(
+                    f"ncks failed extracting hour {hour_index} from {emi_daily_path}"
+                ) from e
 
     def replace_perturb_into_original_emissions(self):
         pass
@@ -759,6 +806,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 )
 
     def after_assimilation(self):
+        
         if not self.run_assimilation_flag:
             logger.info("[DART] Assimilation disabled, skipping after_assimilation")
             return
@@ -792,7 +840,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                     posterior_file,
                 )
                 continue
-            breakpoint()
+            
             restart_chimere_folder = self.paths.chimere_output_runs_dir(mem)
             restart_chimere_folder.mkdir(parents=True, exist_ok=True)
             restart_backup_dir = restart_chimere_folder / "restart_backup"
@@ -869,15 +917,22 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                                 f"Coordinate mismatch for {self.ass_var} on dim {dim_name}: "
                                 f"CHIMERE coord differs from DART coord"
                             )
-                                
-                            ds_restart[self.ass_var].values[-1, :, :, :] = posterior_var.values[0, :, :, :] * ds_restart['airm'].values[-1, :, :, :] * 1e-9
-                ds_restart.to_netcdf(result_tmp)
-                os.replace(result_tmp, prior_from_chimere_file)
+                #conversion
+                # posterior is in ppb 
+                # airm is molec/m3
+                # from ppb to molec(species)/molec(air) is 1e-9
+                # from molec/m3 to molec/cm3 is 1e-6
+                # factor is 1e-15
+                ds_restart[self.ass_var].values[-1, :, :, :] = posterior_var.values[0, :, :, :] * ds_restart['airm'].values[-1, :, :, :] * 1e-15
+                ds_restart.to_netcdf(result_tmp,
+                    format="NETCDF3_64BIT",
+                    engine="netcdf4")
+                os.replace(result_tmp, restart_from_chimere_file)
                 logger.info(
                     "[DART] Updated CHIMERE prior for mem %s with posterior %s -> %s",
                     mem,
                     posterior_file.name,
-                    prior_from_chimere_file.name,
+                    restart_from_chimere_file.name,
                 )
             finally:
                 if result_tmp.exists():

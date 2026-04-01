@@ -1,10 +1,10 @@
 assimilation:
   ass_var: NO2
   case_dir: data_freerun
-  case_emi_dir: emi
+  case_emi_dir: EMISSION
   emi_var: NO2
   model_type: CHIMERE
-  no_mems: 1
+  no_mems: 2
   obs_type: SAT_NO2_TROPOMI
   run_assimilation_flag: true
   state_variable_qty: QTY_NO2
@@ -39,5 +39,5 @@ time:
   backup_ic_option: hourly
   backup_perturb_days: 2
   dt_seconds: 3600
-  end_time: '2026-01-26 00:00:00'
-  start_time: '2026-01-25 12:00:00'
+  end_time: '2026-01-25 12:00:00'
+  start_time: '2026-01-25 01:00:00'
