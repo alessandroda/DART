@@ -757,15 +757,18 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 mem,
                 self.time_manager.current_time,
                 "out",
-                1,
+                self.current_window.run_hours,
             )
 
             if not out_file.exists():
                 logger.error("No CHIMERE out.*.nc files found after run_model().")
                 return
 
-            logger.info("Post-processing CHIMERE output (mem %s)", mem)
-
+            logger.info(
+                "Post-processing CHIMERE output (mem %s), out_file %s",
+                mem,
+                out_file
+            )
             # ------------------------------------------------
             # Select LAST timestep (IMPORTANT)
             # ------------------------------------------------
@@ -1056,7 +1059,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 mem,
                 prior_start_time,
                 "end",
-                1,
+                self.current_window.run_hours,
             )
             if not restart_from_chimere_file.exists():
                 raise FatalPipelineError(
