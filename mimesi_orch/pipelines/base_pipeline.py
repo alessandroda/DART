@@ -145,11 +145,9 @@ class BaseAssimilationPipeline(ABC):
                 logger.info(
                     "[TIME] increment current_time %s -> %s",
                     self._fmt_timestamp(self.time_manager.current_time),
-                    self._fmt_timestamp(
-                        self.time_manager.current_time + self.time_manager.dt
-                    ),
+                    self._fmt_timestamp(self.current_window.end_time),
                 )
-                self.time_manager.increment_time()
+                self.time_manager.current_time = self.current_window.end_time
                 self._log_time_context("after_increment_before_assimilation")
 
                 # Perform data assimilation if applicable
