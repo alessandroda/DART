@@ -216,8 +216,21 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         start_ts = start_time.strftime("%Y%m%d%H")
         end_ts = end_time.strftime("%Y%m%d%H")
         start_index = start_time.hour
-        end_index = start_index + self.current_window.run_hours
-        return start_time, end_time, daily_start, daily_end, start_ts, end_ts, start_index, end_index
+        if self.current_window.run_hours < 1:
+            raise FatalPipelineError(
+                f"Invalid run_hours for assimilation window: {self.current_window.run_hours}"
+            )
+        end_index = start_index + self.current_window.run_hours - 1
+        return (
+            start_time,
+            end_time,
+            daily_start,
+            daily_end,
+            start_ts,
+            end_ts,
+            start_index,
+            end_index,
+        )
 
     def _slice_time_window(self, source_path: Path, output_path: Path, start_index: int, end_index: int):
         try:
