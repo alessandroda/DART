@@ -110,6 +110,14 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         assigned to the nearest cycle end using the +/- 30 minute rule.
         """
         start_time = self.time_manager.current_time
+        
+        if start_time.hour == 0:
+            return AssimWindow(
+                start_time=start_time,
+                end_time=start_time + self.time_manager.dt,
+                run_hours=1,
+                has_assimilation=False,   # optional
+            )
         half_dt = self.time_manager.dt / 2
         day_end = start_time.replace(
             hour=0,
@@ -215,12 +223,13 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
         start_ts = start_time.strftime("%Y%m%d%H")
         end_ts = end_time.strftime("%Y%m%d%H")
+
         start_index = start_time.hour
         if self.current_window.run_hours < 1:
             raise FatalPipelineError(
                 f"Invalid run_hours for assimilation window: {self.current_window.run_hours}"
             )
-        end_index = start_index + self.current_window.run_hours - 1
+        end_index = start_index + self.current_window.run_hours
         return (
             start_time,
             end_time,
