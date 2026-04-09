@@ -528,6 +528,20 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             self._generated_daily_emission_files = []
             self._generated_daily_emission_stamp = None
 
+
+        for mem in range(self.no_mems):
+            run_dir = self.paths.path_data / f"RUN_{mem}"
+
+            ts = self.time_manager.current_time.strftime('%Y%m%d%H')
+            tmp_dir = run_dir / f"tmp{ts}-{self.case_dir}"
+
+            if tmp_dir.exists():
+                if not tmp_dir.is_dir():
+                    raise RuntimeError(f"[CLEANUP] Expected directory, got file: {tmp_dir}")
+
+                logger.info(f"[CLEANUP] Removing tmp directory: {tmp_dir}")
+                shutil.rmtree(tmp_dir)
+
     def _prepare_chimere_run_assets(self) -> tuple[Path, Path]:
         
         run_dir = self.paths.path_submit_bsh / "runs"
