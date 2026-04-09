@@ -636,6 +636,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             path_manager=self.paths,
             timestamp_model=timestamp_chimere,
             no_mems=self.no_mems,
+            run_hours = self.current_window.run_hours
         )
 
         if mems_to_rerun:

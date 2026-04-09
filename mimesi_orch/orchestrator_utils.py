@@ -718,6 +718,7 @@ def get_list_mems_to_rerun(
     path_manager: Optional[object] = None,
     timestamp_model: Optional[str] = None,
     no_mems: Optional[int] = None,
+    run_hours: int
 ) -> list[int]:
     """Block until all jobs in job_ids have finished.
     Return list of ensemble members that did not produce valid outputs.
@@ -758,6 +759,7 @@ def get_list_mems_to_rerun(
                 model=model_type,
                 datetime_model=timestamp_dt,
                 no_mems=no_mems,
+                run_hours= run_hours
             )
 
         logger.info(f"Jobs still running: {running_jobs}. Waiting...")
@@ -803,6 +805,7 @@ def check_ic_files_exist(
     model: ModelType,
     no_mems: int,
     datetime_model: pd.Timestamp,
+    run_hours: int
 ) -> list[int]:
     mems_to_rerun = []
 
@@ -812,7 +815,7 @@ def check_ic_files_exist(
             mem=mem,
             timestamp=datetime_model,
             prefix='end',
-            offset=1
+            offset=run_hours
         )
 
         if ic_path.exists() and ic_path.stat().st_size > 0:
