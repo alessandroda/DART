@@ -54,7 +54,7 @@ class PathManager:
         if base_path is None:
             base_path = self.base_path_DART
 
-        if p is None:
+        if p is None: #why? path_perturbed_meteo diventa base_path e non mi pare abbia senso
             return base_path.resolve()
 
         return (base_path / p).resolve()
@@ -167,7 +167,7 @@ class PathManager:
 
     def chimere2023_EMIS_FILE_SRC(self, is_pert: bool, domain: str, month: int, weekday: str, emi_id: int) -> Path:
         if is_pert:
-            return self.path_perturbed_emi / f"EMIS.{domain}.{month}.{weekday}.s.ens0{emi_id}.nc"
+            return self.path_perturbed_emi / f"EMIS.{domain}.{month}.{weekday}.s.ens{emi_id:02d}.nc"
         else: 
             return self.path_control_run / f"EMIS.{domain}.{month}.{weekday}.s.nc"
     
@@ -176,7 +176,7 @@ class PathManager:
     
     def chimere2023_METEO_FILE_SRC(self, is_pert: bool, domain: str, date_ymd: str, meteo_id: Optional[int]) -> Path:
         if is_pert:
-            return self.path_perturbed_meteo / f"exdomout_{date_ymd}00_24_{domain}.ens0{meteo_id}.nc"
+            return self.path_perturbed_meteo / f"exdomout_{date_ymd}00_24_{domain}.ens{meteo_id:02d}.nc"
         else:
             return self.path_control_run / f"exdomout_{date_ymd}00_24_{domain}.nc"
     

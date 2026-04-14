@@ -19,7 +19,7 @@ paths:
 
 time:
   start_time: "2020-02-06 08:00:00"
-  end_time: "2020-02-06 09:00:00"
+  end_time: "2020-02-06 17:00:00"
   dt_seconds: 3600
 
 
@@ -60,6 +60,7 @@ satellite_data:
   search_window_seconds: 1800
   vertical_ref_height: 2
   superobs: .true. #fortran's, use lower case
+  qa_value: 0.5
 
 
 model_data:

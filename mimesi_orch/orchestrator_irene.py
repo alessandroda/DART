@@ -22,6 +22,7 @@ with open(CONFIG_PATH, "r") as f:
     cfg = yaml.safe_load(f)
 
 config = AppConfig.model_validate(cfg)
+config.paths.config_path = CONFIG_PATH
 path_manager = PathManager(config.paths)
 
 LOG_DIR = Path.cwd()/ "irene_orchestrator_logs"

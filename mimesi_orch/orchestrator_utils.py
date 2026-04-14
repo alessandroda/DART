@@ -395,6 +395,9 @@ def submit_and_wait_cineca(
 
     return job_ids
 
+def get_list_mems_to_rerun():
+    return
+
 def submit_and_wait_slurm(
     model_type: ModelType,
     path_manager: PathManager,
@@ -910,7 +913,7 @@ def submit_and_wait(
 def monitor_job_status(
     job_ids: list[str],
     scheduler: Scheduler,
-    model_type: ModelType,
+    model_type: Optional[ModelType] = None,
     ):
 
     while True:
@@ -919,11 +922,11 @@ def monitor_job_status(
         for jobid in job_ids:
             if scheduler == Scheduler.SLURM:
                 finished = check_job_status_slurm(
-                    jobid, which_run=model_type.value.upper()
+                    jobid#, which_run=model_type.value.upper()
                 )
             else:
                 finished = check_job_status_cresco(
-                    jobid, which_run=model_type.value.upper()
+                    jobid#, which_run=model_type.value.upper()
                 )
 
             if not finished:
@@ -945,7 +948,7 @@ def check_restart_files_exist(
 
     mems_to_rerun = []
 
-    for mem in range(no_mems):
+    for mem in range(1, no_mems+1):
         if ic_path.exists() and ic_path.stat().st_size > 0:
             logger.info(
                 f"{model} | restart_file exists for mem {mem}: {ic_path}"
@@ -1211,7 +1214,7 @@ def from_liststr_to_listdict(ensemble_list: list[str], labels: list[str]) -> lis
         parts = item.split(":")
 
         entry = {
-            "MemberID": member_id
+            "MemberID": member_id + 1  # Start MemberID from 1 for clarity
         }
 
         for i, value in enumerate(parts):
@@ -1244,7 +1247,7 @@ def compute_hourly(data_path: str, time: int, path_saving_data: Path, path_savin
         logger.info("Hourly dataset computed")
 
 def add_missing_variable(no_mems: int, var_to_add: str, domain: str, out_file_func: Callable, orig_file_func: Callable, **kwargs):
-    for mem in range(no_mems):
+    for mem in range(1, no_mems+1):
         out_file_name=out_file_func(mem, **kwargs)
         orig_file_name=orig_file_func(mem, domain, **kwargs)
         logger.info(f'Adding {var_to_add} to {out_file_name} from {orig_file_name}')
@@ -1282,7 +1285,7 @@ def write_dart_filter_list(list_file_func: Path, out_file_func: Callable, no_mem
         list_file_func.write_text(
             "\n".join(
                 str(out_file_func(mem, **kwargs))
-                for mem in range(no_mems)
+                for mem in range(1, no_mems+1)
             ) + "\n"
         )
         logger.info(f"Wrote: {list_file_func}")
@@ -1344,3 +1347,13 @@ def save_diff(file_a: Path, file_b: Path, out_path: Path, label: str):
         logger.error(f"Failed to compute {label}: {e}")
     
 
+def remove_negative_values(obs_file_path: Path):
+    logger.info(f"Filtering negative values in {obs_file_path} ...")
+    try:
+        with xr.open_dataset(obs_file_path) as ds:
+            ds['vcd'] = ds['vcd'].where(ds['vcd'] >= 0, 0)  # Set negative values to 0
+            ds.to_netcdf(obs_file_path, mode='w')  # Overwrite the original file
+        logger.info(f"Negative values filtered successfully in {obs_file_path}.")
+    except Exception as e:
+        logger.error(f"Error filtering negative values in {obs_file_path}: {e}")
+        raise

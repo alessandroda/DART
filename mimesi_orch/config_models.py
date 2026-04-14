@@ -47,6 +47,8 @@ class PathsConfig(BaseModel):
     path_perturbed_meteo: Optional[Path] = None
     log_directory: Optional[Path] = None
 
+    config_path: Optional[Path] = None
+
     @field_validator("*", mode="before")
     @classmethod
     def expand_paths(cls, v):
@@ -105,12 +107,19 @@ class AssimilationConfig(BaseModel):
     run_assimilation_flag: bool = True
     update_restart: bool = None
 
+    var_list_3d: Optional[list] = None
+    var_list_2d: Optional[list] = None
+
     @field_validator("model_type", mode="before")
     @classmethod
     def normalize_model_type(cls, v):
         if isinstance(v, str):
             return v.lower()
         return v
+    
+    model_config = {
+        "protected_namespaces": ()
+    }
 
 # ---------------------------------------------------------------------
 # CLUSTER
@@ -184,6 +193,7 @@ class SatelliteDataConfig(BaseModel):
     collection: str
     vertical_ref_height: Optional[int] = None
     superobs: Optional[str] = None
+    qa_value: Optional[float] = None
 
 # ---------------------------------------------------------------------
 # MODEL DATA
@@ -237,8 +247,10 @@ class AppConfig(BaseModel):
     # runtime-only (not from YAML)
     _config_path: Optional[Path] = None
 
-    class Config:
-        extra = "forbid"
+    model_config = {
+        "protected_namespaces": (),
+        "extra": "forbid"
+    }
 
 
 class MonitoringConfig(BaseModel):

@@ -37,7 +37,8 @@ from orchestrator_utils import (
     add_missing_variable,
     write_dart_filter_list,
     update_pollutant_in_end,
-    save_diff
+    save_diff,
+    remove_negative_values
 )
 
 
@@ -80,6 +81,8 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         self.run_assimilation_flag = a.run_assimilation_flag
         self.update_restart = a.update_restart
         self.case_emi_dir = a.case_emi_dir
+        self.var_list_3d = a.var_list_3d
+        self.var_list_2d = a.var_list_2d
 
         self.queue = self.config.cluster.cluster_queue
         self.project_name = self.config.cluster.project_name
@@ -111,6 +114,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         self.collection = self.config.satellite_data.collection
         self.vertical_ref_height = self.config.satellite_data.vertical_ref_height
         self.superobs = self.config.satellite_data.superobs
+        self.qa_value = self.config.satellite_data.qa_value
 
         self.scheduler = self.config.cluster.scheduler
         logger.info(f"Using scheduler={self.scheduler}, queue={self.queue}")
@@ -174,6 +178,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
             compute_hourly(str(self.path_manager.chimere2023_METEO_FILE_SRC("MeteoID" in dict_mem.keys(), self.domain, date_ymd, dict_mem["MeteoID"] if "MeteoID" in dict_mem.keys() else None)), 
                                    int(date_H), 
                                    self.path_manager.chimere2023_METEO_FILE(dict_mem["MemberID"], self.domain, date_ymdH, 1))
+        #filter negative values in obs e magari anche di piu, c'é da vedere PUM
 
     def run_model(self):
         """
@@ -183,7 +188,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         date_ymdH = self.time_manager.current_time.strftime("%Y%m%d%H")
 
         job_ids = []
-        for mem in range(self.no_mems):
+        for mem in range(1, self.no_mems + 1):
             try:
                 logger.info("Replacing @TOKENS in CHIMERE .par template file ...")
                 logger.info(f"The output directory (run_dir) is: {self.path_manager.chimere2023_run_dir(mem)}")
@@ -269,6 +274,9 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
             logger.info("[DART] No satellite data found, skipping assimilation")
             return
         
+        logger.info(f"---------->>> Removing negative values in satellite observations ...")
+        remove_negative_values(self.path_manager.dart_file_s5p_orbit(orbit_filename, self.obs_name))
+
         logger.info(f"---------->>> Running run_obs_converter()")
         obs_seq_name = self.run_obs_converter(orbit_filename)
 
@@ -315,11 +323,18 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         )
         obs_seq_name = f"obs_seq_{self.seconds_obs}_{self.days_obs}.out"
 
+        obs_seq_path = self.path_manager.dart_obs_seq(obs_seq_name, self.obs_name, self.collection)
+        
+        # Skip submission if file already exists
+        if Path(obs_seq_path).exists():
+            logger.info(f"Obs sequence file already exists: {obs_seq_path}")
+            return obs_seq_name
+        
         replace_nml_template(
             input_nml_path=self.path_manager.dart_s5p_input_template(),
             entries_tbr_dict={
                 "$file_path_s5p": self.path_manager.dart_file_s5p_orbit(orbit_filename, self.obs_name),
-                "$file_out": self.path_manager.dart_obs_seq(obs_seq_name, self.obs_name, self.collection),
+                "$file_out": obs_seq_path,
                 "$obs_type": self.obs_type,
                 "$dom_west": self.dom_west,
                 "$dom_east": self.dom_east,
@@ -329,10 +344,12 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
                 "$dlon": self.dlon,
                 "$dlat": self.dlat,
                 "$vertical_ref_height": self.vertical_ref_height,
-                "$superobs": self.superobs
+                "$superobs": self.superobs,
+                "$qa_value": self.qa_value
             },
             output_nml_path=self.path_manager.dart_s5p_input(),
         )
+
         try:
             spec = CommandSpec(
                 command="convert_s5p_tropomi_l3",
@@ -383,6 +400,11 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
                 "$first_obs_seconds": str(self.seconds_obs), #computed when creating obs_seq.out
                 "$no_mems": str(self.no_mems),
                 "$obs_type": str(self.obs_type),
+                "$num_3d": len(self.var_list_3d),
+                "$list_3d": self.var_list_3d,
+                "$list_2d": self.var_list_2d,
+                "$num_2d": len(self.var_list_2d),
+                
             },
             output_nml_path=self.path_manager.dart_filter_input(),
         )
@@ -419,7 +441,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
                 directory=self.path_manager.dart_run_filter().parent
             )
         job_id = submit_irene(spec)
-        monitor_job_status([job_id], self.scheduler, self.model_type)
+        monitor_job_status([job_id], self.scheduler)
         self.move_analysis_files()
 
         logger.info(f"Computing differences between analysis/preassim means ...")
@@ -431,7 +453,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         if analysis_mean.exists() and preassim_mean.exists():
             save_diff(analysis_mean, preassim_mean, diff_mean_out, "Mean Analysis Increment")
         else:
-            logger.warning(f"Skipping mean diff: files not found in {date_ymdH}")
+            raise FatalPipelineError(f"DART failed to produce analysis and/or preassim means for {date_ymdH}, cannot compute differences.")
 
         logger.info(f"run_dart() is DONE.")
     
@@ -440,6 +462,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         self.path_manager.dart_analysis_dir(date_ymdH).mkdir(parents=True, exist_ok=True)
         self.path_manager.dart_preassim_dir(date_ymdH).mkdir(parents=True, exist_ok=True)
         
+        logger.info(f"Moving DART output files to analysis and preassim directories for date {date_ymdH} if present ...")
         for filename in os.listdir(f"{self.path_manager.path_filter}"):
             if filename.startswith("analysis_"):
                 try:
@@ -458,6 +481,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
                 except shutil.Error:
                     logger.error(f"Failed to move '{filename}' to '{self.path_manager.dart_preassim_dir(date_ymdH)}' because it already exists.")
 
+
     def after_assimilation(self):
         if not self.run_assimilation_flag:
             logger.info("[DART] Assimilation disabled by config")
@@ -470,7 +494,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
             return
         logger.info("---------->>> Running update_pollutant_in_end()")
         date_ymdH = self.time_manager.end_file_datetime.strftime("%Y%m%d%H")
-        for mem in range(self.no_mems):
+        for mem in range(1, self.no_mems + 1):
             update_pollutant_in_end(dart_file=self.path_manager.dart_filter_output_list_file(mem, date_ymdH, 1), 
                                     end_file=self.path_manager.chimere2023_END_FILE(mem, date_ymdH, 1),
                                     out_file=self.path_manager.chimere2023_out_file(mem, date_ymdH, 1),
@@ -492,11 +516,10 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         Cleanup + YAML update.
         """
 
-        #modify_yaml_date(
-        #    self.config["_config_path"],
-        #    self.time_manager.simulated_time.strftime("%Y-%m-%d %H:00:00"),
-        #)
-        #self.cleanup_FARM()
+        modify_yaml_date(
+            self.config.paths.config_path,
+            self.time_manager.simulated_time.strftime("%Y-%m-%d %H:00:00"),
+        )
         
         self.satdata_found = False
         logger.info("Cycle is DONE; starting a new loop!")
