@@ -97,8 +97,14 @@ class AssimilationConfig(BaseModel):
 
     case_dir: str
     case_emi_dir: Optional[str] = None
-    emi_perturbation_dir : Optional[str] = None
-    emi_var: Optional[str] = None
+    # Preferred configuration: single mapping from emission variable -> perturbation subdir.
+    # Example:
+    #   emi_perturbations: {NO2: NO2_2000, NO: NO_2000}
+    emi_perturbations: Optional[dict[str, str]] = None
+    # Support single-species (str) and multi-species (list[str]) configurations.
+    # Pipelines that use these fields should normalize/validate pairing semantics.
+    emi_perturbation_dir: Optional[str | list[str]] = None
+    emi_var: Optional[str | list[str]] = None
 
     no_mems: int = Field(gt=0)
     run_assimilation_flag: bool = True

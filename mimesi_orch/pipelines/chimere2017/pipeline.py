@@ -87,7 +87,8 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         self.state_variable_qty = a.state_variable_qty
         self.run_assimilation_flag = a.run_assimilation_flag
         self.case_emi_dir = a.case_emi_dir
-        self.emi_perturbation_dir=a.emi_perturbation_dir
+        self.emi_perturbations = getattr(a, "emi_perturbations", None)
+        self.emi_perturbation_dir = a.emi_perturbation_dir
         self.cineca_queue = self.config.cluster.cluster_queue
 
         self.backup_perturb_days = self.config.time.backup_perturb_days
@@ -400,8 +401,57 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             raise FatalPipelineError("paths.path_perturbed_emi is not configured")
         if self.case_emi_dir is None:
             raise FatalPipelineError("assimilation.case_emi_dir is not configured")
-        if self.emi_var is None:
-            raise FatalPipelineError("assimilation.emi_var is not configured")
+        emi_pairs: list[tuple[str, str]] = []
+        if self.emi_perturbations is not None:
+            if not isinstance(self.emi_perturbations, dict):
+                raise FatalPipelineError("assimilation.emi_perturbations must be a mapping")
+            if not self.emi_perturbations:
+                raise FatalPipelineError("assimilation.emi_perturbations is empty")
+            for key, value in self.emi_perturbations.items():
+                emi_var = str(key).strip()
+                emi_dir = str(value).strip()
+                if not emi_var:
+                    raise FatalPipelineError("assimilation.emi_perturbations contains an empty variable key")
+                if not emi_dir:
+                    raise FatalPipelineError(
+                        f"assimilation.emi_perturbations contains an empty dir for variable {emi_var}"
+                    )
+                emi_pairs.append((emi_var, emi_dir))
+        else:
+            if self.emi_var is None:
+                raise FatalPipelineError("assimilation.emi_var is not configured")
+            if self.emi_perturbation_dir is None:
+                raise FatalPipelineError("assimilation.emi_perturbation_dir is not configured")
+
+            raw_emi_vars = (
+                [self.emi_var] if isinstance(self.emi_var, str) else list(self.emi_var)
+            )
+            raw_emi_dirs = (
+                [self.emi_perturbation_dir]
+                if isinstance(self.emi_perturbation_dir, str)
+                else list(self.emi_perturbation_dir)
+            )
+            emi_vars = [str(v).strip() for v in raw_emi_vars]
+            emi_dirs = [str(d).strip() for d in raw_emi_dirs]
+
+            empty_vars = [idx for idx, v in enumerate(emi_vars) if not v]
+            empty_dirs = [idx for idx, d in enumerate(emi_dirs) if not d]
+            if empty_vars:
+                raise FatalPipelineError(
+                    "assimilation.emi_var contains empty entries at indices "
+                    + ",".join(map(str, empty_vars))
+                )
+            if empty_dirs:
+                raise FatalPipelineError(
+                    "assimilation.emi_perturbation_dir contains empty entries at indices "
+                    + ",".join(map(str, empty_dirs))
+                )
+            if len(emi_vars) != len(emi_dirs):
+                raise FatalPipelineError(
+                    "assimilation.emi_var and assimilation.emi_perturbation_dir must have the same length "
+                    f"(got emi_var={len(emi_vars)} and emi_perturbation_dir={len(emi_dirs)})"
+                )
+            emi_pairs = list(zip(emi_vars, emi_dirs))
 
         daily_start = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
         daily_end = daily_start + timedelta(days=1)
@@ -415,11 +465,11 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             raise FatalPipelineError(f"Base emission file not found: {base_file}")
 
         logger.info(
-            "[EMISSIONS] Building daily perturbed emission files for %s using base=%s perturbations=%s variable=%s",
+            "[EMISSIONS] Building daily perturbed emission files for %s using base=%s perturbations=%s variables=%s",
             daily_stamp,
             base_file,
             perturbed_root,
-            self.emi_var,
+            ",".join([p[0] for p in emi_pairs]),
         )
 
         generated_files: list[Path] = []
@@ -427,66 +477,69 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             file_dest_dir = self.paths.path_data / f"RUN_{mem}" / f"EMISSION_{mem}"
             file_dest_dir.mkdir(parents=True, exist_ok=True)
             output_file = file_dest_dir / file_original_name
-
-            perturbed_file = (
-                perturbed_root
-                / f"emi_{mem}"
-                / self.emi_perturbation_dir
-                / f"AEMISSIONS.{daily_stamp}_ITA7_{mem}.nc"
-            )
-            if not perturbed_file.exists():
-                raise FatalPipelineError(
-                    f"Perturbed emission file not found for member {mem}: {perturbed_file}"
+            perturbed_files: list[tuple[str, Path]] = []
+            for emi_var, emi_dir in emi_pairs:
+                perturbed_file = (
+                    perturbed_root
+                    / f"emi_{mem}"
+                    / emi_dir
+                    / f"AEMISSIONS.{daily_stamp}_ITA7_{mem}.nc"
                 )
-
-            logger.info(
-                "[EMISSIONS] Member %s replacing %s into %s from %s",
-                mem,
-                self.emi_var,
-                output_file,
-                perturbed_file,
-            )
-
-            with xr.open_dataset(base_file) as ds_base, xr.open_dataset(perturbed_file) as ds_perturbed:
-                ds_base = ds_base.load()
-                ds_perturbed = ds_perturbed.load()
-
-                if self.emi_var not in ds_base:
+                if not perturbed_file.exists():
                     raise FatalPipelineError(
-                        f"Variable {self.emi_var} not found in base emission file {base_file}"
+                        f"Perturbed emission file not found for member {mem}, variable {emi_var}: {perturbed_file}"
                     )
-                if self.emi_var not in ds_perturbed:
-                    raise FatalPipelineError(
-                        f"Variable {self.emi_var} not found in perturbed emission file {perturbed_file}"
-                    )
+                perturbed_files.append((emi_var, perturbed_file))
 
-                orig = ds_base[self.emi_var].values
-                pert = ds_perturbed[self.emi_var].values
-                if np.array_equal(orig, pert):
-                    logger.warning(
-                        "[EMISSIONS] Member %s has identical %s values in %s",
+            shutil.copy2(base_file, output_file)
+
+            with xr.open_dataset(base_file) as ds_base:
+                for emi_var, perturbed_file in perturbed_files:
+
+                    logger.info(
+                        "[EMISSIONS] Member %s replacing %s into %s from %s",
                         mem,
-                        self.emi_var,
+                        emi_var,
+                        output_file,
                         perturbed_file,
                     )
 
-            shutil.copy2(base_file, output_file)
-            try:
-                subprocess.run(
-                    [
-                        "ncks",
-                        "-A",
-                        "-v",
-                        self.emi_var,
-                        str(perturbed_file),
-                        str(output_file),
-                    ],
-                    check=True,
-                )
-            except subprocess.CalledProcessError as e:
-                raise FatalPipelineError(
-                    f"ncks failed replacing {self.emi_var} from {perturbed_file} into {output_file}"
-                ) from e
+                    with xr.open_dataset(perturbed_file) as ds_perturbed:
+                        if emi_var not in ds_base:
+                            raise FatalPipelineError(
+                                f"Variable {emi_var} not found in base emission file {base_file}"
+                            )
+                        if emi_var not in ds_perturbed:
+                            raise FatalPipelineError(
+                                f"Variable {emi_var} not found in perturbed emission file {perturbed_file}"
+                            )
+
+                        orig = ds_base[emi_var].values
+                        pert = ds_perturbed[emi_var].values
+                        if np.array_equal(orig, pert):
+                            logger.warning(
+                                "[EMISSIONS] Member %s has identical %s values in %s",
+                                mem,
+                                emi_var,
+                                perturbed_file,
+                            )
+
+                    try:
+                        subprocess.run(
+                            [
+                                "ncks",
+                                "-A",
+                                "-v",
+                                emi_var,
+                                str(perturbed_file),
+                                str(output_file),
+                            ],
+                            check=True,
+                        )
+                    except subprocess.CalledProcessError as e:
+                        raise FatalPipelineError(
+                            f"ncks failed replacing {emi_var} from {perturbed_file} into {output_file}"
+                        ) from e
 
             generated_files.append(output_file)
 

@@ -22,7 +22,9 @@ class Chimere2017PipelineConfig(BaseModel):
     obs_type: str
     case_dir: str
     case_emi_dir: str | None = None
-    emi_var: str | None = None
+    emi_perturbations: dict[str, str] | None = None
+    emi_perturbation_dir: str | list[str] | None = None
+    emi_var: str | list[str] | None = None
     no_mems: int
     run_assimilation_flag: bool = True
 
@@ -49,6 +51,7 @@ class Chimere2017PipelineConfig(BaseModel):
             obs_type=app.assimilation.obs_type,
             case_dir=app.assimilation.case_dir,
             case_emi_dir=app.assimilation.case_emi_dir,
+            emi_perturbations=app.assimilation.emi_perturbations,
             emi_perturbation_dir=app.assimilation.emi_perturbation_dir,
             emi_var=app.assimilation.emi_var,
             path_perturbed_emi=app.paths.path_perturbed_emi,

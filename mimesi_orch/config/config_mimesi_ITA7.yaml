@@ -2,8 +2,7 @@ assimilation:
   ass_var: NO2
   case_dir: ITA7
   case_emi_dir: basecase/data_ITA7_ITA7
-  emi_perturbation_dir : NO2_2000
-  emi_var: NO2
+  emi_perturbations: {NO2: NO2_2000, NO: NO_2000}
   model_type: CHIMERE
   no_mems: 2
   obs_type: SAT_NO2_TROPOMI
