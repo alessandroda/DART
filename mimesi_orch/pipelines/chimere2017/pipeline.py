@@ -190,18 +190,26 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             raise FatalPipelineError(f"IBC list is empty: {list_path}")
 
         if len(lines) > 1 and lines[0].isdigit():
-            return Path(lines[1])
+            target = Path(lines[1])
+        else:
+            target = Path(lines[-1])
 
-        return Path(lines[-1])
+        if not target.is_absolute():
+            target = (list_path.parent / target).resolve()
+        return target
 
     def _resolve_boun_daily_list(self, daily_list_name: str) -> Path:
-        ibc_dir = self.paths.path_data / "basecase/IBC"
+        ibc_dir = getattr(self.paths, "chimere_input_ibc_dir", None)
+        if ibc_dir is None:
+            raise FatalPipelineError(
+                "paths.chimere_input_ibc_dir is not configured (required for CHIMERE IBC inputs)"
+            )
+
         candidate = ibc_dir / daily_list_name
         if candidate.exists():
             return candidate
-        raise FatalPipelineError(
-            f"Daily BOUN list not found in any IBC dir: {daily_list_name}"
-        )
+
+        raise FatalPipelineError(f"Daily BOUN list not found: {candidate}")
 
     def _get_same_day_window_bounds(self):
         if self.current_window is None:
@@ -335,16 +343,21 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             self._get_same_day_window_bounds()
         )
 
-        meteo_dir = self.paths.path_data / "ATM"
+        meteo_src_dir = getattr(self.paths, "chimere_input_atm_dir", None)
+        if meteo_src_dir is None:
+            raise FatalPipelineError(
+                "paths.chimere_input_atm_dir is not configured (required for CHIMERE ATM inputs)"
+            )
+        meteo_out_dir = self.paths.path_data / "ATM"
         meteo_daily_name = (
             f"exdomout.{daily_start:%Y%m%d%H}_{daily_end:%Y%m%d%H}_ITA7.nc"
         )
-        meteo_daily_path = meteo_dir / meteo_daily_name
+        meteo_daily_path = meteo_src_dir / meteo_daily_name
         if not meteo_daily_path.exists():
             raise FatalPipelineError(f"Daily meteo netcdf not found: {meteo_daily_path}")
 
-        meteo_dir.mkdir(parents=True, exist_ok=True)
-        window_meteo_nc = meteo_dir / f"exdomout.{start_ts}_{end_ts}_ITA7.nc"
+        meteo_out_dir.mkdir(parents=True, exist_ok=True)
+        window_meteo_nc = meteo_out_dir / f"exdomout.{start_ts}_{end_ts}_ITA7.nc"
         self._slice_time_window(
             meteo_daily_path,
             window_meteo_nc,
@@ -408,8 +421,11 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         perturbed_root = self.paths.path_perturbed_emi
         if perturbed_root is None:
             raise FatalPipelineError("paths.path_perturbed_emi is not configured")
-        if self.case_emi_dir is None:
-            raise FatalPipelineError("assimilation.case_emi_dir is not configured")
+        emissions_src_dir = getattr(self.paths, "chimere_input_emissions_dir", None)
+        if emissions_src_dir is None:
+            raise FatalPipelineError(
+                "paths.chimere_input_emissions_dir is not configured (required for CHIMERE emissions inputs)"
+            )
         emi_pairs: list[tuple[str, str]] = []
         if self.emi_perturbations is not None:
             if not isinstance(self.emi_perturbations, dict):
@@ -469,7 +485,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         daily_stamp = f"{date}_{datep1}"
         file_original_name = f"AEMISSIONS.{daily_stamp}_ITA7.nc"
 
-        base_file = self.paths.path_data / self.case_emi_dir / file_original_name
+        base_file = emissions_src_dir / file_original_name
         if not base_file.exists():
             raise FatalPipelineError(f"Base emission file not found: {base_file}")
 

@@ -44,6 +44,10 @@ class PathsConfig(BaseModel):
     run_submit_replace_perturbations: Optional[Path] = None
     path_perturbed_emi: Optional[Path] = None
     log_directory: Optional[Path] = None
+    # CHIMERE input roots (read-only/shared inputs), resolved against base_path if relative.
+    chimere_input_emissions_dir: Optional[Path] = None
+    chimere_input_atm_dir: Optional[Path] = None
+    chimere_input_ibc_dir: Optional[Path] = None
 
     @field_validator("*", mode="before")
     @classmethod

@@ -23,6 +23,9 @@ class Chimere2017Paths:
         self.path_data = self._resolve(cfg.path_data)
         self.path_control_run = None
         self.path_perturbed_emi = self._resolve(cfg.path_perturbed_emi)
+        self.chimere_input_emissions_dir = self._resolve(cfg.chimere_input_emissions_dir)
+        self.chimere_input_atm_dir = self._resolve(cfg.chimere_input_atm_dir)
+        self.chimere_input_ibc_dir = self._resolve(cfg.chimere_input_ibc_dir)
         self.run_submit_model_template = (
             self._resolve(cfg.run_submit_model_template)
             if cfg.run_submit_model_template is not None
