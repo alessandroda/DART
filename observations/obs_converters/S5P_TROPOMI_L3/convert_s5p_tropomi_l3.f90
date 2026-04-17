@@ -119,24 +119,25 @@ program convert_s5p_tropomi_L2
 
    if ( file_exist ) then
 
-      ! existing file found, append to it
-      call read_obs_seq(s5p_out_file, 0, 0, 2*nobs, obs_seq)
-
-   else
-      allocate(used(nobs))
-      allocate(tused(nobs))
-      allocate(tobs(nobs))
-      allocate(sorted_used(nobs))
-      ! create a new one
-      call init_obs_sequence(obs_seq, num_copies, num_qc, 2*nobs)
-      do i = 1, num_copies
-         call set_copy_meta_data(obs_seq, i, 'S5P observation')
-      end do
-      do i = 1, num_qc
-         call set_qc_meta_data(obs_seq, i, 'Data QC')
-      end do
-
+      write(*,*) "ERROR: obs_seq file already exists:", trim(s5p_out_file)
+      write(*,*) "Refusing to overwrite to avoid duplication."
+      call finalize_utilities()
+      stop 1
    endif
+      
+   allocate(used(nobs))
+   allocate(tused(nobs))
+   allocate(tobs(nobs))
+   allocate(sorted_used(nobs))
+   ! create a new one
+   call init_obs_sequence(obs_seq, num_copies, num_qc, 2*nobs)
+   do i = 1, num_copies
+      call set_copy_meta_data(obs_seq, i, 'S5P observation')
+   end do
+   do i = 1, num_qc
+      call set_qc_meta_data(obs_seq, i, 'Data QC')
+   end do
+
 
    if (.not. allocated(used)) then
       allocate(used(nobs))

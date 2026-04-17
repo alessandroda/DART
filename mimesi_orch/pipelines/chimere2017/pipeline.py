@@ -111,6 +111,14 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         assigned to the nearest cycle end using the +/- 30 minute rule.
         """
         start_time = self.time_manager.current_time
+        
+        if start_time.hour == 0:
+            return AssimWindow(
+                start_time=start_time,
+                end_time=start_time + self.time_manager.dt,
+                run_hours=1,
+                has_assimilation=False,   # optional
+            )
         half_dt = self.time_manager.dt / 2
         day_end = start_time.replace(
             hour=0,
@@ -216,12 +224,13 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
         start_ts = start_time.strftime("%Y%m%d%H")
         end_ts = end_time.strftime("%Y%m%d%H")
+
         start_index = start_time.hour
         if self.current_window.run_hours < 1:
             raise FatalPipelineError(
                 f"Invalid run_hours for assimilation window: {self.current_window.run_hours}"
             )
-        end_index = start_index + self.current_window.run_hours - 1
+        end_index = start_index + self.current_window.run_hours
         return (
             start_time,
             end_time,
@@ -572,6 +581,20 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             self._generated_daily_emission_files = []
             self._generated_daily_emission_stamp = None
 
+
+        for mem in range(self.no_mems):
+            run_dir = self.paths.path_data / f"RUN_{mem}"
+
+            ts = self.time_manager.current_time.strftime('%Y%m%d%H')
+            tmp_dir = run_dir / f"tmp{ts}-{self.case_dir}"
+
+            if tmp_dir.exists():
+                if not tmp_dir.is_dir():
+                    raise RuntimeError(f"[CLEANUP] Expected directory, got file: {tmp_dir}")
+
+                logger.info(f"[CLEANUP] Removing tmp directory: {tmp_dir}")
+                shutil.rmtree(tmp_dir)
+
     def _prepare_chimere_run_assets(self) -> tuple[Path, Path]:
         
         run_dir = self.paths.path_submit_bsh / "runs"
@@ -680,6 +703,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             path_manager=self.paths,
             timestamp_model=timestamp_chimere,
             no_mems=self.no_mems,
+            run_hours = self.current_window.run_hours
         )
 
         if mems_to_rerun:
