@@ -310,6 +310,10 @@ class CleanupConfig(BaseModel):
     delete_window_ibc: bool = True
     delete_window_emissions: bool = True
     delete_window_meteo: bool = True
+    # If true, window inputs are not removed each step; instead they are
+    # removed by retention policy (e.g. keep last N days) on the schedule
+    # implemented by the pipeline (currently: at midnight).
+    window_inputs_retention: bool = True
 
     # Retention policy (applies when enabled).
     # If both are None, the pipeline may fall back to `time.backup_perturb_days`

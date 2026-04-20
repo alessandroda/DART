@@ -455,6 +455,122 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 cutoff.strftime("%Y-%m-%d %H:%M:%S"),
             )
 
+    @staticmethod
+    def _parse_window_inputs_timestamp(path: Path) -> tuple[datetime, datetime] | None:
+        """
+        Parse timestamps from window-input files like:
+          BOUN_CONCS.<YYYYMMDDHH>_<YYYYMMDDHH>_ITA7.nc
+          BOUN_CONCS.<YYYYMMDDHH>_<YYYYMMDDHH>_ITA7.list
+          INI_CONCS.<YYYYMMDDHH>_<YYYYMMDDHH>_ITA7.list
+          AEMISSIONS.<YYYYMMDDHH>_<YYYYMMDDHH>_ITA7.nc
+          exdomout.<YYYYMMDDHH>_<YYYYMMDDHH>_ITA7.nc
+        """
+        patterns = [
+            r"^(?:BOUN_CONCS|INI_CONCS)\.(\d{10})_(\d{10})_([A-Za-z0-9]+)\.(?:nc|list)$",
+            r"^AEMISSIONS\.(\d{10})_(\d{10})_([A-Za-z0-9]+)\.nc$",
+            r"^exdomout\.(\d{10})_(\d{10})_([A-Za-z0-9]+)\.nc$",
+        ]
+        for pat in patterns:
+            m = re.match(pat, path.name)
+            if not m:
+                continue
+            t1 = datetime.strptime(m.group(1), "%Y%m%d%H")
+            t2 = datetime.strptime(m.group(2), "%Y%m%d%H")
+            return t1, t2
+        return None
+
+    def _cleanup_retention_window_inputs(self) -> None:
+        """
+        Delete old window-input slices (IBC/emissions/meteo) by age.
+
+        This complements (or replaces) per-step deletion to reduce I/O churn.
+        """
+        cleanup_cfg = getattr(self.config, "cleanup", None)
+        if cleanup_cfg is None or not cleanup_cfg.enabled:
+            return
+
+        retain_hours = cleanup_cfg.retain_hours
+        retain_days = cleanup_cfg.retain_days
+        if retain_hours is None and retain_days is None:
+            if self.backup_perturb_days is not None:
+                retain_days = int(self.backup_perturb_days)
+            elif self.backup_ic_hours is not None:
+                retain_hours = int(self.backup_ic_hours)
+            else:
+                return
+
+        if retain_hours is not None:
+            cutoff = self.time_manager.current_time - timedelta(hours=retain_hours)
+        else:
+            cutoff = self.time_manager.current_time - timedelta(days=retain_days)
+
+        hard_keep = self.time_manager.current_time - timedelta(hours=6)
+
+        removed = 0
+
+        if cleanup_cfg.delete_window_meteo:
+            atm_dir = self.paths.path_data / "ATM"
+            if atm_dir.exists():
+                for p in atm_dir.glob("exdomout.*_*.nc"):
+                    parsed = self._parse_window_inputs_timestamp(p)
+                    if parsed is None:
+                        continue
+                    t1, _ = parsed
+                    if t1 >= hard_keep:
+                        continue
+                    if t1 < cutoff:
+                        try:
+                            p.unlink()
+                            removed += 1
+                        except Exception as e:
+                            logger.warning("[CLEANUP] Failed removing %s: %s", p, e)
+
+        for mem in range(self.no_mems):
+            run_dir = self.paths.path_data / f"RUN_{mem}"
+            if not run_dir.exists():
+                continue
+
+            if cleanup_cfg.delete_window_ibc:
+                ibc_dir = run_dir / "IBC"
+                if ibc_dir.exists():
+                    for p in ibc_dir.glob("*.*_*.*"):
+                        parsed = self._parse_window_inputs_timestamp(p)
+                        if parsed is None:
+                            continue
+                        t1, _ = parsed
+                        if t1 >= hard_keep:
+                            continue
+                        if t1 < cutoff:
+                            try:
+                                p.unlink()
+                                removed += 1
+                            except Exception as e:
+                                logger.warning("[CLEANUP] Failed removing %s: %s", p, e)
+
+            if cleanup_cfg.delete_window_emissions:
+                emi_dir = run_dir / f"EMISSION_{mem}"
+                if emi_dir.exists():
+                    for p in emi_dir.glob("AEMISSIONS.*_*.nc"):
+                        parsed = self._parse_window_inputs_timestamp(p)
+                        if parsed is None:
+                            continue
+                        t1, _ = parsed
+                        if t1 >= hard_keep:
+                            continue
+                        if t1 < cutoff:
+                            try:
+                                p.unlink()
+                                removed += 1
+                            except Exception as e:
+                                logger.warning("[CLEANUP] Failed removing %s: %s", p, e)
+
+        if removed:
+            logger.info(
+                "[CLEANUP] Retention removed %d window-input file(s) older than %s",
+                removed,
+                cutoff.strftime("%Y-%m-%d %H:%M:%S"),
+            )
+
     def _read_boun_list_target(self, list_path: Path) -> Path:
         try:
             lines = [
@@ -882,15 +998,32 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         for mem in range(self.no_mems):
             run_dir = self.paths.path_data / f"RUN_{mem}"
 
-            ts = self.time_manager.current_time.strftime('%Y%m%d%H')
-            tmp_dir = run_dir / f"tmp{ts}-{self.case_dir}"
+            # NOTE: BasePipeline increments `current_time` to `current_window.end_time`
+            # before calling finalize_step(). CHIMERE temp directories may be named
+            # using either the run start timestamp or the window end timestamp,
+            # depending on the external launcher scripts. Try both to avoid a
+            # systematic +/-1h mismatch.
+            ts_candidates = []
+            if self.current_window is not None:
+                ts_candidates.append(self.current_window.start_time)
+            ts_candidates.append(self.time_manager.current_time)
 
-            if tmp_dir.exists():
-                if not tmp_dir.is_dir():
-                    raise RuntimeError(f"[CLEANUP] Expected directory, got file: {tmp_dir}")
+            seen = set()
+            for ts_dt in ts_candidates:
+                ts = ts_dt.strftime("%Y%m%d%H")
+                if ts in seen:
+                    continue
+                seen.add(ts)
+                tmp_dir = run_dir / f"tmp{ts}-{self.case_dir}"
 
-                logger.info(f"[CLEANUP] Removing tmp directory: {tmp_dir}")
-                shutil.rmtree(tmp_dir)
+                if tmp_dir.exists():
+                    if not tmp_dir.is_dir():
+                        raise RuntimeError(
+                            f"[CLEANUP] Expected directory, got file: {tmp_dir}"
+                        )
+
+                    logger.info("[CLEANUP] Removing tmp directory: %s", tmp_dir)
+                    shutil.rmtree(tmp_dir)
 
         cleanup_cfg = getattr(self.config, "cleanup", None)
         if cleanup_cfg is not None and cleanup_cfg.enabled:
@@ -901,7 +1034,11 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                     self.current_window.end_time.strftime("%Y-%m-%d %H:%M:%S"),
                 )
             if cleanup_cfg.delete_window_ibc or cleanup_cfg.delete_window_emissions or cleanup_cfg.delete_window_meteo:
-                self._cleanup_window_inputs()
+                if cleanup_cfg.window_inputs_retention:
+                    if self.time_manager.current_time.hour == 0:
+                        self._cleanup_retention_window_inputs()
+                else:
+                    self._cleanup_window_inputs()
             self._cleanup_trim_outputs()
             if self.time_manager.current_time.hour == 0:
                 self._cleanup_retention_outputs()
