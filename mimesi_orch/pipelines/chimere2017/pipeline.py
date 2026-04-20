@@ -104,6 +104,8 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         self._pending_orbit_time = None
         self._generated_daily_emission_files: list[Path] = []
         self._generated_daily_emission_stamp: str | None = None
+        self._previous_window_start: pd.Timestamp | None = None
+        self._previous_window_end: pd.Timestamp | None = None
 
     def build_assim_window(self) -> AssimWindow:
         """
@@ -619,9 +621,33 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         run_dir = self.paths.path_data / f"RUN_{mem}"
         if not run_dir.exists():
             return None
-        candidates = sorted(run_dir.glob(f"end.*_{window_start_ts}_*.nc"))
+        if self._previous_window_start is not None:
+            prev_start_ts = self._previous_window_start.strftime("%Y%m%d%H")
+            expected = run_dir / f"end.{prev_start_ts}_{window_start_ts}_{self.case_dir}.nc"
+            if expected.exists():
+                return expected
+
+            expected_any_case = sorted(
+                p
+                for p in run_dir.glob(f"end.{prev_start_ts}_{window_start_ts}_*.nc")
+                if ".min." not in p.name
+            )
+            if expected_any_case:
+                return expected_any_case[-1]
+
+        candidates = sorted(
+            p for p in run_dir.glob(f"end.*_{window_start_ts}_*.nc") if ".min." not in p.name
+        )
         if not candidates:
             return None
+        if len(candidates) > 1:
+            logger.warning(
+                "[IBC] Multiple candidate previous restart files found for mem %s start=%s; using %s. Candidates=%s",
+                mem,
+                window_start_ts,
+                candidates[-1].name,
+                ",".join(p.name for p in candidates),
+            )
         return candidates[-1]
 
     @staticmethod
@@ -1129,6 +1155,11 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             self._cleanup_trim_outputs()
             if self.time_manager.current_time.hour == 0:
                 self._cleanup_retention_outputs()
+
+        # Record completed window for the next iteration (used to resolve previous restart file).
+        if self.current_window is not None:
+            self._previous_window_start = self.current_window.start_time
+            self._previous_window_end = self.current_window.end_time
 
     def _prepare_chimere_run_assets(self) -> tuple[Path, Path]:
         
