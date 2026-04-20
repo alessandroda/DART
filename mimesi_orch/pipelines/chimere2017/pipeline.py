@@ -265,6 +265,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
         start_ts = self.current_window.start_time.strftime("%Y%m%d%H")
         end_ts = self.current_window.end_time.strftime("%Y%m%d%H")
+        removed = 0
 
         # IBC (per member)
         if cleanup_cfg.delete_window_ibc:
@@ -281,6 +282,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                     if p.exists():
                         try:
                             p.unlink()
+                            removed += 1
                         except Exception as e:
                             logger.warning("[CLEANUP] Failed removing %s: %s", p, e)
 
@@ -292,6 +294,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 if p.exists():
                     try:
                         p.unlink()
+                        removed += 1
                     except Exception as e:
                         logger.warning("[CLEANUP] Failed removing %s: %s", p, e)
 
@@ -302,8 +305,17 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             if meteo_slice.exists():
                 try:
                     meteo_slice.unlink()
+                    removed += 1
                 except Exception as e:
                     logger.warning("[CLEANUP] Failed removing %s: %s", meteo_slice, e)
+
+        if removed:
+            logger.info(
+                "[CLEANUP] Removed %d window-input file(s) for %s_%s",
+                removed,
+                start_ts,
+                end_ts,
+            )
 
     def _cleanup_trim_outputs(self) -> None:
         """
@@ -321,6 +333,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
         start_time = self.current_window.start_time
         run_hours = self.current_window.run_hours
+        written = 0
 
         def _default_keep_list(raw: list[str] | None) -> list[str]:
             if raw:
@@ -344,6 +357,8 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 )
                 out_min = out_path.with_name(f"out.min.{out_path.name.split('out.', 1)[1]}")
                 self._subset_netcdf_copy(out_path, out_min, keep_out)
+                if out_min.exists():
+                    written += 1
 
         if cleanup_cfg.trim_end:
             keep_end = _default_keep_list(cleanup_cfg.keep_end_vars)
@@ -353,6 +368,13 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 )
                 end_min = end_path.with_name(f"end.min.{end_path.name.split('end.', 1)[1]}")
                 self._subset_netcdf_copy(end_path, end_min, keep_end)
+                if end_min.exists():
+                    written += 1
+
+        if written:
+            t1 = self.current_window.start_time.strftime("%Y%m%d%H")
+            t2 = self.current_window.end_time.strftime("%Y%m%d%H")
+            logger.info("[CLEANUP] Wrote %d trimmed output file(s) for %s_%s", written, t1, t2)
 
     @staticmethod
     def _parse_chimere_window_file_timestamp(path: Path) -> tuple[str, datetime, datetime] | None:
@@ -401,6 +423,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         # Always keep the last few hours even if retention is misconfigured.
         hard_keep = self.time_manager.current_time - timedelta(hours=6)
 
+        removed = 0
         for mem in range(self.no_mems):
             run_dir = self.paths.path_data / f"RUN_{mem}"
             if not run_dir.exists():
@@ -421,8 +444,16 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 if t1 < cutoff:
                     try:
                         p.unlink()
+                        removed += 1
                     except Exception as e:
                         logger.warning("[CLEANUP] Failed removing %s: %s", p, e)
+
+        if removed:
+            logger.info(
+                "[CLEANUP] Retention removed %d file(s) older than %s",
+                removed,
+                cutoff.strftime("%Y-%m-%d %H:%M:%S"),
+            )
 
     def _read_boun_list_target(self, list_path: Path) -> Path:
         try:
@@ -863,6 +894,12 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
         cleanup_cfg = getattr(self.config, "cleanup", None)
         if cleanup_cfg is not None and cleanup_cfg.enabled:
+            if self.current_window is not None:
+                logger.info(
+                    "[CLEANUP] finalize_step window %s -> %s",
+                    self.current_window.start_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    self.current_window.end_time.strftime("%Y-%m-%d %H:%M:%S"),
+                )
             if cleanup_cfg.delete_window_ibc or cleanup_cfg.delete_window_emissions or cleanup_cfg.delete_window_meteo:
                 self._cleanup_window_inputs()
             self._cleanup_trim_outputs()
