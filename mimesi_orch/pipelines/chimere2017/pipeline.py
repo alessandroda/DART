@@ -595,6 +595,57 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             target = (list_path.parent / target).resolve()
         return target
 
+    @staticmethod
+    def _assert_no_unresolved_template_tokens(path: Path, tokens: list[str]) -> None:
+        try:
+            content = path.read_text()
+        except Exception as e:
+            raise FatalPipelineError(f"Failed reading generated list file {path}: {e}") from e
+
+        unresolved = [t for t in tokens if t in content]
+        if unresolved:
+            raise FatalPipelineError(
+                "Unresolved template tokens found in generated list file "
+                f"{path}: {', '.join(unresolved)}"
+            )
+
+    def _find_previous_restart_end_file(self, mem: int, window_start_ts: str) -> Path | None:
+        """
+        Find the CHIMERE restart file produced by the previous iteration.
+
+        For a new window starting at `window_start_ts`, the previous cycle should have
+        produced an `end.<prev_start>_<window_start_ts>_*.nc` file under RUN_{mem}.
+        """
+        run_dir = self.paths.path_data / f"RUN_{mem}"
+        if not run_dir.exists():
+            return None
+        candidates = sorted(run_dir.glob(f"end.*_{window_start_ts}_*.nc"))
+        if not candidates:
+            return None
+        return candidates[-1]
+
+    @staticmethod
+    def _patch_ini_list_restart(ini_list_path: Path, restart_end_file: Path) -> None:
+        """
+        Ensure INI_CONCS list references the restart `end.*.nc` from the previous cycle.
+        """
+        try:
+            content = ini_list_path.read_text()
+        except Exception as e:
+            raise FatalPipelineError(f"Failed reading INI list file {ini_list_path}: {e}") from e
+
+        pattern = r"end\.\d{10}_\d{10}_[A-Za-z0-9]+\.nc"
+        if re.search(pattern, content) is None:
+            raise FatalPipelineError(
+                f"INI list {ini_list_path} does not contain an end.*.nc reference to patch"
+            )
+
+        updated = re.sub(pattern, restart_end_file.name, content)
+        try:
+            ini_list_path.write_text(updated)
+        except Exception as e:
+            raise FatalPipelineError(f"Failed writing patched INI list file {ini_list_path}: {e}") from e
+
     def _resolve_boun_daily_list(self, daily_list_name: str) -> Path:
         ibc_dir = getattr(self.paths, "chimere_input_ibc_dir", None)
         if ibc_dir is None:
@@ -699,6 +750,19 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             mem_ibc_dir = self.paths.path_data / f"RUN_{mem}/IBC"
             mem_ibc_dir.mkdir(parents=True, exist_ok=True)
 
+            # Templates differ across installations. Support both legacy placeholders
+            # (e.g. @mimesi_start_date) and newer ones (YYYYMMDDHH/ YYYYMMDDHH+dh),
+            # plus a common historical typo (@mimesi_ens_memeber).
+            template_entries = {
+                "YYYYMMDDHH+dh": end_ts,
+                "YYYYMMDDHH": start_ts,
+                "@mimesi_start_date": start_ts,
+                "@mimesi_end_date": end_ts,
+                "@mimesi_path_data": str(self.paths.path_data),
+                "@mimesi_ens_member": mem,
+                "@mimesi_ens_memeber": mem,
+            }
+
             window_boun_nc = (
                 mem_ibc_dir / f"BOUN_CONCS.{start_ts}_{end_ts}_ITA7.nc"
             )
@@ -711,29 +775,52 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
             replace_nml_template(
                 input_nml_path=str(boun_template),
-                entries_tbr_dict={
-                    "@mimesi_path_data": str(self.paths.path_data),
-                    "@mimesi_ens_memeber": mem,
-                    "@mimesi_start_date": start_ts,
-                    "@mimesi_end_date": end_ts,
-                },
+                entries_tbr_dict=template_entries,
                 output_nml_path=str(
                     mem_ibc_dir / f"BOUN_CONCS.{start_ts}_{end_ts}_ITA7.list"
                 ),
             )
+            self._assert_no_unresolved_template_tokens(
+                mem_ibc_dir / f"BOUN_CONCS.{start_ts}_{end_ts}_ITA7.list",
+                tokens=list(template_entries.keys()),
+            )
 
             replace_nml_template(
                 input_nml_path=str(ini_template),
-                entries_tbr_dict={
-                    "YYYYMMDDHH+dh": end_ts,
-                    "YYYYMMDDHH": start_ts,
-                    "@mimesi_path_data": str(self.paths.path_data),
-                    "@mimesi_ens_member": mem,
-                },
+                entries_tbr_dict=template_entries,
                 output_nml_path=str(
                     mem_ibc_dir / f"INI_CONCS.{start_ts}_{end_ts}_ITA7.list"
                 ),
             )
+            ini_list_path = mem_ibc_dir / f"INI_CONCS.{start_ts}_{end_ts}_ITA7.list"
+            self._assert_no_unresolved_template_tokens(
+                ini_list_path,
+                tokens=list(template_entries.keys()),
+            )
+
+            # INI list should refer to previous-cycle end.<prev>_<start_ts>_*.nc
+            restart_end = self._find_previous_restart_end_file(mem, start_ts)
+            if restart_end is None:
+                is_first_cycle = self.time_manager.current_time == self.time_manager.start_time
+                if not is_first_cycle:
+                    raise FatalPipelineError(
+                        f"Missing previous-cycle restart file for mem {mem} at window start {start_ts}. "
+                        f"Expected something like RUN_{mem}/end.*_{start_ts}_*.nc"
+                    )
+                logger.warning(
+                    "[IBC] No previous restart end file found for first cycle (mem %s, start=%s). "
+                    "INI list left as generated by template: %s",
+                    mem,
+                    start_ts,
+                    ini_list_path,
+                )
+            else:
+                self._patch_ini_list_restart(ini_list_path, restart_end)
+                logger.info(
+                    "[IBC] INI list for mem %s patched to use previous restart: %s",
+                    mem,
+                    restart_end.name,
+                )
 
     def update_meteo_inputs(self):
         _, _, daily_start, daily_end, start_ts, end_ts, start_index, end_index = (
