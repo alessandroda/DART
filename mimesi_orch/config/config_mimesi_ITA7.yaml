@@ -1,8 +1,9 @@
 assimilation:
   ass_var: NO2
   case_dir: ITA7
-  # NOTE: Quote keys like "NO"/"YES"/"ON"/"OFF" to avoid YAML 1.1 parsing them as booleans.
-  emi_perturbations: {NO2: NO2_2000, "NO": NO_2000}
+  emi_perturbations:
+    'NO': NO_2000
+    NO2: NO2_2000
   model_type: CHIMERE
   no_mems: 2
   obs_type: SAT_NO2_TROPOMI
@@ -23,6 +24,9 @@ logging:
   level: INFO
 paths:
   base_path: /g100_work/ARPAE_AQM/MIMESI/
+  chimere_input_atm_dir: /g100_work/ARPAE_AQM/MIMESI/runs_chimere/input_testcase_2025/ATM
+  chimere_input_emissions_dir: /g100_work/ARPAE_AQM/MIMESI/runs_chimere/input_testcase_2025/emissioni
+  chimere_input_ibc_dir: /g100_work/ARPAE_AQM/MIMESI/runs_chimere/input_testcase_2025/IBC
   chimere_par_template: catena_aria_test/Chimere/auto_runs/templates/chimere.mimesi-ITA7_template.par
   env_python: miniconda3/bin/python3.13
   listing_file: SAT_OBS/C03__listing.csv
@@ -31,9 +35,6 @@ paths:
   path_filter: DART/models/CHIMERE_v2017r/work_offline
   path_perturbed_emi: perturbations/emi_mems
   path_submit_bsh: catena_aria_test/Chimere/auto_runs
-  chimere_input_emissions_dir: /g100_work/ARPAE_AQM/MIMESI/runs_chimere/input_testcase_2025/emissioni
-  chimere_input_atm_dir: /g100_work/ARPAE_AQM/MIMESI/runs_chimere/input_testcase_2025/ATM
-  chimere_input_ibc_dir: /g100_work/ARPAE_AQM/MIMESI/runs_chimere/input_testcase_2025/IBC
   run_submit_model_template: catena_aria_test/Chimere/auto_runs/templates/run_mimesi-ITA7_template.sh
   run_submit_replace_perturbations: DART/mimesi_orch/perturbation/bash_emissions/submit_replace_perturb_into_original_emission_arg.sh
 satellite_data:
@@ -43,8 +44,6 @@ time:
   backup_ic_option: hourly
   backup_perturb_days: 2
   dt_seconds: 3600
-  end_time: '2026-01-25 12:00:00'
-  start_time: '2026-01-25 00:00:00'
 
 # Optional disk-usage cleanup (safe during the time loop).
 # NOTE: Variable names must match the NetCDF variables produced by CHIMERE.
@@ -59,3 +58,6 @@ cleanup:
   trim_out: true
   keep_end_vars: [lon, lat, Times, NO, NO2, SO2, CO, PM10, PM25, O3]
   keep_out_vars: [lon, lat, Times, NO, NO2, SO2, CO, PM10, PM25, O3, tem2, u10m, v10m, w10mls]
+  end_time: '2025-11-04 00:00:00'
+  start_time: '2025-11-02 11:00:00'
+

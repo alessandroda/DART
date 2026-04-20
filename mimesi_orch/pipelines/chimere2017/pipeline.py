@@ -660,7 +660,6 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         _, _, daily_start, daily_end, start_ts, end_ts, start_index, end_index = (
             self._get_same_day_window_bounds()
         )
-
         daily_list_name = f"BOUN_CONCS.{daily_start:%Y%m%d%H}_{daily_end:%Y%m%d%H}_ITA7.list"
         
         daily_boun_list_path = self._resolve_boun_daily_list(daily_list_name)
