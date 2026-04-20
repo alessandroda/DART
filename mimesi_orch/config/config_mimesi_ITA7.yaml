@@ -9,6 +9,39 @@ assimilation:
   obs_type: SAT_NO2_TROPOMI
   run_assimilation_flag: true
   state_variable_qty: QTY_NO2
+cleanup:
+  delete_window_emissions: true
+  delete_window_ibc: true
+  delete_window_meteo: true
+  enabled: true
+  keep_end_vars:
+  - lon
+  - lat
+  - Times
+  - 'NO'
+  - NO2
+  - SO2
+  - CO
+  - PM10
+  - PM25
+  - O3
+  keep_out_vars:
+  - lon
+  - lat
+  - Times
+  - 'NO'
+  - NO2
+  - SO2
+  - CO
+  - PM10
+  - PM25
+  - O3
+  - tem2
+  - u10m
+  - v10m
+  - w10mls
+  trim_end: true
+  trim_out: true
 cluster:
   cluster_queue: g100_usr_prod
   project_name: mimesi
@@ -44,20 +77,5 @@ time:
   backup_ic_option: hourly
   backup_perturb_days: 2
   dt_seconds: 3600
-
-# Optional disk-usage cleanup (safe during the time loop).
-# NOTE: Variable names must match the NetCDF variables produced by CHIMERE.
-cleanup:
-  enabled: true
-  # Remove window-specific inputs created in each cycle (keeps daily emission files).
-  delete_window_ibc: true
-  delete_window_emissions: true
-  delete_window_meteo: true
-  # Trim CHIMERE outputs for the completed window.
-  trim_end: true
-  trim_out: true
-  keep_end_vars: [lon, lat, Times, NO, NO2, SO2, CO, PM10, PM25, O3]
-  keep_out_vars: [lon, lat, Times, NO, NO2, SO2, CO, PM10, PM25, O3, tem2, u10m, v10m, w10mls]
   end_time: '2025-11-04 00:00:00'
-  start_time: '2025-11-02 11:00:00'
-
+  start_time: '2025-11-02 00:00:00'
