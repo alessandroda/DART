@@ -3,6 +3,8 @@ from pathlib import Path
 import shutil
 import time
 import numpy as np
+import re
+from datetime import datetime
 from pipeline_errors import FatalPipelineError, ModelRunError
 from mimesi_types import Scheduler
 from config_models import AppConfig
@@ -171,28 +173,28 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         self.update_meteo_inputs()
         self.update_emission_inputs()
 
-    def _subset_netcdf_inplace(self, nc_path: Path, keep_vars: list[str]) -> None:
+    def _subset_netcdf_copy(self, source_path: Path, output_path: Path, keep_vars: list[str]) -> None:
         """
-        Reduce a NetCDF file to a minimal variable set.
+        Write a reduced NetCDF file with a minimal variable set.
 
         Uses NCO (ncks) when available; otherwise falls back to xarray.
         """
-        if not nc_path.exists():
-            logger.warning("[CLEANUP] NetCDF not found (skip subsetting): %s", nc_path)
+        if not source_path.exists():
+            logger.warning("[CLEANUP] NetCDF not found (skip subsetting): %s", source_path)
             return
 
         keep_vars = [str(v).strip() for v in keep_vars if str(v).strip()]
         if not keep_vars:
-            logger.warning("[CLEANUP] Empty keep_vars for %s (skip subsetting)", nc_path)
+            logger.warning("[CLEANUP] Empty keep_vars for %s (skip subsetting)", source_path)
             return
 
         try:
-            with xr.open_dataset(nc_path, decode_cf=False) as ds:
+            with xr.open_dataset(source_path, decode_cf=False) as ds:
                 available = set(ds.variables)
         except Exception as e:
             logger.warning(
                 "[CLEANUP] Failed reading NetCDF header for %s (skip subsetting): %s",
-                nc_path,
+                source_path,
                 e,
             )
             return
@@ -201,12 +203,12 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         if not existing:
             logger.warning(
                 "[CLEANUP] None of the requested variables exist in %s. Requested=%s",
-                nc_path,
+                source_path,
                 ",".join(keep_vars),
             )
             return
 
-        tmp_path = nc_path.with_suffix(f"{nc_path.suffix}.tmp")
+        tmp_path = output_path.with_suffix(f"{output_path.suffix}.tmp")
         ncks = shutil.which("ncks")
         if ncks:
             try:
@@ -216,32 +218,32 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                         "-O",
                         "-v",
                         ",".join(existing),
-                        str(nc_path),
+                        str(source_path),
                         str(tmp_path),
                     ],
                     check=True,
                 )
-                tmp_path.replace(nc_path)
+                tmp_path.replace(output_path)
                 return
             except subprocess.CalledProcessError as e:
                 logger.warning(
                     "[CLEANUP] ncks failed subsetting %s (will try xarray fallback): %s",
-                    nc_path,
+                    source_path,
                     e,
                 )
             except Exception as e:
                 logger.warning(
                     "[CLEANUP] Failed replacing subset NetCDF for %s (will try xarray fallback): %s",
-                    nc_path,
+                    source_path,
                     e,
                 )
 
         try:
-            with xr.open_dataset(nc_path, decode_cf=False) as ds:
+            with xr.open_dataset(source_path, decode_cf=False) as ds:
                 ds[existing].to_netcdf(tmp_path)
-            tmp_path.replace(nc_path)
+            tmp_path.replace(output_path)
         except Exception as e:
-            logger.warning("[CLEANUP] xarray subsetting failed for %s: %s", nc_path, e)
+            logger.warning("[CLEANUP] xarray subsetting failed for %s: %s", source_path, e)
             if tmp_path.exists():
                 tmp_path.unlink()
 
@@ -305,7 +307,10 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
     def _cleanup_trim_outputs(self) -> None:
         """
-        Trim CHIMERE window outputs (out/end) to keep only requested variables.
+        Write trimmed copies of CHIMERE window outputs (out/end) to keep only requested variables.
+
+        Important: never trims `end.*.nc` in-place because CHIMERE restart files
+        are typically required for the next cycle.
         """
         if self.current_window is None:
             raise FatalPipelineError("Assimilation window is not initialized")
@@ -337,7 +342,8 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 out_path = self.paths.get_chimere_output_path(
                     self.model_type, mem, start_time, "out", run_hours
                 )
-                self._subset_netcdf_inplace(out_path, keep_out)
+                out_min = out_path.with_name(f"out.min.{out_path.name.split('out.', 1)[1]}")
+                self._subset_netcdf_copy(out_path, out_min, keep_out)
 
         if cleanup_cfg.trim_end:
             keep_end = _default_keep_list(cleanup_cfg.keep_end_vars)
@@ -345,7 +351,78 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 end_path = self.paths.get_chimere_output_path(
                     self.model_type, mem, start_time, "end", run_hours
                 )
-                self._subset_netcdf_inplace(end_path, keep_end)
+                end_min = end_path.with_name(f"end.min.{end_path.name.split('end.', 1)[1]}")
+                self._subset_netcdf_copy(end_path, end_min, keep_end)
+
+    @staticmethod
+    def _parse_chimere_window_file_timestamp(path: Path) -> tuple[str, datetime, datetime] | None:
+        """
+        Parse timestamps from CHIMERE files like:
+          out.<YYYYMMDDHH>_<YYYYMMDDHH>_ITA7.nc
+          end.<YYYYMMDDHH>_<YYYYMMDDHH>_ITA7.nc
+          out.min.<YYYYMMDDHH>_<YYYYMMDDHH>_ITA7.nc
+          end.min.<YYYYMMDDHH>_<YYYYMMDDHH>_ITA7.nc
+        """
+        m = re.match(
+            r"^(out|end)(?:\\.min)?\\.(\\d{10})_(\\d{10})_([A-Za-z0-9]+)\\.nc$",
+            path.name,
+        )
+        if not m:
+            return None
+        kind = m.group(1)
+        t1 = datetime.strptime(m.group(2), "%Y%m%d%H")
+        t2 = datetime.strptime(m.group(3), "%Y%m%d%H")
+        return kind, t1, t2
+
+    def _cleanup_retention_outputs(self) -> None:
+        """
+        Delete old out/end files by age, keeping a rolling window and (optionally)
+        a daily "first-hour" restart anchor.
+        """
+        cleanup_cfg = getattr(self.config, "cleanup", None)
+        if cleanup_cfg is None or not cleanup_cfg.enabled:
+            return
+
+        retain_hours = cleanup_cfg.retain_hours
+        retain_days = cleanup_cfg.retain_days
+        if retain_hours is None and retain_days is None:
+            if self.backup_perturb_days is not None:
+                retain_days = int(self.backup_perturb_days)
+            elif self.backup_ic_hours is not None:
+                retain_hours = int(self.backup_ic_hours)
+            else:
+                return
+
+        if retain_hours is not None:
+            cutoff = self.time_manager.current_time - timedelta(hours=retain_hours)
+        else:
+            cutoff = self.time_manager.current_time - timedelta(days=retain_days)
+
+        # Always keep the last few hours even if retention is misconfigured.
+        hard_keep = self.time_manager.current_time - timedelta(hours=6)
+
+        for mem in range(self.no_mems):
+            run_dir = self.paths.path_data / f"RUN_{mem}"
+            if not run_dir.exists():
+                continue
+            for p in run_dir.glob("*.nc"):
+                parsed = self._parse_chimere_window_file_timestamp(p)
+                if parsed is None:
+                    continue
+                kind, t1, t2 = parsed
+
+                if t1 >= hard_keep:
+                    continue
+
+                if cleanup_cfg.keep_daily_first_hour_end and kind == "end":
+                    if t1.hour == 0 and (t2 - t1) == timedelta(hours=1):
+                        continue
+
+                if t1 < cutoff:
+                    try:
+                        p.unlink()
+                    except Exception as e:
+                        logger.warning("[CLEANUP] Failed removing %s: %s", p, e)
 
     def _read_boun_list_target(self, list_path: Path) -> Path:
         try:
@@ -789,6 +866,8 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             if cleanup_cfg.delete_window_ibc or cleanup_cfg.delete_window_emissions or cleanup_cfg.delete_window_meteo:
                 self._cleanup_window_inputs()
             self._cleanup_trim_outputs()
+            if self.time_manager.current_time.hour == 0:
+                self._cleanup_retention_outputs()
 
     def _prepare_chimere_run_assets(self) -> tuple[Path, Path]:
         

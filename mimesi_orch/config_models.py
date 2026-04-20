@@ -12,7 +12,7 @@ Design principles:
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pathlib import Path
 from datetime import datetime
 from typing import Any, Literal, Optional
@@ -74,6 +74,23 @@ class TimeConfig(BaseModel):
     backup_perturb_days: Optional[int] = Field(default=None, ge=0)
     backup_ic_hours: Optional[int] = Field(default=None, ge=0)
     backup_ic_option: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_legacy_date_keys(cls, data):
+        """
+        Backwards-compatible support for older YAML keys.
+
+        Some legacy configs use `start_date`/`end_date` instead of
+        `start_time`/`end_time`.
+        """
+        if not isinstance(data, dict):
+            return data
+        if "start_time" not in data and "start_date" in data:
+            data["start_time"] = data["start_date"]
+        if "end_time" not in data and "end_date" in data:
+            data["end_time"] = data["end_date"]
+        return data
 
     @field_validator("end_time")
     @classmethod
@@ -294,11 +311,37 @@ class CleanupConfig(BaseModel):
     delete_window_emissions: bool = True
     delete_window_meteo: bool = True
 
+    # Retention policy (applies when enabled).
+    # If both are None, the pipeline may fall back to `time.backup_perturb_days`
+    # or `time.backup_ic_hours` when available.
+    retain_days: Optional[int] = Field(default=None, ge=0)
+    retain_hours: Optional[int] = Field(default=None, ge=0)
+    # Keep `end.<YYYYMMDD00>_<YYYYMMDD01>_*.nc` even when older than retention.
+    keep_daily_first_hour_end: bool = False
+
     # Output trimming (applies to CHIMERE out.*.nc / end.*.nc of the completed window).
     trim_end: bool = False
     trim_out: bool = False
     keep_end_vars: Optional[list[str]] = None
     keep_out_vars: Optional[list[str]] = None
+
+    @field_validator("keep_end_vars", "keep_out_vars", mode="before")
+    @classmethod
+    def guard_yaml_bool_list_items(cls, v, info):
+        """
+        Guard against YAML 1.1 parsing list items like NO/YES/ON/OFF as booleans.
+        """
+        if v is None:
+            return v
+        if not isinstance(v, list):
+            return v
+        bool_items = [item for item in v if isinstance(item, bool)]
+        if bool_items:
+            raise ValueError(
+                f"{info.field_name} contains boolean items (likely unquoted YAML values like NO/YES/ON/OFF). "
+                'Quote them, e.g. ["NO", "NO2"].'
+            )
+        return v
 
 
 # ---------------------------------------------------------------------
