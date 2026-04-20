@@ -171,8 +171,181 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         self.update_meteo_inputs()
         self.update_emission_inputs()
 
-    def cleanup_CHIMERE2017(self):
-        pass
+    def _subset_netcdf_inplace(self, nc_path: Path, keep_vars: list[str]) -> None:
+        """
+        Reduce a NetCDF file to a minimal variable set.
+
+        Uses NCO (ncks) when available; otherwise falls back to xarray.
+        """
+        if not nc_path.exists():
+            logger.warning("[CLEANUP] NetCDF not found (skip subsetting): %s", nc_path)
+            return
+
+        keep_vars = [str(v).strip() for v in keep_vars if str(v).strip()]
+        if not keep_vars:
+            logger.warning("[CLEANUP] Empty keep_vars for %s (skip subsetting)", nc_path)
+            return
+
+        try:
+            with xr.open_dataset(nc_path, decode_cf=False) as ds:
+                available = set(ds.variables)
+        except Exception as e:
+            logger.warning(
+                "[CLEANUP] Failed reading NetCDF header for %s (skip subsetting): %s",
+                nc_path,
+                e,
+            )
+            return
+
+        existing = [v for v in keep_vars if v in available]
+        if not existing:
+            logger.warning(
+                "[CLEANUP] None of the requested variables exist in %s. Requested=%s",
+                nc_path,
+                ",".join(keep_vars),
+            )
+            return
+
+        tmp_path = nc_path.with_suffix(f"{nc_path.suffix}.tmp")
+        ncks = shutil.which("ncks")
+        if ncks:
+            try:
+                subprocess.run(
+                    [
+                        "ncks",
+                        "-O",
+                        "-v",
+                        ",".join(existing),
+                        str(nc_path),
+                        str(tmp_path),
+                    ],
+                    check=True,
+                )
+                tmp_path.replace(nc_path)
+                return
+            except subprocess.CalledProcessError as e:
+                logger.warning(
+                    "[CLEANUP] ncks failed subsetting %s (will try xarray fallback): %s",
+                    nc_path,
+                    e,
+                )
+            except Exception as e:
+                logger.warning(
+                    "[CLEANUP] Failed replacing subset NetCDF for %s (will try xarray fallback): %s",
+                    nc_path,
+                    e,
+                )
+
+        try:
+            with xr.open_dataset(nc_path, decode_cf=False) as ds:
+                ds[existing].to_netcdf(tmp_path)
+            tmp_path.replace(nc_path)
+        except Exception as e:
+            logger.warning("[CLEANUP] xarray subsetting failed for %s: %s", nc_path, e)
+            if tmp_path.exists():
+                tmp_path.unlink()
+
+    def _cleanup_window_inputs(self) -> None:
+        """
+        Remove window-specific inputs created in before_step().
+
+        Safe during the time loop:
+        - deletes IBC window files
+        - deletes emission *window* slice (keeps daily file)
+        - deletes meteo window slice
+        """
+        if self.current_window is None:
+            raise FatalPipelineError("Assimilation window is not initialized")
+
+        cleanup_cfg = getattr(self.config, "cleanup", None)
+        if cleanup_cfg is None or not cleanup_cfg.enabled:
+            return
+
+        start_ts = self.current_window.start_time.strftime("%Y%m%d%H")
+        end_ts = self.current_window.end_time.strftime("%Y%m%d%H")
+
+        # IBC (per member)
+        if cleanup_cfg.delete_window_ibc:
+            for mem in range(self.no_mems):
+                ibc_dir = self.paths.path_data / f"RUN_{mem}/IBC"
+                if not ibc_dir.exists():
+                    continue
+                for name in (
+                    f"BOUN_CONCS.{start_ts}_{end_ts}_ITA7.nc",
+                    f"BOUN_CONCS.{start_ts}_{end_ts}_ITA7.list",
+                    f"INI_CONCS.{start_ts}_{end_ts}_ITA7.list",
+                ):
+                    p = ibc_dir / name
+                    if p.exists():
+                        try:
+                            p.unlink()
+                        except Exception as e:
+                            logger.warning("[CLEANUP] Failed removing %s: %s", p, e)
+
+        # Emissions window slice (per member)
+        if cleanup_cfg.delete_window_emissions:
+            for mem in range(self.no_mems):
+                emi_dir = self.paths.path_data / f"RUN_{mem}/EMISSION_{mem}"
+                p = emi_dir / f"AEMISSIONS.{start_ts}_{end_ts}_ITA7.nc"
+                if p.exists():
+                    try:
+                        p.unlink()
+                    except Exception as e:
+                        logger.warning("[CLEANUP] Failed removing %s: %s", p, e)
+
+        # Meteo window slice (shared)
+        if cleanup_cfg.delete_window_meteo:
+            atm_dir = self.paths.path_data / "ATM"
+            meteo_slice = atm_dir / f"exdomout.{start_ts}_{end_ts}_ITA7.nc"
+            if meteo_slice.exists():
+                try:
+                    meteo_slice.unlink()
+                except Exception as e:
+                    logger.warning("[CLEANUP] Failed removing %s: %s", meteo_slice, e)
+
+    def _cleanup_trim_outputs(self) -> None:
+        """
+        Trim CHIMERE window outputs (out/end) to keep only requested variables.
+        """
+        if self.current_window is None:
+            raise FatalPipelineError("Assimilation window is not initialized")
+
+        cleanup_cfg = getattr(self.config, "cleanup", None)
+        if cleanup_cfg is None or not cleanup_cfg.enabled:
+            return
+
+        start_time = self.current_window.start_time
+        run_hours = self.current_window.run_hours
+
+        def _default_keep_list(raw: list[str] | None) -> list[str]:
+            if raw:
+                base = list(raw)
+            else:
+                base = []
+            # Always try to keep basic coords/time if present.
+            for v in ("lon", "lat", "Times", "Time"):
+                if v not in base:
+                    base.insert(0, v)
+            # Preserve ensemble member coordinate if present in file.
+            if "member" not in base:
+                base.append("member")
+            return base
+
+        if cleanup_cfg.trim_out:
+            keep_out = _default_keep_list(cleanup_cfg.keep_out_vars)
+            for mem in range(self.no_mems):
+                out_path = self.paths.get_chimere_output_path(
+                    self.model_type, mem, start_time, "out", run_hours
+                )
+                self._subset_netcdf_inplace(out_path, keep_out)
+
+        if cleanup_cfg.trim_end:
+            keep_end = _default_keep_list(cleanup_cfg.keep_end_vars)
+            for mem in range(self.no_mems):
+                end_path = self.paths.get_chimere_output_path(
+                    self.model_type, mem, start_time, "end", run_hours
+                )
+                self._subset_netcdf_inplace(end_path, keep_end)
 
     def _read_boun_list_target(self, list_path: Path) -> Path:
         try:
@@ -610,6 +783,12 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
                 logger.info(f"[CLEANUP] Removing tmp directory: {tmp_dir}")
                 shutil.rmtree(tmp_dir)
+
+        cleanup_cfg = getattr(self.config, "cleanup", None)
+        if cleanup_cfg is not None and cleanup_cfg.enabled:
+            if cleanup_cfg.delete_window_ibc or cleanup_cfg.delete_window_emissions or cleanup_cfg.delete_window_meteo:
+                self._cleanup_window_inputs()
+            self._cleanup_trim_outputs()
 
     def _prepare_chimere_run_assets(self) -> tuple[Path, Path]:
         

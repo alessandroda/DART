@@ -120,6 +120,20 @@ class AssimilationConfig(BaseModel):
             return v.lower()
         return v
 
+    @field_validator("emi_perturbations", mode="before")
+    @classmethod
+    def guard_yaml_bool_keys(cls, v):
+        if v is None:
+            return v
+        if isinstance(v, dict):
+            bool_keys = [k for k in v.keys() if isinstance(k, bool)]
+            if bool_keys:
+                raise ValueError(
+                    "emi_perturbations contains boolean keys (likely unquoted YAML keys like NO/YES/ON/OFF). "
+                    'Quote them, e.g. {"NO": NO_2000}.'
+                )
+        return v
+
 # ---------------------------------------------------------------------
 # CLUSTER
 # ---------------------------------------------------------------------
@@ -257,6 +271,37 @@ class RuntimeConfig(BaseModel):
 
 
 # ---------------------------------------------------------------------
+# CLEANUP
+# ---------------------------------------------------------------------
+
+
+class CleanupConfig(BaseModel):
+    """
+    Optional output/input cleanup to reduce disk usage.
+
+    Notes
+    -----
+    - This is designed to be safe during the time loop:
+      it deletes *window* inputs (IBC/emission slices/meteo slices) after each cycle,
+      but does not delete daily emission files needed for subsequent hours.
+    - Output trimming uses NCO (ncks) when available, otherwise falls back to xarray.
+    """
+
+    enabled: bool = False
+
+    # Per-cycle input cleanup (safe defaults).
+    delete_window_ibc: bool = True
+    delete_window_emissions: bool = True
+    delete_window_meteo: bool = True
+
+    # Output trimming (applies to CHIMERE out.*.nc / end.*.nc of the completed window).
+    trim_end: bool = False
+    trim_out: bool = False
+    keep_end_vars: Optional[list[str]] = None
+    keep_out_vars: Optional[list[str]] = None
+
+
+# ---------------------------------------------------------------------
 # ROOT CONFIG
 # ---------------------------------------------------------------------
 
@@ -280,6 +325,7 @@ class AppConfig(BaseModel):
     monitoring: Optional[MonitoringConfig] = None
     runtime: Optional[RuntimeConfig] = None
     pipeline: Optional[PipelineSelectionConfig] = None
+    cleanup: Optional[CleanupConfig] = None
 
     # runtime-only (not from YAML)
     _config_path: Optional[Path] = None

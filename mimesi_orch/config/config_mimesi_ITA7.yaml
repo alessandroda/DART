@@ -1,7 +1,8 @@
 assimilation:
   ass_var: NO2
   case_dir: ITA7
-  emi_perturbations: {NO2: NO2_2000, NO: NO_2000}
+  # NOTE: Quote keys like "NO"/"YES"/"ON"/"OFF" to avoid YAML 1.1 parsing them as booleans.
+  emi_perturbations: {NO2: NO2_2000, "NO": NO_2000}
   model_type: CHIMERE
   no_mems: 2
   obs_type: SAT_NO2_TROPOMI
@@ -44,3 +45,17 @@ time:
   dt_seconds: 3600
   end_time: '2026-01-25 12:00:00'
   start_time: '2026-01-25 00:00:00'
+
+# Optional disk-usage cleanup (safe during the time loop).
+# NOTE: Variable names must match the NetCDF variables produced by CHIMERE.
+cleanup:
+  enabled: true
+  # Remove window-specific inputs created in each cycle (keeps daily emission files).
+  delete_window_ibc: true
+  delete_window_emissions: true
+  delete_window_meteo: true
+  # Trim CHIMERE outputs for the completed window.
+  trim_end: true
+  trim_out: true
+  keep_end_vars: [lon, lat, Times, NO, NO2, SO2, CO, PM10, PM25, O3]
+  keep_out_vars: [lon, lat, Times, NO, NO2, SO2, CO, PM10, PM25, O3, tem2, u10m, v10m, w10mls]
