@@ -1410,9 +1410,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         template_chimere_path = self.paths.path_data / "to_DART" / f"out.{t1}_{tp}_0.nc"
 
         replace_nml_template(
-            self.paths.base_path
-            / self.paths.path_filter
-            / "input_template.nml",
+            self.paths.path_filter / "input_template.nml",
             entries_tbr_dict={
                 "$obs_sequence_name": obs_seq_name,
                 "$folder_path": self.output_sim_folder,
@@ -1428,23 +1426,17 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 "$state_variable_conc": str(self.state_variable_conc),
                 "$state_variable_qty": str(self.state_variable_qty),
             },
-            output_nml_path=self.paths.base_path
-            / self.paths.path_filter
-            / "input.nml",
+            output_nml_path=self.paths.path_filter / "input.nml",
         )
         # FILTER_INPUT_LIST.TXT
         replace_nml_template(
-            self.paths.base_path
-            / self.paths.path_filter
-            / "filter_input_list_template.txt",
+            self.paths.path_filter / "filter_input_list_template.txt",
             entries_tbr_dict={
                 "$folder_path": self.paths.path_data / f"to_DART/",
                 "$t1": t1,
                 "$tp": tp,
             },
-            output_nml_path=self.paths.base_path
-            / self.paths.path_filter
-            / "filter_input_list.txt",
+            output_nml_path=self.paths.path_filter / "filter_input_list.txt",
         )
         logger.info(
             "[DART] filter_input_list interval start=%s end=%s simulated_time=%s",
@@ -1455,16 +1447,12 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
         # FILTER_OUTPUT_LIST.TXT
         replace_nml_template(
-            self.paths.base_path
-            / self.paths.path_filter
-            / "filter_output_list_template.txt",
+            self.paths.path_filter / "filter_output_list_template.txt",
             entries_tbr_dict={
                 "$folder_path": self.output_sim_folder,
                 "$date": self.time_manager.simulated_time.strftime("%Y%m%d%H"),
             },
-            output_nml_path=self.paths.base_path
-            / self.paths.path_filter
-            / "filter_output_list.txt",
+            output_nml_path=self.paths.path_filter / "filter_output_list.txt",
         )
         # SUBMIT_FILTER.BSH
         submit_filter_entries = {
@@ -1507,7 +1495,6 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 self.move_analysis_files()
                 self.move_preassim_files()
                 replace_priorinflation(
-                    self.paths.base_path,
                     self.paths.path_filter,
                     self.time_manager.simulated_time.strftime("%Y%m%d%H"),
                 )

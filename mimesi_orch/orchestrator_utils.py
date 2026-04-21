@@ -850,14 +850,13 @@ def ic_g1_not_existing(
     return mems_to_rerun
 
 
-def replace_priorinflation(base_path: Path, path_filter: Path, timestamp_farm: str):
+def replace_priorinflation(path_filter: Path, timestamp: str):
     """
-    Replaces the priorinflation files in the FARM model's working directory.
+    Promote prior inflation outputs to inputs for the next DART cycle.
 
     Args:
-        base_path (Path): Base workspace path.
-        path_filter (Path): DART/filter work directory, relative or absolute.
-        timestamp_farm (str): Timestamp for logging purposes.
+        path_filter (Path): DART/filter work directory.
+        timestamp (str): Timestamp for logging purposes.
     """
     # Define file names
     file_mappings = {
@@ -866,10 +865,10 @@ def replace_priorinflation(base_path: Path, path_filter: Path, timestamp_farm: s
     }
 
     # Define working directory
-    work_path = path_filter if path_filter.is_absolute() else base_path / path_filter
+    work_path = Path(path_filter)
 
     logger.info(
-        f"Starting renaming of priorinflation files for next run: {timestamp_farm}"
+        f"Starting renaming of prior inflation files for next run: {timestamp} (work_dir={work_path})"
     )
 
     for input_file, output_file in file_mappings.items():
@@ -887,7 +886,7 @@ def replace_priorinflation(base_path: Path, path_filter: Path, timestamp_farm: s
         except Exception as e:
             logger.error(f"Failed to rename {input_file} to {output_file}: {e}")
 
-    logger.info(f"Finished renaming priorinflation files for run: {timestamp_farm}")
+    logger.info(f"Finished renaming prior inflation files for run: {timestamp}")
 
 
 def filter_dates(dates, mode):
