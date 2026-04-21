@@ -310,16 +310,10 @@ class CleanupConfig(BaseModel):
     delete_window_ibc: bool = True
     delete_window_emissions: bool = True
     delete_window_meteo: bool = True
-    # If true, window inputs are not removed each step; instead they are
-    # removed by retention policy (e.g. keep last N days) on the schedule
-    # implemented by the pipeline (currently: at midnight).
-    window_inputs_retention: bool = True
 
-    # Retention policy (applies when enabled).
-    # If both are None, the pipeline may fall back to `time.backup_perturb_days`
-    # or `time.backup_ic_hours` when available.
-    retain_days: Optional[int] = Field(default=None, ge=0)
-    retain_hours: Optional[int] = Field(default=None, ge=0)
+    # Retention policy for CHIMERE outputs (applies when enabled).
+    # `retain_cycles` keeps only the latest N completed windows ("cycles").
+    retain_cycles: Optional[int] = Field(default=None, ge=1)
     # Keep `end.<YYYYMMDD00>_<YYYYMMDD01>_*.nc` even when older than retention.
     keep_daily_first_hour_end: bool = False
 

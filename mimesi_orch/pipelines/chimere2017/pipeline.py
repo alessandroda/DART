@@ -357,7 +357,9 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 out_path = self.paths.get_chimere_output_path(
                     self.model_type, mem, start_time, "out", run_hours
                 )
-                out_min = out_path.with_name(f"out.min.{out_path.name.split('out.', 1)[1]}")
+                filtered_dir = (self.paths.path_data / f"RUN_{mem}" / "filtered_res")
+                filtered_dir.mkdir(parents=True, exist_ok=True)
+                out_min = filtered_dir / f"out.min.{out_path.name.split('out.', 1)[1]}"
                 self._subset_netcdf_copy(out_path, out_min, keep_out)
                 if out_min.exists():
                     written += 1
@@ -368,7 +370,9 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 end_path = self.paths.get_chimere_output_path(
                     self.model_type, mem, start_time, "end", run_hours
                 )
-                end_min = end_path.with_name(f"end.min.{end_path.name.split('end.', 1)[1]}")
+                filtered_dir = (self.paths.path_data / f"RUN_{mem}" / "filtered_res")
+                filtered_dir.mkdir(parents=True, exist_ok=True)
+                end_min = filtered_dir / f"end.min.{end_path.name.split('end.', 1)[1]}"
                 self._subset_netcdf_copy(end_path, end_min, keep_end)
                 if end_min.exists():
                     written += 1
@@ -383,12 +387,13 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         """
         Parse timestamps from CHIMERE files like:
           out.<YYYYMMDDHH>_<YYYYMMDDHH>_ITA7.nc
+          dep.<YYYYMMDDHH>_<YYYYMMDDHH>_ITA7.nc
           end.<YYYYMMDDHH>_<YYYYMMDDHH>_ITA7.nc
           out.min.<YYYYMMDDHH>_<YYYYMMDDHH>_ITA7.nc
           end.min.<YYYYMMDDHH>_<YYYYMMDDHH>_ITA7.nc
         """
         m = re.match(
-            r"^(out|end)(?:\\.min)?\\.(\\d{10})_(\\d{10})_([A-Za-z0-9]+)\\.nc$",
+            r"^(out|end|dep)(?:\\.min)?\\.(\\d{10})_(\\d{10})_([A-Za-z0-9]+)\\.nc$",
             path.name,
         )
         if not m:
@@ -400,27 +405,21 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
     def _cleanup_retention_outputs(self) -> None:
         """
-        Delete old out/end files by age, keeping a rolling window and (optionally)
-        a daily "first-hour" restart anchor.
+        Delete old out/end files by retention policy.
+
+        Supports:
+        - cycle-based retention (`cleanup.retain_cycles`): keep last N completed windows
+
+        In all cases, a small hard keep window is applied as a safety net, and
+        (optionally) a daily "first-hour" restart anchor can be preserved.
         """
         cleanup_cfg = getattr(self.config, "cleanup", None)
         if cleanup_cfg is None or not cleanup_cfg.enabled:
             return
 
-        retain_hours = cleanup_cfg.retain_hours
-        retain_days = cleanup_cfg.retain_days
-        if retain_hours is None and retain_days is None:
-            if self.backup_perturb_days is not None:
-                retain_days = int(self.backup_perturb_days)
-            elif self.backup_ic_hours is not None:
-                retain_hours = int(self.backup_ic_hours)
-            else:
-                return
-
-        if retain_hours is not None:
-            cutoff = self.time_manager.current_time - timedelta(hours=retain_hours)
-        else:
-            cutoff = self.time_manager.current_time - timedelta(days=retain_days)
+        retain_cycles = getattr(cleanup_cfg, "retain_cycles", None)
+        if retain_cycles is None:
+            return
 
         # Always keep the last few hours even if retention is misconfigured.
         hard_keep = self.time_manager.current_time - timedelta(hours=6)
@@ -430,7 +429,30 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             run_dir = self.paths.path_data / f"RUN_{mem}"
             if not run_dir.exists():
                 continue
-            for p in run_dir.glob("*.nc"):
+            filtered_dir = run_dir / "filtered_res"
+
+            keep_starts: set[datetime] | None = None
+            if retain_cycles is not None:
+                starts = []
+                candidates = list(run_dir.glob("*.nc"))
+                if filtered_dir.exists():
+                    candidates.extend(filtered_dir.glob("*.nc"))
+                for p in candidates:
+                    parsed = self._parse_chimere_window_file_timestamp(p)
+                    if parsed is None:
+                        continue
+                    _, t1, _ = parsed
+                    starts.append(t1)
+                unique_starts = sorted({t for t in starts})
+                if unique_starts:
+                    keep_starts = set(unique_starts[-int(retain_cycles) :])
+                else:
+                    keep_starts = set()
+
+            candidates = list(run_dir.glob("*.nc"))
+            if filtered_dir.exists():
+                candidates.extend(filtered_dir.glob("*.nc"))
+            for p in candidates:
                 parsed = self._parse_chimere_window_file_timestamp(p)
                 if parsed is None:
                     continue
@@ -443,7 +465,12 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                     if t1.hour == 0 and (t2 - t1) == timedelta(hours=1):
                         continue
 
-                if t1 < cutoff:
+                if keep_starts is not None:
+                    if t1 in keep_starts:
+                        continue
+                    should_remove = True
+
+                if should_remove:
                     try:
                         p.unlink()
                         removed += 1
@@ -452,125 +479,9 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
         if removed:
             logger.info(
-                "[CLEANUP] Retention removed %d file(s) older than %s",
+                "[CLEANUP] Retention removed %d file(s) keeping last %d cycle(s)",
                 removed,
-                cutoff.strftime("%Y-%m-%d %H:%M:%S"),
-            )
-
-    @staticmethod
-    def _parse_window_inputs_timestamp(path: Path) -> tuple[datetime, datetime] | None:
-        """
-        Parse timestamps from window-input files like:
-          BOUN_CONCS.<YYYYMMDDHH>_<YYYYMMDDHH>_ITA7.nc
-          BOUN_CONCS.<YYYYMMDDHH>_<YYYYMMDDHH>_ITA7.list
-          INI_CONCS.<YYYYMMDDHH>_<YYYYMMDDHH>_ITA7.list
-          AEMISSIONS.<YYYYMMDDHH>_<YYYYMMDDHH>_ITA7.nc
-          exdomout.<YYYYMMDDHH>_<YYYYMMDDHH>_ITA7.nc
-        """
-        patterns = [
-            r"^(?:BOUN_CONCS|INI_CONCS)\.(\d{10})_(\d{10})_([A-Za-z0-9]+)\.(?:nc|list)$",
-            r"^AEMISSIONS\.(\d{10})_(\d{10})_([A-Za-z0-9]+)\.nc$",
-            r"^exdomout\.(\d{10})_(\d{10})_([A-Za-z0-9]+)\.nc$",
-        ]
-        for pat in patterns:
-            m = re.match(pat, path.name)
-            if not m:
-                continue
-            t1 = datetime.strptime(m.group(1), "%Y%m%d%H")
-            t2 = datetime.strptime(m.group(2), "%Y%m%d%H")
-            return t1, t2
-        return None
-
-    def _cleanup_retention_window_inputs(self) -> None:
-        """
-        Delete old window-input slices (IBC/emissions/meteo) by age.
-
-        This complements (or replaces) per-step deletion to reduce I/O churn.
-        """
-        cleanup_cfg = getattr(self.config, "cleanup", None)
-        if cleanup_cfg is None or not cleanup_cfg.enabled:
-            return
-
-        retain_hours = cleanup_cfg.retain_hours
-        retain_days = cleanup_cfg.retain_days
-        if retain_hours is None and retain_days is None:
-            if self.backup_perturb_days is not None:
-                retain_days = int(self.backup_perturb_days)
-            elif self.backup_ic_hours is not None:
-                retain_hours = int(self.backup_ic_hours)
-            else:
-                return
-
-        if retain_hours is not None:
-            cutoff = self.time_manager.current_time - timedelta(hours=retain_hours)
-        else:
-            cutoff = self.time_manager.current_time - timedelta(days=retain_days)
-
-        hard_keep = self.time_manager.current_time - timedelta(hours=6)
-
-        removed = 0
-
-        if cleanup_cfg.delete_window_meteo:
-            atm_dir = self.paths.path_data / "ATM"
-            if atm_dir.exists():
-                for p in atm_dir.glob("exdomout.*_*.nc"):
-                    parsed = self._parse_window_inputs_timestamp(p)
-                    if parsed is None:
-                        continue
-                    t1, _ = parsed
-                    if t1 >= hard_keep:
-                        continue
-                    if t1 < cutoff:
-                        try:
-                            p.unlink()
-                            removed += 1
-                        except Exception as e:
-                            logger.warning("[CLEANUP] Failed removing %s: %s", p, e)
-
-        for mem in range(self.no_mems):
-            run_dir = self.paths.path_data / f"RUN_{mem}"
-            if not run_dir.exists():
-                continue
-
-            if cleanup_cfg.delete_window_ibc:
-                ibc_dir = run_dir / "IBC"
-                if ibc_dir.exists():
-                    for p in ibc_dir.glob("*.*_*.*"):
-                        parsed = self._parse_window_inputs_timestamp(p)
-                        if parsed is None:
-                            continue
-                        t1, _ = parsed
-                        if t1 >= hard_keep:
-                            continue
-                        if t1 < cutoff:
-                            try:
-                                p.unlink()
-                                removed += 1
-                            except Exception as e:
-                                logger.warning("[CLEANUP] Failed removing %s: %s", p, e)
-
-            if cleanup_cfg.delete_window_emissions:
-                emi_dir = run_dir / f"EMISSION_{mem}"
-                if emi_dir.exists():
-                    for p in emi_dir.glob("AEMISSIONS.*_*.nc"):
-                        parsed = self._parse_window_inputs_timestamp(p)
-                        if parsed is None:
-                            continue
-                        t1, _ = parsed
-                        if t1 >= hard_keep:
-                            continue
-                        if t1 < cutoff:
-                            try:
-                                p.unlink()
-                                removed += 1
-                            except Exception as e:
-                                logger.warning("[CLEANUP] Failed removing %s: %s", p, e)
-
-        if removed:
-            logger.info(
-                "[CLEANUP] Retention removed %d window-input file(s) older than %s",
-                removed,
-                cutoff.strftime("%Y-%m-%d %H:%M:%S"),
+                int(retain_cycles),
             )
 
     def _read_boun_list_target(self, list_path: Path) -> Path:
@@ -1140,6 +1051,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
         cleanup_cfg = getattr(self.config, "cleanup", None)
         if cleanup_cfg is not None and cleanup_cfg.enabled:
+            retain_cycles = getattr(cleanup_cfg, "retain_cycles", None)
             if self.current_window is not None:
                 logger.info(
                     "[CLEANUP] finalize_step window %s -> %s",
@@ -1147,13 +1059,9 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                     self.current_window.end_time.strftime("%Y-%m-%d %H:%M:%S"),
                 )
             if cleanup_cfg.delete_window_ibc or cleanup_cfg.delete_window_emissions or cleanup_cfg.delete_window_meteo:
-                if cleanup_cfg.window_inputs_retention:
-                    if self.time_manager.current_time.hour == 0:
-                        self._cleanup_retention_window_inputs()
-                else:
-                    self._cleanup_window_inputs()
+                self._cleanup_window_inputs()
             self._cleanup_trim_outputs()
-            if self.time_manager.current_time.hour == 0:
+            if retain_cycles is not None or self.time_manager.current_time.hour == 0:
                 self._cleanup_retention_outputs()
 
         # Record completed window for the next iteration (used to resolve previous restart file).
