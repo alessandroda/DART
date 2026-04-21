@@ -314,12 +314,18 @@ class CleanupConfig(BaseModel):
     # Retention policy for CHIMERE outputs (applies when enabled).
     # `retain_cycles` keeps only the latest N completed windows ("cycles").
     retain_cycles: Optional[int] = Field(default=None, ge=1)
+    # Run retention every N completed cycles (1 = every cycle).
+    retention_interval_cycles: int = Field(default=1, ge=1)
     # Keep `end.<YYYYMMDD00>_<YYYYMMDD01>_*.nc` even when older than retention.
     keep_daily_first_hour_end: bool = False
+    # Keep `end.<YYYYMMDD23>_<YYYYMMDD00+1d>_*.nc` even when older than retention.
+    keep_daily_last_hour_end: bool = False
 
     # Output trimming (applies to CHIMERE out.*.nc / end.*.nc of the completed window).
     trim_end: bool = False
     trim_out: bool = False
+    # If true, delete the original `out.*.nc` after writing `out.min.*.nc`.
+    delete_out_after_trim: bool = False
     keep_end_vars: Optional[list[str]] = None
     keep_out_vars: Optional[list[str]] = None
 

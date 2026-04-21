@@ -106,6 +106,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         self._generated_daily_emission_stamp: str | None = None
         self._previous_window_start: pd.Timestamp | None = None
         self._previous_window_end: pd.Timestamp | None = None
+        self._cleanup_completed_cycles: int = 0
 
     def build_assim_window(self) -> AssimWindow:
         """
@@ -319,6 +320,84 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 end_ts,
             )
 
+    def _cleanup_prune_window_inputs(self) -> None:
+        """
+        Prune accumulated window-input slices from previous runs.
+
+        This is intentionally more aggressive than `_cleanup_window_inputs()`:
+        - removes all meteo window slices under `path_data/ATM`
+        - removes all IBC window files under `RUN_{mem}/IBC`
+        - removes all emission window slices under `RUN_{mem}/EMISSION_{mem}`
+          but preserves daily emission files spanning 24h from 00->00.
+        """
+        cleanup_cfg = getattr(self.config, "cleanup", None)
+        if cleanup_cfg is None or not cleanup_cfg.enabled:
+            return
+
+        removed = 0
+
+        def _parse_window_stamp(name: str) -> tuple[datetime, datetime] | None:
+            m = re.match(r"^AEMISSIONS\.(\d{10})_(\d{10})_[A-Za-z0-9]+\.nc$", name)
+            if not m:
+                return None
+            return (
+                datetime.strptime(m.group(1), "%Y%m%d%H"),
+                datetime.strptime(m.group(2), "%Y%m%d%H"),
+            )
+
+        # Meteo: only window slices are written under path_data/ATM.
+        if cleanup_cfg.delete_window_meteo:
+            atm_dir = self.paths.path_data / "ATM"
+            if atm_dir.exists():
+                for p in atm_dir.glob("exdomout.*_*.nc"):
+                    try:
+                        p.unlink()
+                        removed += 1
+                    except Exception as e:
+                        logger.warning("[CLEANUP] Failed removing %s: %s", p, e)
+
+        # IBC + emissions (per member).
+        for mem in range(self.no_mems):
+            run_dir = self.paths.path_data / f"RUN_{mem}"
+            if not run_dir.exists():
+                continue
+
+            if cleanup_cfg.delete_window_ibc:
+                ibc_dir = run_dir / "IBC"
+                if ibc_dir.exists():
+                    for pat in ("BOUN_CONCS.*_*.nc", "BOUN_CONCS.*_*.list", "INI_CONCS.*_*.list"):
+                        for p in ibc_dir.glob(pat):
+                            try:
+                                p.unlink()
+                                removed += 1
+                            except Exception as e:
+                                logger.warning("[CLEANUP] Failed removing %s: %s", p, e)
+
+            if cleanup_cfg.delete_window_emissions:
+                emi_dir = run_dir / f"EMISSION_{mem}"
+                if emi_dir.exists():
+                    for p in emi_dir.glob("AEMISSIONS.*_*.nc"):
+                        parsed = _parse_window_stamp(p.name)
+                        # If parsing fails, keep conservative (do not delete).
+                        if parsed is None:
+                            continue
+                        t1, t2 = parsed
+                        is_daily = (
+                            t1.hour == 0
+                            and t2.hour == 0
+                            and (t2 - t1) == timedelta(hours=24)
+                        )
+                        if is_daily:
+                            continue
+                        try:
+                            p.unlink()
+                            removed += 1
+                        except Exception as e:
+                            logger.warning("[CLEANUP] Failed removing %s: %s", p, e)
+
+        if removed:
+            logger.info("[CLEANUP] Pruned %d accumulated window-input file(s)", removed)
+
     def _cleanup_trim_outputs(self) -> None:
         """
         Write trimmed copies of CHIMERE window outputs (out/end) to keep only requested variables.
@@ -381,6 +460,44 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             t1 = self.current_window.start_time.strftime("%Y%m%d%H")
             t2 = self.current_window.end_time.strftime("%Y%m%d%H")
             logger.info("[CLEANUP] Wrote %d trimmed output file(s) for %s_%s", written, t1, t2)
+
+    def _cleanup_prune_trimmed_original_outputs(self) -> None:
+        """
+        When `trim_out` is enabled, delete original `out.*.nc` outputs if a trimmed
+        `filtered_res/out.min.*.nc` exists.
+
+        This is designed to run on the cleanup interval to reduce I/O overhead.
+        """
+        cleanup_cfg = getattr(self.config, "cleanup", None)
+        if cleanup_cfg is None or not cleanup_cfg.enabled:
+            return
+        if not cleanup_cfg.trim_out:
+            return
+        if not cleanup_cfg.delete_out_after_trim:
+            return
+
+        removed = 0
+        for mem in range(self.no_mems):
+            run_dir = self.paths.path_data / f"RUN_{mem}"
+            filtered_dir = run_dir / "filtered_res"
+            if not run_dir.exists() or not filtered_dir.exists():
+                continue
+
+            for out_path in run_dir.glob("out.*_*.nc"):
+                if ".min." in out_path.name:
+                    continue
+                suffix = out_path.name.split("out.", 1)[1]
+                out_min = filtered_dir / f"out.min.{suffix}"
+                if not out_min.exists():
+                    continue
+                try:
+                    out_path.unlink()
+                    removed += 1
+                except Exception as e:
+                    logger.warning("[CLEANUP] Failed removing %s: %s", out_path, e)
+
+        if removed:
+            logger.info("[CLEANUP] Removed %d original out.*.nc file(s) after trim", removed)
 
     @staticmethod
     def _parse_chimere_window_file_timestamp(path: Path) -> tuple[str, datetime, datetime] | None:
@@ -463,6 +580,9 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
 
                 if cleanup_cfg.keep_daily_first_hour_end and kind == "end":
                     if t1.hour == 0 and (t2 - t1) == timedelta(hours=1):
+                        continue
+                if cleanup_cfg.keep_daily_last_hour_end and kind == "end":
+                    if t1.hour == 23 and (t2 - t1) == timedelta(hours=1) and t2.hour == 0:
                         continue
 
                 if keep_starts is not None:
@@ -1051,6 +1171,13 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
         cleanup_cfg = getattr(self.config, "cleanup", None)
         if cleanup_cfg is not None and cleanup_cfg.enabled:
             retain_cycles = getattr(cleanup_cfg, "retain_cycles", None)
+            retention_interval = int(getattr(cleanup_cfg, "retention_interval_cycles", 1))
+            self._cleanup_completed_cycles += 1
+            should_run_interval_cleanup = (
+                retention_interval >= 1
+                and (self._cleanup_completed_cycles % retention_interval == 0)
+            )
+            should_run_retention = retain_cycles is not None and should_run_interval_cleanup
             if self.current_window is not None:
                 logger.info(
                     "[CLEANUP] finalize_step window %s -> %s",
@@ -1058,9 +1185,12 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                     self.current_window.end_time.strftime("%Y-%m-%d %H:%M:%S"),
                 )
             if cleanup_cfg.delete_window_ibc or cleanup_cfg.delete_window_emissions or cleanup_cfg.delete_window_meteo:
-                self._cleanup_window_inputs()
+                if should_run_interval_cleanup:
+                    self._cleanup_prune_window_inputs()
             self._cleanup_trim_outputs()
-            if retain_cycles is not None or self.time_manager.current_time.hour == 0:
+            if should_run_interval_cleanup:
+                self._cleanup_prune_trimmed_original_outputs()
+            if should_run_retention:
                 self._cleanup_retention_outputs()
 
         # Record completed window for the next iteration (used to resolve previous restart file).

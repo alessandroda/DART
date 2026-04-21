@@ -14,6 +14,11 @@ cleanup:
   delete_window_ibc: true
   delete_window_meteo: true
   enabled: true
+  retain_cycles: 20
+  retention_interval_cycles: 3
+  keep_daily_first_hour_end: true
+  keep_daily_last_hour_end: true
+  delete_out_after_trim: true
   keep_end_vars:
   - lon
   - lat
