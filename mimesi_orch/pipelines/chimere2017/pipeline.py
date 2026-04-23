@@ -1817,7 +1817,7 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
                 updated_values = (
                     posterior_var.values[0, :, :, :]
                     * ds_restart["airm"].values[-1, :, :, :]
-                    * 1e-15
+                    * 1e-9
                 )
                 ds_update = ds_restart[[self.ass_var]].copy(deep=True)
                 ds_update[self.ass_var].values[-1, :, :, :] = updated_values
