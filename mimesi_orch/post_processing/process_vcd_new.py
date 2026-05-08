@@ -9,7 +9,7 @@ import xarray as xr
 from tqdm import tqdm
 from scipy.interpolate import griddata
 import os
-
+import cartopy.feature as cfeature
 Sicily = {
     "name": "Sicily",
     "lonmin_grid": 12.0,
@@ -34,6 +34,14 @@ Domain_italy = {
     "latmax_grid": 47.1,
 }
 
+Domain_kairos = {
+
+    "name" : "kairos",
+    "lonmin_grid" : 6.6,
+    "lonmax_grid" : 18.8,
+    "latmin_grid" : 36.6,
+    "latmax_grid" : 47.1,
+}
 
 colors = [
     (0, "blue"),
@@ -45,6 +53,115 @@ colors = [
     (1, "purple"),
 ]
 
+def plot_monthly_mean_from_nc(out_dir, month="2025-11"):
+    import glob
+
+    # ==========================================
+    # 1. LOAD ALL DAILY NETCDF
+    # ==========================================
+    files = sorted(glob.glob(os.path.join(out_dir, "*.nc")))
+
+    if not files:
+        raise ValueError("No NetCDF files found!")
+
+    ds = xr.open_mfdataset(files, combine="nested", concat_dim="time")
+
+    print(ds)
+
+    # ==========================================
+    # 2. SELECT MONTH
+    # ==========================================
+    ds_month = ds.sel(time=month)
+
+    print(f"Selected {ds_month.time.size} timesteps")
+
+    # ==========================================
+    # 3. FILTER LOW COVERAGE (IMPORTANT)
+    # ==========================================
+    if "nobs" in ds_month:
+        mask = ds_month["nobs"].sum(dim="time") > 20
+        ds_month = ds_month.where(mask)
+
+    # ==========================================
+    # 4. MONTHLY MEAN
+    # ==========================================
+    ds_mean = ds_month.mean(dim="time", skipna=True)
+
+    # ==========================================
+    # 5. VARIABLES
+    # ==========================================
+    obs = ds_mean["obs_s5p_tropomi"]
+    prior = ds_mean["prior_ensemble_mean"]
+    post = ds_mean["posterior_ensemble_mean"]
+
+    diff = post - prior  # safer than %
+
+    # ==========================================
+    # 6. SMOOTHING (optional but recommended)
+    # ==========================================
+    obs = obs.rolling(latitude=3, longitude=3, center=True).mean()
+    prior = prior.rolling(latitude=3, longitude=3, center=True).mean()
+    post = post.rolling(latitude=3, longitude=3, center=True).mean()
+    diff = diff.rolling(latitude=3, longitude=3, center=True).mean()
+
+    # ==========================================
+    # 7. PLOT
+    # ==========================================
+    fig, axs = plt.subplots(
+        1, 4, figsize=(18, 5),
+        subplot_kw={"projection": ccrs.PlateCarree()}
+    )
+
+    titles = [
+        "Satellite observations",
+        "Model forecast",
+        "Assimilated analysis",
+        "Analysis - Background"
+    ]
+
+    data_list = [obs, prior, post, diff]
+    cmaps = ["viridis", "viridis", "viridis", "RdBu_r"]
+
+    for ax, data, title, cmap in zip(axs, data_list, titles, cmaps):
+
+        ax.set_extent([
+            settings.grid_bounds["lonmin_grid"],
+            settings.grid_bounds["lonmax_grid"],
+            settings.grid_bounds["latmin_grid"],
+            settings.grid_bounds["latmax_grid"]
+        ], crs=ccrs.PlateCarree())
+
+        ax.coastlines(resolution="10m", linewidth=0.5)
+        ax.add_feature(cfeature.BORDERS, linewidth=0.3)
+
+        if title == "Analysis - Background":
+            img = ax.pcolormesh(
+                data.longitude, data.latitude, data,
+                cmap=cmap, vmin=-2e-5, vmax=2e-5,
+                shading="auto"
+            )
+        else:
+            img = ax.pcolormesh(
+                data.longitude, data.latitude, data,
+                cmap=cmap, vmin=0, vmax=5e-5,
+                shading="auto"
+            )
+
+        ax.set_title(title)
+
+        cbar = plt.colorbar(img, ax=ax, orientation="horizontal", pad=0.05)
+        if title == "Analysis - Background":
+            cbar.set_label("Δ NO₂ [mol/m²]")
+        else:
+            cbar.set_label("NO₂ [mol/m²]")
+
+    fig.suptitle(f"Monthly mean NO₂ — {month}")
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, f"monthly_mean_{month}.png"), dpi=300)
+    plt.close()
+
+    print("Monthly plot saved")
 
 def centers_to_edges(centers):
     centers = np.asarray(centers)
@@ -74,20 +191,20 @@ class Settings:
     latmin: float = 30.0
     latmax: float = 72.0
 
-    grid_bounds: dict = Domain_minni
+    grid_bounds: dict = Domain_kairos
 
     min_scale: float = 0
-    max_scale: float = 0.001
-    start_time = "2023081400"
-    end_time = "2023081500"
+    max_scale: float = 0.00001
+    start_time = "2025110200"
+    end_time = "2025113000"
     range_conc = {
-        "obs_s5p_tropomi": (0, 0.0008),
-        "prior_ensemble_mean": (0, 0.0008),
-        "posterior_ensemble_mean": (0, 0.0008),
-        "prior_ensemble_spread": (0, 0.0008),
-        "posterior_ensemble_spread": (0, 0.0008),
-        "prior_ensemble_member_1": (0, 0.0008),
-        "posterior_ensemble_member_1": (0, 0.0008),
+        "obs_s5p_tropomi": (0, 0.0001),
+        "prior_ensemble_mean": (0, 0.0001),
+        "posterior_ensemble_mean": (0, 0.0001),
+        "prior_ensemble_spread": (0, 0.0001),
+        "posterior_ensemble_spread": (0, 0.0001),
+        "prior_ensemble_member_1": (0, 0.0001),
+        "posterior_ensemble_member_1": (0, 0.0001),
     }
 
     values = {
@@ -98,14 +215,36 @@ class Settings:
         "posterior_ensemble_spread": 5,
         "prior_ensemble_member_1": 6,
         "posterior_ensemble_member_1": 7,
+        "prior_ensemble_member_2": 8,
+        "posterior_ensemble_member_2": 9,
+        "prior_ensemble_member_3": 10,
+        "posterior_ensemble_member_3": 11,
+        "prior_ensemble_member_4": 12,
+        "posterior_ensemble_member_4": 13,
+        "prior_ensemble_member_5": 14,
+        "posterior_ensemble_member_5": 15,
+        "prior_ensemble_member_6": 16,
+        "posterior_ensemble_member_6": 17,
+        "prior_ensemble_member_7": 18,
+        "posterior_ensemble_member_7": 19,
+        "prior_ensemble_member_8": 20,
+        "posterior_ensemble_member_8": 21,
+        "prior_ensemble_member_9": 22,
+        "posterior_ensemble_member_9": 23,
+        "prior_ensemble_member_10": 24,
+        "posterior_ensemble_member_10": 25,
+        "prior_ensemble_member_11": 26,
+        "posterior_ensemble_member_11": 27,
+        "prior_ensemble_member_12": 28,
+        "posterior_ensemble_member_12": 29,
     }
 
 
 def get_regular_from_nc(nc_template):
     ds = xr.open_dataset(nc_template)
 
-    lon = ds["lon"].values
-    lat = ds["lat"].values
+    lon = ds["lon"][0,:].values
+    lat = ds["lat"][:,0].values
 
     if not (
         np.allclose(np.diff(lon), np.diff(lon)[0])
@@ -157,7 +296,37 @@ def transform_obs_seq_out(subdirectories, lon_grid, lat_grid, **kwargs):
     end_time = pd.to_datetime(settings.end_time, format="%Y%m%d%H")
     index = pd.date_range(start=start_time, end=end_time, freq="h")
     result = pd.DataFrame(
-        columns=["obs_s5p_tropomi", "prior_ensemble_mean", "posterior_ensemble_mean"],
+        columns=[
+            "obs_s5p_tropomi",
+            "prior_ensemble_mean",
+            "posterior_ensemble_mean",
+            "prior_ensemble_spread",
+            "posterior_ensemble_spread",
+            "prior_ensemble_member_1",
+            "posterior_ensemble_member_1",
+            "prior_ensemble_member_2",
+            "posterior_ensemble_member_2",
+            "prior_ensemble_member_3",
+            "posterior_ensemble_member_3",
+            "prior_ensemble_member_4",
+            "posterior_ensemble_member_4",
+            "prior_ensemble_member_5",
+            "posterior_ensemble_member_5",
+            "prior_ensemble_member_6",
+            "posterior_ensemble_member_6",
+            "prior_ensemble_member_7",
+            "posterior_ensemble_member_7",
+            "prior_ensemble_member_8",
+            "posterior_ensemble_member_8",
+            "prior_ensemble_member_9",
+            "posterior_ensemble_member_9",
+            "prior_ensemble_member_10",
+            "posterior_ensemble_member_10",
+            "prior_ensemble_member_11",
+            "posterior_ensemble_member_11",
+            "prior_ensemble_member_12",
+            "posterior_ensemble_member_12",
+        ],
         index=index,
     )
     paths = {
@@ -166,6 +335,30 @@ def transform_obs_seq_out(subdirectories, lon_grid, lat_grid, **kwargs):
         "posterior_ensemble_mean": [],
         "prior_ensemble_spread": [],
         "posterior_ensemble_spread": [],
+        "prior_ensemble_member_1": [],
+        "posterior_ensemble_member_1": [],
+        "prior_ensemble_member_2": [],
+        "posterior_ensemble_member_2": [],
+        "prior_ensemble_member_3": [],
+        "posterior_ensemble_member_3": [],
+        "prior_ensemble_member_4": [],
+        "posterior_ensemble_member_4": [],
+        "prior_ensemble_member_5": [],
+        "posterior_ensemble_member_5": [],
+        "prior_ensemble_member_6": [],
+        "posterior_ensemble_member_6": [],
+        "prior_ensemble_member_7": [],
+        "posterior_ensemble_member_7": [],
+        "prior_ensemble_member_8": [],
+        "posterior_ensemble_member_8": [],
+        "prior_ensemble_member_9": [],
+        "posterior_ensemble_member_9": [],
+        "prior_ensemble_member_10": [],
+        "posterior_ensemble_member_10": [],
+        "prior_ensemble_member_11": [],
+        "posterior_ensemble_member_11": [],
+        "prior_ensemble_member_12": [],
+        "posterior_ensemble_member_12": [],
     }
 
     for subdir in tqdm(subdirectories):
@@ -179,6 +372,30 @@ def transform_obs_seq_out(subdirectories, lon_grid, lat_grid, **kwargs):
             "posterior_ensemble_mean",
             "prior_ensemble_spread",
             "posterior_ensemble_spread",
+            "prior_ensemble_member_1",
+            "posterior_ensemble_member_1",
+            "prior_ensemble_member_2",
+            "posterior_ensemble_member_2",
+            "prior_ensemble_member_3",
+            "posterior_ensemble_member_3",
+            "prior_ensemble_member_4",
+            "posterior_ensemble_member_4",
+            "prior_ensemble_member_5",
+            "posterior_ensemble_member_5",
+            "prior_ensemble_member_6",
+            "posterior_ensemble_member_6",
+            "prior_ensemble_member_7",
+            "posterior_ensemble_member_7",
+            "prior_ensemble_member_8",
+            "posterior_ensemble_member_8",
+            "prior_ensemble_member_9",
+            "posterior_ensemble_member_9",
+            "prior_ensemble_member_10",
+            "posterior_ensemble_member_10",
+            "prior_ensemble_member_11",
+            "posterior_ensemble_member_11",
+            "prior_ensemble_member_12",
+            "posterior_ensemble_member_12",
         ]:
             # if os.path.exists(os.path.join(out_dir_key1, f"{key}_{subdir}_{settings.grid_bounds['name']}.nc")):
             #    continue
@@ -295,7 +512,7 @@ def transform_obs_seq_out(subdirectories, lon_grid, lat_grid, **kwargs):
                         ),
                     )
 
-                    subset = subset.where(subset > 0, drop=True)
+                    subset = subset.where(subset > 0)
                     mean_on_domain = subset.mean(dim=["latitude", "longitude"])
                     print(f"{key}: {mean_on_domain}")
                     # at corresponding time index set the mean_on_domain
@@ -405,32 +622,33 @@ settings = Settings()
 
 # for i in ['1000', '0100', '0010', '3000', '3000_noinfl', '1000_noinfl',
 #        '3000_restart_infl', '3000_vert_loc']:
-for i in ["0010"]:
-    case_name = f"data_202308_so2"
-    workdir = f"/mnt/mumbai_n3r6/25-12676_MIMESI/DART/models/CHIMERE_v2017r/work_offline/posteriors/"
-    out_dir = f"/mnt/mumbai_n3r6/25-12676_MIMESI/DART/models/CHIMERE_v2017r/work_offline/posteriors/"
-    nc_template = (
-        "/mnt/mumbai_n3r6/25-12676_MIMESI/kAiros/out.2025121500_2025121600_ITA7_psfc.nc"
-    )
-    os.makedirs(out_dir, exist_ok=True)
+#for i in ["0010"]:
+#    case_name = f"ITA7"
+#    workdir = f"/g100_scratch/userexternal/adausili/ITA7/posteriors"
+out_dir = f"/g100_scratch/userexternal/adausili/ITA7/pp_old"
+#    nc_template = (
+#        "/g100_scratch/userexternal/adausili/ITA7/RUN_0/out.2025113000_2025113001_ITA7.nc"
+#    )
+#    os.makedirs(out_dir, exist_ok=True)
+#
+#    subdirectories = [
+#        d
+#        for d in os.listdir(workdir)
+#        if os.path.isdir(os.path.join(workdir, d)) and d != "plots"
+#    ]
+#
+#    lon_grid, lat_grid = get_regular_from_nc(nc_template)
+#    print(lon_grid, lat_grid)
+#    try:
+#        domain_averaged, paths = transform_obs_seq_out(
+#            subdirectories, lon_grid, lat_grid
+#        )  # kwargs : specific_time
+#        domain_averaged.to_csv(
+#            out_dir + f'/{case_name}_domain_avg_{settings.grid_bounds["name"]}.csv'
+#        )
+#
+#    except:
+#        print("error")
 
-    subdirectories = [
-        d
-        for d in os.listdir(workdir)
-        if os.path.isdir(os.path.join(workdir, d)) and d != "plots"
-    ]
-
-    lon_grid, lat_grid = get_regular_from_nc(nc_template)
-    print(lon_grid, lat_grid)
-    try:
-        domain_averaged, paths = transform_obs_seq_out(
-            subdirectories, lon_grid, lat_grid, specific_time="2025121616"
-        )  # kwargs : specific_time
-        domain_averaged.to_csv(
-            out_dir + f'/{case_name}_domain_avg_{settings.grid_bounds["name"]}.csv'
-        )
-
-    except:
-        print("error")
-
+plot_monthly_mean_from_nc(out_dir, month="2025-11")
 # plot_ts_domain_averaged(domain_averaged)

@@ -461,8 +461,8 @@ def apply_vertical_correlation(pert_fields: np.ndarray, A: np.ndarray) -> np.nda
 
 def recenter_and_rescale(field: np.ndarray, spread: float) -> np.ndarray:
     """Recenter and rescale the field."""
-    mean = np.mean(field, axis=-1, keepdims=True)
-    std = np.std(field, axis=-1, ddof=1, keepdims=True)
+    mean = np.mean(field, axis=0, keepdims=True)
+    std = np.std(field, axis=0, ddof=1, keepdims=True)
     return (field - mean) * (spread / std)
 
 
@@ -496,12 +496,15 @@ def perturb_emission():
         chem_fac_pr = None
         logger.info(f"2{settings.separator_step} Loop over times")
         dict_members = {key: deepcopy(emission_dataset) for key in range(settings.mems)}
-        grid_length = get_dist(
-            lat2d[0, 0],
-            lon2d[0, 0],
-            lat2d[1, 0],
-            lon2d[0, 1],
-        )
+        #grid_length = get_dist(
+        #    lat2d[0, 0],
+        #    lon2d[0, 0],
+        #    lat2d[1, 0],
+        #    lon2d[0, 1],
+        #)
+        dx = get_dist(lat2d[0, 0], lon2d[0, 0], lat2d[1, 0], lon2d[1, 0])
+        dy = get_dist(lat2d[0, 0], lon2d[0, 0], lat2d[0, 1], lon2d[0, 1])
+        grid_length = 0.5 * (dx + dy)
         logger.info(
             f"{settings.separator_inside_step} Grid detected → nx={nx}, ny={ny}, nz={nz}"
         )
@@ -513,38 +516,45 @@ def perturb_emission():
         for i, time_step in enumerate(emission_dataset.Time):
 
             logger.info(f"{settings.separator_inside_step} Time: {time_step.values}")
+
+            # 1. random field
             random_field = box_muller_random_field(nx, ny, nz, settings.mems)
-            logger.info(
-                f"3{settings.separator_step} Apply horizontal correlations: corr_hz ={settings.corr_length_hz}"
-            )
+
+            # 2. horizontal correlation
             chem_fac = apply_horizontal_correlations(
                 weights_dict, random_field, nx, ny, nz, ngrid_corr, mems=settings.mems
             )
-            logger.info(
-                f"4{settings.separator_step} Apply vertical correlation: corr_vz ={settings.corr_length_vz}"
-            )
-            chem_fac = apply_vertical_correlation(chem_fac, A)
-            logger.info(f"5{settings.separator_step} Recenter and rescale")
-            chem_fac = recenter_and_rescale(chem_fac, settings.spread)
 
+            # 3. vertical correlation
+            chem_fac = apply_vertical_correlation(chem_fac, A)
+
+            # 4. temporal correlation (AR1)  <-- MOVE HERE
             if chem_fac_pr is not None:
                 alpha = np.exp(-1 / settings.corr_time)
                 chem_fac = alpha * chem_fac_pr + np.sqrt(1 - alpha**2) * chem_fac
+
+            logger.info(f"5{settings.separator_step} Recenter and rescale")
+
+            # 5. normalize ensemble
+            chem_fac = recenter_and_rescale(chem_fac, settings.spread)
+
+            # 6. enforce zero mean
+            mean_log = np.mean(chem_fac, axis=0, keepdims=True)
+            chem_fac = chem_fac - mean_log
+
+            # 7. lognormal bias correction
+            var_log = np.var(chem_fac, axis=0, keepdims=True)
+            chem_fac = chem_fac - 0.5 * var_log
+
+            # 8. apply perturbation
             logger.info(f"6{settings.separator_step} PERTURBATION")
             for imem in range(settings.mems):
                 chem_fac_t = np.transpose(chem_fac[imem], axes=[2, 1, 0])
                 dict_members[imem][settings.var][i, :, :, :] *= np.exp(chem_fac_t)
+
+            # 9. store for next timestep
             chem_fac_pr = chem_fac
 
-            # After generating perturbations and before saving
-            logger.info(
-                f"{settings.separator_step} Constrain Ensemble Mean to Target Field"
-            )
-            constrain_mean_to_target(
-                dict_members=dict_members,
-                target_field=emission_dataset[settings.var].values,
-                var_name=settings.var,
-            )
         try:
             for imem in range(settings.mems):
                 dir_path = (

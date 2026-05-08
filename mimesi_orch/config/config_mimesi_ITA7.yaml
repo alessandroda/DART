@@ -5,20 +5,18 @@ assimilation:
     'NO': NO_2000
     NO2: NO2_2000
   model_type: CHIMERE
-  no_mems: 2
+  no_mems: 12
   obs_type: SAT_NO2_TROPOMI
   run_assimilation_flag: true
   state_variable_qty: QTY_NO2
 cleanup:
+  delete_out_after_trim: true
   delete_window_emissions: true
   delete_window_ibc: true
   delete_window_meteo: true
   enabled: true
-  retain_cycles: 20
-  retention_interval_cycles: 3
   keep_daily_first_hour_end: true
   keep_daily_last_hour_end: true
-  delete_out_after_trim: true
   keep_end_vars:
   - lon
   - lat
@@ -45,6 +43,8 @@ cleanup:
   - u10m
   - v10m
   - w10mls
+  retain_cycles: 20
+  retention_interval_cycles: 3
   trim_end: true
   trim_out: true
 cluster:
@@ -69,7 +69,7 @@ paths:
   env_python: miniconda3/bin/python3.13
   listing_file: SAT_OBS/C03__listing.csv
   log_directory: logs_orchestrator
-  path_data: runs_chimere/ITA7
+  path_data: /g100_scratch/userexternal/adausili/ITA7
   path_filter: DART/models/CHIMERE_v2017r/work_offline
   path_perturbed_emi: perturbations/emi_mems
   path_submit_bsh: catena_aria_test/Chimere/auto_runs
@@ -82,5 +82,5 @@ time:
   backup_ic_option: hourly
   backup_perturb_days: 2
   dt_seconds: 3600
-  end_time: '2025-11-04 00:00:00'
-  start_time: '2025-11-04 00:00:00'
+  end_time: '2025-12-01 00:00:00'
+  start_time: '2025-12-01 00:00:00'

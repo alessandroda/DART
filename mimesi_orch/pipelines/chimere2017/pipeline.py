@@ -1557,6 +1557,21 @@ class Chimere2017DartPipeline(BaseAssimilationPipeline):
             },
             output_nml_path=self.paths.path_filter / "input.nml",
         )
+
+       # Persist the exact DART configuration used for this cycle alongside outputs
+        # so runs/tests can be reproduced later.
+        try:
+            shutil.copy2(
+                self.paths.path_filter / "input.nml",
+                Path(self.output_sim_folder) / "input.nml",
+            )
+        except Exception as e:
+            logger.warning(
+                "[DART] Failed to store input.nml in %s: %s",
+                self.output_sim_folder,
+                e,
+            )
+
         # FILTER_INPUT_LIST.TXT
         replace_nml_template(
             self.paths.path_filter / "filter_input_list_template.txt",

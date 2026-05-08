@@ -10,7 +10,7 @@ program convert_s5p_tropomi_L2
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
    use types_mod, only : r8, missing_r8
-   use location_mod, only : VERTISPRESSURE, VERTISHEIGHT
+   use location_mod, only : VERTISPRESSURE, VERTISHEIGHT, VERTISLEVEL
    use netcdf
    use netcdf_utilities_mod, only : nc_open_file_readonly, nc_close_file
    use obs_sequence_mod, only : obs_sequence_type, obs_type, read_obs_seq, &
@@ -223,7 +223,7 @@ program convert_s5p_tropomi_L2
             SAT_SO2_TROPOMI, obs_err, oday, osec, qc, obs, key = n)
        case ('SAT_NO2_TROPOMI')
          call set_obs_def_no2_tropomi(n, avgk_obs_r8(:), REAL(tsat_obs%pressure(:,n), 8), REAL(tsat_obs%amf_trop(1, n), 8))
-         call create_3d_obs(REAL(tsat_obs%lat(n),8),REAL(tsat_obs%lon(n), 8), REAL(vertical_ref_height, 8), VERTISHEIGHT, REAL(tsat_obs%vcd(1, n), 8), &
+         call create_3d_obs(REAL(tsat_obs%lat(n),8),REAL(tsat_obs%lon(n), 8), REAL(vertical_ref_height, 8), VERTISLEVEL, REAL(tsat_obs%vcd(1, n), 8), &
             SAT_NO2_TROPOMI, obs_err, oday, osec, qc, obs, key = n)
        case default
          print *, "Unknown gas type:", which_gas
