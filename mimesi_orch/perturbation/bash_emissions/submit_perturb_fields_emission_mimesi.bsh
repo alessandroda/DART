@@ -1,0 +1,20 @@
+#!/bin/bash
+#SBATCH --partition=g100_usr_prod
+#SBATCH --account=arpae_aqm
+#SBATCH --time=00:30:00
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --mem=64G
+#SBATCH --job-name=perturbation_test
+
+ulimit -s unlimited
+source /g100_work/ARAPE_AQM/MIMESI/env_conda
+conda activate mimesi_env
+cd /g100_work/ARAPE_AQM/MIMESI/DART/mimesi_orch/perturbation/bash_emissions
+
+# loop over dates
+for day in {21..30}; do
+    date="202511${day}"
+    echo "Running for $date"
+    ./perturb_fields_emission_mimesi.bsh $date
+done

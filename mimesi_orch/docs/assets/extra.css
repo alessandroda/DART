@@ -1,0 +1,38 @@
+:root {
+  /* Colors taken from the MIMESI icon/banner palette (teal, purple, lime). */
+  --mimesi-teal: #35c8c7;
+  --mimesi-purple: #7b5cd6;
+  --mimesi-lime: #b8e100;
+  --mimesi-bg: #0b1020;
+
+  /* Material theme overrides */
+  --md-primary-fg-color: var(--mimesi-teal);
+  --md-accent-fg-color: var(--mimesi-purple);
+}
+
+a {
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.15em;
+}
+
+/* Add a background behind the header logo for contrast. */
+.md-header__button.md-logo {
+  background: var(--mimesi-bg);
+  border-radius: 10px;
+  padding: 6px;
+  margin: 4px 6px 4px 0;
+}
+
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  display: block;
+}
+
+/* Add a background behind the logo on the home page. */
+.mimesi-hero-logo {
+  display: inline-block;
+  background: var(--mimesi-bg);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin: 8px 0 12px 0;
+}

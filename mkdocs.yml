@@ -1,0 +1,39 @@
+site_name: DART + MIMESI Orchestrator
+site_description: Documentation for the MIMESI orchestration utilities shipped in this repository.
+repo_url: .
+repo_name: Repository
+
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
+    - navigation.sections
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Installation: installation.md
+  - Architecture: architecture.md
+  - Operational run: operational_run.md
+  - Folder structure: folder_structure.md
+  - Troubleshooting: troubleshooting.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - footnotes
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.inlinehilite
+
+plugins:
+  - search
+

@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# -----------------------------
+# Base paths
+# -----------------------------
+BASE=/g100_work/ARPAE_AQM/MIMESI
+CONDA=$BASE/miniconda3
+
+source $BASE/env.sh
+
+# -----------------------------
+# Date parameters
+# -----------------------------
+DATE=$1
+HOUR=$2
+
+YEAR=$(echo $DATE | cut -c1-4)
+DATE_WITHOUT_DASH=$(echo $DATE | sed 's/-//g')
+
+# DATE + 1 day
+DATEp1=$(date -d "$DATE +1 day" +%Y-%m-%d)
+DATEp1_WITHOUT_DASH=$(echo $DATEp1 | sed 's/-//g')
+
+# -----------------------------
+# Emission settings
+# -----------------------------
+VAR="NO"
+MEMS=12
+
+export EMISSION_PATH_EMISSIONS="$BASE/perturbations/"
+export EMISSION_EMISSION_BASE_DIR="$BASE/runs_chimere/input_testcase_2025/emissioni/"
+export EMISSION_NAME_NETCDFS="AEMISSIONS.${DATE_WITHOUT_DASH}00_${DATEp1_WITHOUT_DASH}00_ITA7.nc"
+export EMISSION_MEMS=$MEMS
+export EMISSION_VAR=$VAR
+export EMISSION_CORR_TIME=6
+export EMISSION_CORR_LENGTH_VZ=4
+export EMISSION_CORR_LENGTH_HZ=50
+export EMISSION_SPREAD=1
+export EMISSION_SUB_DIR_EMI="2000"
+
+echo $EMISSION_NAME_NETCDFS 
+
+# -----------------------------
+# Run perturbation
+# -----------------------------
+python -u $BASE/DART/mimesi_orch/perturbation/perturb_emi_opt.py
+

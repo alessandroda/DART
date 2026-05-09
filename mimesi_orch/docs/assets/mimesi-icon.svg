@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="MIMESI icon">
+  <defs>
+    <style>
+      .stroke { stroke: #ffffff; stroke-width: 8; stroke-linejoin: round; stroke-linecap: round; }
+    </style>
+  </defs>
+
+  <!-- Cube (simplified, inspired by provided MIMESI icon) -->
+  <g class="stroke">
+    <path d="M128 44 212 92 212 188 128 236 44 188 44 92Z" fill="#7B5CD6"/>
+    <path d="M128 44 212 92 128 140 44 92Z" fill="#8B74E3"/>
+    <path d="M44 92 128 140 128 236 44 188Z" fill="#6C4EC7"/>
+    <!-- Highlight band -->
+    <path d="M68 136 128 170 188 136 188 156 128 190 68 156Z" fill="#35C8C7"/>
+
+    <!-- Grid lines -->
+    <path d="M128 44V236" fill="none"/>
+    <path d="M44 92l84 48 84-48" fill="none"/>
+    <path d="M44 188l84-48 84 48" fill="none"/>
+    <path d="M86 68l0 96" fill="none" opacity="0.25"/>
+    <path d="M170 68l0 96" fill="none" opacity="0.25"/>
+  </g>
+
+  <!-- Beam -->
+  <path d="M22 118 116 158 116 186 22 146Z" fill="#2FC7A0" opacity="0.85"/>
+
+  <!-- Satellite (simplified) -->
+  <g class="stroke">
+    <rect x="8" y="98" width="32" height="32" rx="4" fill="#1B2345"/>
+    <path d="M40 102 70 84 82 100 52 118Z" fill="#1B2345"/>
+    <path d="M40 126 70 144 82 128 52 110Z" fill="#1B2345"/>
+  </g>
+</svg>
+

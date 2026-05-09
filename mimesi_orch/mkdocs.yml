@@ -1,0 +1,43 @@
+site_name: MIMESI Orchestrator
+site_description: Documentation for the MIMESI Python orchestrator (mimesi_orch)
+
+theme:
+  name: material
+  language: en
+  logo: assets/Logo_mimesi.svg
+  favicon: assets/Logo_mimesi.svg
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.top
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+
+extra_css:
+  - assets/extra.css
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Installation: installation.md
+  - Example Config (ITA7): config_mimesi_ITA7.md
+  - Troubleshooting: troubleshooting.md
