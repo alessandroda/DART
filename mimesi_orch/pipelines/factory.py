@@ -8,14 +8,15 @@ from pipelines.registry import create_pipeline
 
 # Import modules for registration side effects.
 from pipelines.chimere2017 import pipeline as _chimere2017_pipeline  # noqa: F401
+from pipelines.chimere2023 import pipeline as _chimere2023_pipeline
 
 
 def infer_pipeline_name(config: AppConfig) -> str:
     if config.pipeline is not None and config.pipeline.name:
         requested = config.pipeline.name.strip().lower()
-        if requested != "chimere2017":
+        if requested not in ["chimere2017", "chimere2023"]:
             raise ValueError(
-                f"Unsupported pipeline '{requested}'. Only 'chimere2017' is enabled."
+                f"Unsupported pipeline '{requested}'. Only 'chimere2017 and chimere2023' is enabled."
             )
         return requested
 

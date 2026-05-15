@@ -29,7 +29,9 @@ class PathsConfig(BaseModel):
     All paths are relative to base_path unless explicitly absolute.
     """
 
-    base_path: Path
+    base_path: Optional[Path] = None
+    base_path_ctm: Optional[Path] = None
+    base_path_DART: Optional[Path] = None
     env_python: Path
 
     listing_file: Path
@@ -113,7 +115,7 @@ class AssimilationConfig(BaseModel):
 
     model_type: ModelType
     ass_var: str
-    state_variable_qty: str
+    state_variable_qty: Optional[str] = None
     obs_type: str
 
     case_dir: str
@@ -129,6 +131,13 @@ class AssimilationConfig(BaseModel):
 
     no_mems: int = Field(gt=0)
     run_assimilation_flag: bool = True
+    
+    update_restart: Optional[bool] = None
+
+    var_list_3d: Optional[list] = None
+    var_list_2d: Optional[list] = None
+
+    obs_filter_negative: Optional[bool] = None
 
     @field_validator("model_type", mode="before")
     @classmethod
@@ -219,6 +228,11 @@ class SatelliteDataConfig(BaseModel):
     """
 
     search_window_seconds: int = Field(gt=0)
+    obs_name: Optional[str] = None
+    vertical_ref_height: Optional[int] = None
+    superobs: Optional[str] = None
+    qa_value: Optional[float] = None
+
 
 # ---------------------------------------------------------------------
 # MODEL DATA
@@ -237,6 +251,14 @@ class ModelDataConfig(BaseModel):
     restart_from_controlrun: Optional[bool] = None
     perturbation_names: Optional[list] = None
     ensemble_list: Optional[list] = None
+    is_control_ensemble: Optional[bool] = None
+    dom_west: Optional[float] = None
+    dom_east: Optional[float] = None
+    dom_south: Optional[float] = None
+    dom_north: Optional[float] = None
+    nz: Optional[int] = None
+    dlon: Optional[float] = None
+    dlat: Optional[float] = None
 
 
 class PipelineSelectionConfig(BaseModel):
