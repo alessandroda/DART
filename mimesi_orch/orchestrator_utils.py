@@ -364,7 +364,9 @@ def submit_irene(spec: CommandSpec) -> str:
             f"Submission command failed: {spec.command} " f"(return code {rc})"
         )
     if not job_id:
-        raise SchedulerError(f"No job id returned by command {spec.command}")
+        logger.info(f"No job id returned by command {spec.command}")
+        logger.info(f"No monitoring will be performed")
+        return None
     
     time.sleep(5)
     logger.info(f"[TGCC-IRENE] Submitted job with ID:{job_id}")
@@ -1267,17 +1269,19 @@ def add_missing_variable(no_mems: int, var_to_add: str, domain: str, out_file_fu
         ds.close()
         meteo.close()"""
 
-        with xr.open_dataset(out_file_name) as ds, xr.open_dataset(orig_file_name) as meteo:
-            meteo_sub = (
-                meteo.rename({"Time": "time_counter", "south_north": "y", "west_east": "x"})
-                    .isel(time_counter=slice(0, 1))
-                    .assign_coords(time_counter=ds.time_counter, y=ds.y, x=ds.x)
-            )
+        with xr.open_dataset(out_file_name) as ds:
+            if var_to_add not in ds.data_vars:
+                with xr.open_dataset(orig_file_name) as meteo:
+                    meteo_sub = (
+                        meteo.rename({"Time": "time_counter", "south_north": "y", "west_east": "x"})
+                            .isel(time_counter=slice(0, 1))
+                            .assign_coords(time_counter=ds.time_counter, y=ds.y, x=ds.x)
+                    )
 
-            ds[var_to_add] = meteo_sub[var_to_add].astype("float32")
-            tmp = str(out_file_name) + ".tmp"
-            ds.to_netcdf(tmp)
-            os.replace(tmp, out_file_name)
+                    ds[var_to_add] = meteo_sub[var_to_add].astype("float32")
+                    tmp = str(out_file_name) + ".tmp"
+                    ds.to_netcdf(tmp)
+                    os.replace(tmp, out_file_name)
 
 
 def write_dart_filter_list(list_file_func: Path, out_file_func: Callable, no_mems: int, **kwargs):
@@ -1338,22 +1342,32 @@ def save_diff(file_a: Path, file_b: Path, out_path: Path, label: str):
             
             # This operation is now "lazy" - no math happens yet
             diff = ds_a - ds_b
+            relative_diff = xr.where(ds_b != 0, ((ds_a - ds_b) / ds_b)*100, 0)
+
+            # Delete existing files before saving to avoid conflicts
+            out_path.unlink(missing_ok=True)
+            relative_out_path = out_path.with_suffix('.relative.nc')
+            relative_out_path.unlink(missing_ok=True)
             
             # The computation and writing happen chunk-by-chunk to the disk
             diff.to_netcdf(out_path)
+            relative_diff.to_netcdf(relative_out_path)
             
             logger.info(f"[{label}] Memory-optimized diff saved to {out_path}")
+            logger.info(f"[{label}] Memory-optimized relative diff saved to {relative_out_path}")
     except Exception as e:
         logger.error(f"Failed to compute {label}: {e}")
     
 
-def remove_negative_values(obs_file_path: Path):
+def remove_negative_values(obs_file_path: Path, obs_file_out: Path):
     logger.info(f"Filtering negative values in {obs_file_path} ...")
     try:
         with xr.open_dataset(obs_file_path) as ds:
             ds['vcd'] = ds['vcd'].where(ds['vcd'] >= 0, 0)  # Set negative values to 0
-            ds.to_netcdf(obs_file_path, mode='w')  # Overwrite the original file
-        logger.info(f"Negative values filtered successfully in {obs_file_path}.")
+            os.makedirs(obs_file_out.parent, exist_ok=True)
+            ds.to_netcdf(obs_file_out) 
+        logger.info(f"Negative values filtered successfully in {obs_file_out}.")
     except Exception as e:
         logger.error(f"Error filtering negative values in {obs_file_path}: {e}")
         raise
+    

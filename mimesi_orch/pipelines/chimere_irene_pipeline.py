@@ -83,6 +83,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         self.case_emi_dir = a.case_emi_dir
         self.var_list_3d = a.var_list_3d
         self.var_list_2d = a.var_list_2d
+        self.obs_filt = a.obs_filter_negative
 
         self.queue = self.config.cluster.cluster_queue
         self.project_name = self.config.cluster.project_name
@@ -101,6 +102,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         self.chimpart = self.config.model_data.chimpart
         self.submit_sequentially = self.config.model_data.submit_sequentially
         self.restart_from_controlrun = self.config.model_data.restart_from_controlrun
+        self.is_control_ensemble = self.config.model_data.is_control_ensemble
         self.dom_west = self.config.model_data.dom_west
         self.dom_east = self.config.model_data.dom_east
         self.dom_south = self.config.model_data.dom_south
@@ -111,7 +113,6 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
 
         self.search_window_seconds = self.config.satellite_data.search_window_seconds
         self.obs_name = self.config.satellite_data.obs_name
-        self.collection = self.config.satellite_data.collection
         self.vertical_ref_height = self.config.satellite_data.vertical_ref_height
         self.superobs = self.config.satellite_data.superobs
         self.qa_value = self.config.satellite_data.qa_value
@@ -192,13 +193,21 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
             try:
                 logger.info("Replacing @TOKENS in CHIMERE .par template file ...")
                 logger.info(f"The output directory (run_dir) is: {self.path_manager.chimere2023_run_dir(mem)}")
+                if self.current_end_file[mem] is None:
+                    if self.is_control_ensemble and (self.time_manager.current_time == self.time_manager.start_time):
+                        endfile_f = self.path_manager.chimere2023_END_FILE(mem, self.time_manager.end_file_datetime.strftime("%Y%m%d%H")[:-2]+"00", 24) 
+                    else:
+                        endfile_f = self.path_manager.chimere2023_END_FILE(mem, self.time_manager.end_file_datetime.strftime("%Y%m%d%H"), 1) 
+                else:
+                    endfile_f = self.current_end_file[mem]
+                logger.info(f"The END file used for ENS{mem} is: {endfile_f}")
                 replace_nml_template(
                     input_nml_path=self.path_manager.chimere2023_PAR_BASE_TEMPLATE(),
                     entries_tbr_dict={
                         "@LAB": f"ENS{mem}",
                         "@SIMULDIR": self.path_manager.chimere2023_run_dir(mem),
                         "@IUSEINI": "2",
-                        "@ENDFILE": self.path_manager.chimere2023_END_FILE(mem, self.time_manager.end_file_datetime.strftime("%Y%m%d%H"), 1) if self.current_end_file[mem] is None else self.current_end_file[mem],
+                        "@ENDFILE": endfile_f,
                         "@EMISSDIR": self.path_manager.chimere2023_run_dir(mem)
                     },
                     output_nml_path=self.path_manager.chimere2023_PAR_FILE(mem)
@@ -273,21 +282,18 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
         if not orbit_filename:
             logger.info("[DART] No satellite data found, skipping assimilation")
             return
-        
-        logger.info(f"---------->>> Removing negative values in satellite observations ...")
-        remove_negative_values(self.path_manager.dart_file_s5p_orbit(orbit_filename, self.obs_name))
 
         logger.info(f"---------->>> Running run_obs_converter()")
         obs_seq_name = self.run_obs_converter(orbit_filename)
 
-        obs_path = self.path_manager.dart_obs_seq(obs_seq_name, self.obs_name, self.collection)
+        obs_path = self.path_manager.dart_obs_seq(orbit_filename, self.obs_name, obs_seq_name)
         if not obs_path.exists():
             logger.info("[DART] convertion was run but all obs were excluded and obs_seq was not created, skipping assimilation")
             return
         else:
             logger.info(f"[DART] obs_seq created: {obs_path}")
         self.satdata_found = True
-        self.run_dart(obs_seq_name)
+        self.run_dart(obs_seq_name, obs_path)
 
     def process_satellite_data(self):
 
@@ -322,18 +328,25 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
             self.time_manager.sat_obs.second,
         )
         obs_seq_name = f"obs_seq_{self.seconds_obs}_{self.days_obs}.out"
-
-        obs_seq_path = self.path_manager.dart_obs_seq(obs_seq_name, self.obs_name, self.collection)
+        obs_seq_path = self.path_manager.dart_obs_seq(orbit_filename, self.obs_name, obs_seq_name)
         
         # Skip submission if file already exists
         if Path(obs_seq_path).exists():
             logger.info(f"Obs sequence file already exists: {obs_seq_path}")
             return obs_seq_name
         
+        #filter negative values in satellite observations if requested (and save the filtered file in a different location to keep the original data)
+        if self.obs_filt:
+            logger.info(f"---------->>> Removing negative values in satellite observations ...")
+            remove_negative_values(self.path_manager.dart_file_s5p_orbit(orbit_filename, self.obs_name), 
+                                   self.path_manager.dart_file_s5p_orbit_filtered(orbit_filename, self.obs_name))
+        logger.info(f"CHECK file_path_s5p: {self.path_manager.dart_file_s5p_orbit_filtered(orbit_filename, self.obs_name)}") if self.obs_filt else logger.info(f"file_path_s5p: {self.path_manager.dart_file_s5p_orbit(orbit_filename, self.obs_name)}")
+        
+        
         replace_nml_template(
             input_nml_path=self.path_manager.dart_s5p_input_template(),
             entries_tbr_dict={
-                "$file_path_s5p": self.path_manager.dart_file_s5p_orbit(orbit_filename, self.obs_name),
+                "$file_path_s5p": self.path_manager.dart_file_s5p_orbit_filtered(orbit_filename, self.obs_name) if self.obs_filt else self.path_manager.dart_file_s5p_orbit(orbit_filename, self.obs_name),
                 "$file_out": obs_seq_path,
                 "$obs_type": self.obs_type,
                 "$dom_west": self.dom_west,
@@ -365,7 +378,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
             return False
         return obs_seq_name
 
-    def run_dart(self, obs_seq_name):
+    def run_dart(self, obs_seq_name, obs_path):
         logger.info("---------->>> Running DART")
         """
         All chimere files in the title have the starting time of the run and now current_time=simulated_time=final simulation time
@@ -392,7 +405,7 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
             entries_tbr_dict={
                 "$obs_sequence_name": obs_seq_name,
                 "$folder_path": self.path_manager.dart_posteriors_dir(date_ymdH),
-                "$folder_obs_path": self.path_manager.dart_s5p_output_dir(self.obs_name, self.collection),
+                "$folder_obs_path": obs_path.parent if not self.obs_filt else obs_path.parent,
                 "$date_assim": date_ymdHMS,
                 "$init_time_days": str(self.days_model), #computed in base_pipeline
                 "$init_time_seconds": str(self.seconds_model), #computed in base_pipeline
@@ -401,8 +414,8 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
                 "$no_mems": str(self.no_mems),
                 "$obs_type": str(self.obs_type),
                 "$num_3d": len(self.var_list_3d),
-                "$list_3d": self.var_list_3d,
-                "$list_2d": self.var_list_2d,
+                "$list_3d": ', '.join("'" + v + "'" for v in self.var_list_3d),
+                "$list_2d": ', '.join("'" + v + "'" for v in self.var_list_2d),
                 "$num_2d": len(self.var_list_2d),
                 
             },
@@ -433,18 +446,20 @@ class ChimereV2023DartPipeline(BaseAssimilationPipeline):
                 "@MAIL": f"{self.mail}",
                 "@CURRENT_DATE": date_ymdH,
                 "@DEST_LOG_PATH": self.path_manager.dart_posteriors_dir(date_ymdH),
+                "@WORKDIR": self.path_manager.dart_run_filter().parent
             },
             output_nml_path=self.path_manager.dart_run_filter(),
         )
         spec = CommandSpec(
-                command=f"ccc_msub ./{self.path_manager.dart_run_filter().name}",
+                command= f"./{self.path_manager.dart_run_filter().name}", #f"ccc_msub ./{self.path_manager.dart_run_filter().name}",
                 directory=self.path_manager.dart_run_filter().parent
             )
         job_id = submit_irene(spec)
-        monitor_job_status([job_id], self.scheduler)
+        if job_id:
+            monitor_job_status([job_id], self.scheduler)
         self.move_analysis_files()
 
-        logger.info(f"Computing differences between analysis/preassim means ...")
+        logger.info(f"Computing differences between analysis/preassim means (ana - preassim)...")
         # 1. Difference: analysis_mean.nc - preassim_mean.nc
         analysis_mean = self.path_manager.dart_analysis_dir(date_ymdH) / "analysis_mean.nc"
         preassim_mean = self.path_manager.dart_preassim_dir(date_ymdH) / "preassim_mean.nc"

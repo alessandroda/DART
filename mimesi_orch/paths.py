@@ -260,15 +260,18 @@ class PathManager:
     def dart_s5p_data_dir(self, obs_name: str) -> Path:
         #return self.dart_s5p_base() / "data/SO2-COBRA"
         return self.dart_s5p_base() / "data" / obs_name
-
+    
     def dart_file_s5p_orbit(self, orbit_filename: str, obs_name: str) -> Path:
         return self.dart_s5p_data_dir(obs_name) / orbit_filename
-
-    def dart_s5p_output_dir(self, obs_name: str, collection: str) -> Path:
-        return self.dart_s5p_data_dir(obs_name) / collection
-
-    def dart_obs_seq(self, obs_seq_name: str, obs_name: str, collection: str) -> Path:
-        return self.dart_s5p_output_dir(obs_name, collection) / obs_seq_name
+    
+    def dart_file_s5p_orbit_filtered(self, orbit_filename: str, obs_name: str) -> Path:
+        return self.dart_s5p_data_dir(obs_name) / "negative_filtered" / orbit_filename
+    
+    def dart_obs_seq(self, orbit_filename: str, obs_name: str, obs_seq_name: str) -> Path:
+        return self.dart_file_s5p_orbit(orbit_filename, obs_name).parent / obs_seq_name
+    
+    def dart_obs_seq_filtered(self, orbit_filename: str, obs_name: str, obs_seq_name: str) -> Path:
+        return self.dart_file_s5p_orbit_filtered(orbit_filename, obs_name).parent / obs_seq_name
 
     def get_ic_g1_path(
         self,

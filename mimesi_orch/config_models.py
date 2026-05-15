@@ -110,6 +110,8 @@ class AssimilationConfig(BaseModel):
     var_list_3d: Optional[list] = None
     var_list_2d: Optional[list] = None
 
+    obs_filter_negative: Optional[bool] = None
+
     @field_validator("model_type", mode="before")
     @classmethod
     def normalize_model_type(cls, v):
@@ -190,7 +192,6 @@ class SatelliteDataConfig(BaseModel):
 
     search_window_seconds: int = Field(gt=0)
     obs_name: str
-    collection: str
     vertical_ref_height: Optional[int] = None
     superobs: Optional[str] = None
     qa_value: Optional[float] = None
@@ -210,6 +211,7 @@ class ModelDataConfig(BaseModel):
     chimpart: Optional[str] = None
     submit_sequentially: Optional[bool] = None
     restart_from_controlrun: Optional[bool] = None
+    is_control_ensemble: Optional[bool] = None
     perturbation_names: Optional[list] = None
     ensemble_list: Optional[list] = None
     dom_west: Optional[float] = None

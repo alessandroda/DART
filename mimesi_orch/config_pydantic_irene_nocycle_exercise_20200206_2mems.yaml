@@ -1,12 +1,13 @@
 assimilation:
   ass_var: c_NO2
   model_type: chimere
-  no_mems: 15
+  no_mems: 2
   obs_type: SAT_NO2_TROPOMI
   run_assimilation_flag: true
   update_restart: false
-  var_list_3d: ['NO2', 'pres', 'NO', 'EMISA', 'EMISB'] #use a list
+  var_list_3d: ['NO2', 'pres', 'NO'] #, 'EMISA', 'EMISB']
   var_list_2d: ['psfc']
+  obs_filter_negative: false
 cluster:
   cluster_queue: rome
   mail: gdemoliner@lisa.ipsl.fr
@@ -34,40 +35,28 @@ model_data:
   dom_west: -15.25
   domain: EUROCOMEX3
   ensemble_list:
-  - '01'
-  - '02'
-  - '03'
-  - '04'
-  - '05'
-  - '06'
-  - '07'
-  - 08
-  - 09
-  - '10'
-  - '11'
-  - '12'
-  - '13'
-  - '14'
-  - '15'
+  - '01:02'
+  - '02:02'
   nz: 20
   perturbation_names:
   - EmisID
+  - MeteoID
   restart_from_controlrun: false
   submit_sequentially: false
 paths:
   base_path_DART: /ccc/work/cont003/gen7232/demoling/DART/
   base_path_ctm: /ccc/work/cont003/gen7232/demoling/chimere_v2023_dart/
-  case_name: nocycle_exercise_2020020615_15mems_noIM
+  case_name: nocycle_exercise_20200206_2mems
   env_python: /ccc/cont003/home/lisa/demoling/CHIMDART_env/bin/python
   listing_file: observations/obs_converters/S5P_TROPOMI_L3/data/NO2/C03__listing_02.csv
   log_directory: logs_orchestrator
   path_control_run: /ccc/scratch/cont003/gen7232/demoling/OUT_Chimere/CHIMOUT-EUROCOMEX3_reruned0102
   path_data: /ccc/scratch/cont003/gen7232/demoling/OUT_orch_chimdart/
   path_filter: models/chimere/work
-  path_perturbed_emi: /ccc/scratch/cont003/gen7232/demoling/PERTURBED/EMIS_ANT/results_doubled/
+  path_perturbed_emi: /ccc/scratch/cont003/gen7232/demoling/PERTURBED/EMIS_ANT/fixed_scaling/
+  path_perturbed_meteo: /ccc/scratch/cont003/gen7232/demoling/PERTURBED/METEO/fixed_scaling/
   path_submit_bsh: /
 satellite_data:
-  collection: C03
   obs_name: NO2
   qa_value: 0.5
   search_window_seconds: 1800
@@ -75,5 +64,5 @@ satellite_data:
   vertical_ref_height: 2
 time:
   dt_seconds: 3600
-  end_time: '2020-02-07 17:00:00'
-  start_time: '2020-02-06 10:00:00'
+  end_time: '2020-02-06 17:00:00'
+  start_time: '2020-02-06 08:00:00'
