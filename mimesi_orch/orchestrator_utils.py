@@ -289,7 +289,8 @@ def replace_nml_template(
     try:
         with open(output_nml_path, "w") as f2:
             f2.write(input_nml)
-        os.chmod(output_nml_path, 0o775)
+        # test on another user: remove chmod command
+        #os.chmod(output_nml_path, 0o777)
     except Exception as e:
         raise RuntimeError(f"Error writing output file {output_nml_path}") from e
 
