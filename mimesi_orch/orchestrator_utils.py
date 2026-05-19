@@ -139,34 +139,38 @@ def run_command_in_directory(spec: CommandSpec) -> Tuple[int, Optional[str]]:
     try:
         logger.info(f"[CMD] Entering directory: {spec.directory}")
         os.chdir(spec.directory)
-        
-        """
-        command_path = Path(spec.command)
-        if not command_path.is_absolute():
-            command_path = spec.directory / command_path
 
-        if not command_path.exists():
-            raise FileNotFoundError(command_path)
-
-        cmd = [str(command_path)]
-        subprocess.run(["chmod", "+x", str(command_path)], check=True)
-        """     
         cmd = shlex.split(spec.command)
         if not cmd:
             raise ValueError("Empty command")
 
-        # If first token is a path, ensure it exists + executable
-        first = Path(cmd[0])
-        if first.exists(): 
-            first = first.resolve()
-            # Make executable if needed
-            subprocess.run(
-                ["chmod", "+x", str(first)],
-                check=True,
-            )
-            cmd[0] = str(first)
-        
-        ### end of changes
+        # If first token is a path, resolve it relative to spec.directory.
+        # Prefer invoking scripts via interpreter (bash/python) so we don't depend on execute bits
+        # (e.g. after changing user/umask, on noexec mounts, or when chmod is not permitted).
+        first_token = cmd[0]
+        first_path = Path(first_token)
+        if not first_path.is_absolute():
+            candidate = (spec.directory / first_path)
+            if candidate.exists():
+                first_path = candidate
+
+        if first_path.exists():
+            first_path = first_path.resolve()
+            suffix = first_path.suffix.lower()
+            if suffix == ".sh":
+                cmd = ["bash", str(first_path), *cmd[1:]]
+            elif suffix == ".py":
+                cmd = ["python", str(first_path), *cmd[1:]]
+            else:
+                # If it's a file but not executable, try to chmod; if that fails, we'll
+                # surface a clear error instead of a generic PermissionError.
+                if first_path.is_file() and not os.access(first_path, os.X_OK):
+                    try:
+                        subprocess.run(["chmod", "+x", str(first_path)], check=True)
+                    except Exception:
+                        pass
+                cmd[0] = str(first_path)
+
         if spec.args:
             cmd.extend(map(str, spec.args))
 
@@ -175,11 +179,28 @@ def run_command_in_directory(spec: CommandSpec) -> Tuple[int, Optional[str]]:
             " ".join(shlex.quote(c) for c in cmd),
         )
 
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-        ) #stdout='Submitted Batch Session 3561287\n'
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+            )  # stdout='Submitted Batch Session 3561287\n'
+        except PermissionError as e:
+            # Common when trying to exec a non-executable script on shared/noexec filesystems.
+            # If it looks like a shell script, retry via bash.
+            if cmd and Path(cmd[0]).suffix.lower() == ".sh":
+                retry_cmd = ["bash", *cmd]
+                logger.warning(
+                    "[CMD] PermissionError executing script; retrying via bash: %s",
+                    " ".join(shlex.quote(c) for c in retry_cmd),
+                )
+                result = subprocess.run(retry_cmd, capture_output=True, text=True)
+            else:
+                raise PermissionError(
+                    f"Permission denied executing: {cmd[0]}. "
+                    "If this is a script, ensure it is readable and either executable "
+                    "or run it via an interpreter (e.g. 'bash <script>.sh')."
+                ) from e
         stdout = result.stdout.strip()
         stderr = result.stderr.strip()
 
@@ -212,13 +233,18 @@ def run_command_in_directory_bsub(
     original_directory = os.getcwd()
     try:
         os.chdir(directory)
-        command = directory / command
-        # subprocess.call(command,shell=True)
-        subprocess.run(["chmod", "+x", command])
+        command = (directory / command).resolve()
+        # Prefer running scripts through bash to avoid permission/noexec issues.
+        if command.suffix.lower() == ".sh":
+            run_cmd = ["bash", str(command)]
+        else:
+            # subprocess.call(command,shell=True)
+            subprocess.run(["chmod", "+x", str(command)])
+            run_cmd = [str(command)]
         # 08.10.2024
         # subprocess.run should return a list of ids when running on the
         # members
-        output = subprocess.run(command, capture_output=True, text=True)
+        output = subprocess.run(run_cmd, capture_output=True, text=True)
         # breakpoint()
         if farm:
             lines = output.stdout.strip().splitlines()
