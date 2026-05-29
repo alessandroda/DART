@@ -239,6 +239,40 @@ def run_command_in_directory_bsub(
         os.chdir(original_directory)
     return jobid
 
+def monitor_job_dart(self, job_id):
+        logger.info(f"Monitoring job {job_id}")
+        job_id = job_id.strip()[1:-1]
+
+        while True:
+            if check_job_status_cresco(job_id, which_run="FARM"):
+                print("Job completed successfully.")
+                # Handle successful job completion: move files
+                self.move_analysis_files()
+                replace_priorinflation(
+                    self.path_manager,
+                    self.time_manager.simulated_time.strftime("%Y%m%d%H"),
+                )
+                break
+            else:
+                print("Job is still running. Waiting...")
+                time.sleep(10)
+
+def submit_irene(spec: CommandSpec) -> str:
+    rc, job_id = run_command_in_directory(spec)
+
+    if rc != 0:
+        raise SchedulerError(
+            f"Submission command failed: {spec.command} " f"(return code {rc})"
+        )
+    if not job_id:
+        logger.info(f"No job id returned by command {spec.command}")
+        logger.info(f"No monitoring will be performed")
+        return None
+    
+    time.sleep(5)
+    logger.info(f"[TGCC-IRENE] Submitted job with ID:{job_id}")
+
+    return job_id[0]
 
 def submit_and_wait_cineca(
     spec: CommandSpec,
@@ -765,6 +799,26 @@ def get_list_mems_to_rerun(
         logger.info(f"Jobs still running: {running_jobs}. Waiting...")
         time.sleep(30)
 
+def check_restart_files_exist_irene(
+    ic_paths: list,
+    model: ModelType,
+    no_mems: int,
+) -> list[int]:
+
+    mems_to_rerun = []
+
+    for mem in range(1, no_mems+1):
+        if ic_paths[mem-1].exists() and ic_paths[mem-1].stat().st_size > 0:
+            logger.info(
+                f"{model} | restart_file exists for mem {mem}: {ic_paths[mem-1]}"
+                f"({ic_paths[mem-1].stat().st_size} bytes)"
+            )
+        else:
+            logger.warning(f"{model} | resatrt_file is missing for mem {mem}: {ic_paths[mem-1]}")
+            mems_to_rerun.append(mem)
+
+    return mems_to_rerun
+
 
 def check_restart_files_exist(
     path_manager: Chimere2017Paths,
@@ -972,6 +1026,37 @@ def get_list_mems_to_rerun_slurm(
         time.sleep(30)
 
 
+def monitor_job_status(
+    job_ids: list[str],
+    scheduler: Scheduler,
+    model_type: Optional[ModelType] = None,
+    ):
+
+    while True:
+        running_jobs = []
+
+        for jobid in job_ids:
+            if scheduler == Scheduler.SLURM:
+                finished = check_job_status_slurm(
+                    jobid#, which_run=model_type.value.upper()
+                )
+            else:
+                finished = check_job_status_cresco(
+                    jobid#, which_run=model_type.value.upper()
+                )
+
+            if not finished:
+                running_jobs.append(jobid)
+
+        if not running_jobs:
+            logger.info(f"Jobs {job_ids} have finished")
+            return
+
+        logger.info(f"Jobs still running: {running_jobs}. Waiting...")
+        time.sleep(15)
+
+
+
 def safe_symlink(target: Path, link: Path):
     """Create a symlink safely:
     - If it exists and points correctly → do nothing
@@ -1083,7 +1168,7 @@ def from_liststr_to_listdict(ensemble_list: list[str], labels: list[str]) -> lis
         parts = item.split(":")
 
         entry = {
-            "MemberID": member_id
+            "MemberID": member_id + 1  # Start MemberID from 1 for clarity
         }
 
         for i, value in enumerate(parts):
@@ -1101,15 +1186,175 @@ def from_liststr_to_listdict(ensemble_list: list[str], labels: list[str]) -> lis
 
     return ensemble_dicts
 
-def compute_hourly(data_path: str, time: int, path_saving_data: Path, path_saving_list: Optional[Path]=None) -> Path:
-    data = xr.open_dataset(data_path)
+def compute_hourly(data: xr.Dataset, time: int, path_saving_data: Path, path_saving_list: Optional[Path]=None) -> Path:
     data_sel = data.sel(Time=slice(time, time+2)) #to keep Time dimension
     if len(data_sel.Times.values) == 0: #when time is saved as float (isel drops Time even with drop=False)
         data_sel = data.sel(Time=slice(data.Time.values[time], data.Time.values[time+1]))
     
+    path_saving_data.parent.mkdir(parents=True, exist_ok=True)
     data_sel.to_netcdf(path_saving_data)
     if path_saving_list:
         path_saving_list.write_text("1\n" + str(path_saving_data) + "\n")
         logger.info("Hourly dataset computed and listing created")
     else:
         logger.info("Hourly dataset computed")
+
+def cut_block(data: xr.Dataset, time: int, hours: int, path_saving_data: Path, path_saving_list: Optional[Path]=None) -> Path:
+    data_sel = data.sel(Time=slice(time, time+hours+1)) #to keep Time dimension
+    if len(data_sel.Times.values) == 0: #when time is saved as float (isel drops Time even with drop=False)
+        data_sel = data.sel(Time=slice(data.Time.values[time], data.Time.values[time+hours]))
+    
+    path_saving_data.parent.mkdir(parents=True, exist_ok=True)
+    data_sel.to_netcdf(path_saving_data)
+    if path_saving_list:
+        path_saving_list.write_text("1\n" + str(path_saving_data) + "\n")
+        logger.info("Hourly dataset computed and listing created")
+    else:
+        logger.info("Hourly dataset computed")
+
+
+def add_missing_variable(no_mems: int, var_to_add: str, domain: str, out_file_func: Callable, orig_file_func: Callable, **kwargs):
+    for mem in range(1, no_mems+1):
+        out_file_name=out_file_func(mem, **kwargs)
+        orig_file_name=orig_file_func(mem, domain, **kwargs)
+        logger.info(f'Adding {var_to_add} to {out_file_name} from {orig_file_name}')
+        """#ds = xr.open_dataset(f'/ccc/scratch/cont003/gen7232/demoling/OUT_orch_chimdart/OUT_Chimere/first_tests_202002_06-15/ENS{i}/chim_ENS{i}_2020021413_1_out.nc')
+        #vcmeteo = xr.open_dataset(f'/ccc/scratch/cont003/gen7232/demoling/OUT_orch_chimdart/OUT_Chimere/first_tests_202002_06-15/ENS{i}/exdomout_2020021413_1_EUROCOMEX3.nc')
+        ds = xr.open_dataset(out_file_name)
+        meteo = xr.open_dataset(orig_file_name)
+
+        meteo = meteo.rename({"Time": "time_counter", "south_north": "y", "west_east": "x" })
+        meteo = meteo.isel(time_counter=slice(0,1))
+        meteo = meteo.assign_coords(time_counter=ds.time_counter, y=ds.y, x=ds.x)
+
+        ds[var_to_add] = meteo.psfc.astype("float32")
+        #ds.to_netcdf(f'chim_ENS{i}_2020021413_1_out_psfc_float.nc')
+        ds.to_netcdf(out_file_name, mode="a")
+
+        ds.close()
+        meteo.close()"""
+
+        with xr.open_dataset(out_file_name) as ds:
+            if var_to_add not in ds.data_vars:
+                with xr.open_dataset(orig_file_name) as meteo:
+                    meteo_sub = (
+                        meteo.rename({"Time": "time_counter", "south_north": "y", "west_east": "x"})
+                            .isel(time_counter=slice(0, -1))
+                            .assign_coords(time_counter=ds.time_counter, y=ds.y, x=ds.x)
+                    )
+
+                    ds[var_to_add] = meteo_sub[var_to_add].astype("float32")
+                    tmp = str(out_file_name) + ".tmp"
+                    ds.to_netcdf(tmp)
+                    os.replace(tmp, out_file_name)
+
+
+def write_dart_filter_list(list_file_func: Path, out_file_func: Callable, no_mems: int, **kwargs):
+    try:    
+        list_file_func.write_text(
+            "\n".join(
+                str(out_file_func(mem, **kwargs))
+                for mem in range(1, no_mems+1)
+            ) + "\n"
+        )
+        logger.info(f"Wrote: {list_file_func}")
+    except:
+        logger.warning(f"Writing of the following failed: {list_file_func}")
+
+def update_pollutant_in_end(dart_file: Path, end_file: Path, out_file: Path, pollutant: str):
+    """
+    Replace pollutant values in the restart dataset (end_file) with updates from the filtering (dart_file)
+    Converts ppbv -> molecules/cm³ using 'airm' from original chimere file (out_file).
+    """
+    # Check files
+    for f in [dart_file, end_file, out_file]:
+        if not os.path.exists(f):
+            raise FileNotFoundError(f"{f} is missing")
+
+    # Open datasets
+    with xr.open_dataset(dart_file) as dart_ds, xr.open_dataset(end_file) as end_ds, xr.open_dataset(out_file) as out_ds:
+
+        poll = dart_ds[pollutant].load()
+        airm = out_ds['airm'].sel(time_counter=slice(out_ds['airm'].time_counter.values[-1], out_ds['airm'].time_counter.values[-1])).load()
+        poll = xr.where(poll < 0, 0, poll)
+        # Broadcast airm if shapes differ
+        if poll.shape != airm.shape:
+            logger.warning("Chimere original out file and dart outputs differ in shape")
+            airm = airm.broadcast_like(poll)
+        
+        # Convert units
+        poll_molec = (1e-9 * poll * airm).astype(end_ds[pollutant].dtype)
+        poll_molec = poll_molec.rename({'y': 'south_north', 'x': 'west_east', 'time_counter': 'Time'})
+        # Replace last time step in end
+        #end_ds[pollutant].isel(Time=-1).values[:] = poll_molec.values
+        end_ds[pollutant].loc[dict(Time=end_ds.Time[-1])] = poll_molec.isel(Time=-1).values
+
+        tmp = str(end_file) + ".tmp"
+        end_ds.to_netcdf(tmp)
+    
+    # Ora che siamo fuori dal 'with', i file sono chiusi e possiamo fare l'os.replace
+    os.replace(tmp, end_file)
+    logger.info(f"DART's updated {pollutant} successfully replaced into {end_file}")
+
+
+def save_diff(file_a: Path, file_b: Path, out_path: Path, label: str):
+    """Memory-optimized subtraction using Dask lazy-loading."""
+    try:
+        # 'chunks={}' enables Dask. 
+        # You can also specify specific dimensions like chunks={'time': 1, 'lev': 5}
+        with xr.open_dataset(file_a, chunks={'time': 1}) as ds_a, \
+                xr.open_dataset(file_b, chunks={'time': 1}) as ds_b:
+            
+            ds_b = ds_b.sel(time_counter=slice(ds_b['airm'].time_counter.values[-1], ds_b['airm'].time_counter.values[-1])) 
+            
+            # Keep only variables present in BOTH datasets
+            common_vars = list(set(ds_a.data_vars) & set(ds_b.data_vars))
+
+            if not common_vars:
+                raise ValueError("No common variables between datasets")
+
+            ds_a = ds_a[common_vars]
+            ds_b = ds_b[common_vars]
+
+            # This operation is now "lazy" - no math happens yet
+            diff = ds_a - ds_b
+            #relative_diff = xr.where(ds_b != 0, ((ds_a - ds_b) / ds_b)*100, 0)
+            valid_mask = (
+                (ds_b != 0)
+                & np.isfinite(ds_b)
+                & np.isfinite(ds_a)
+            )
+
+            safe_num = (ds_a - ds_b).where(valid_mask)
+            safe_den = ds_b.where(valid_mask)
+
+            relative_diff = (safe_num / safe_den) * 100
+            # Optional cleanup of inf values
+            relative_diff = relative_diff.where(np.isfinite(relative_diff))
+
+            # Delete existing files before saving to avoid conflicts
+            out_path.unlink(missing_ok=True)
+            relative_out_path = out_path.with_suffix('.relative.nc')
+            relative_out_path.unlink(missing_ok=True)
+            
+            # The computation and writing happen chunk-by-chunk to the disk
+            diff.to_netcdf(out_path)
+            relative_diff.to_netcdf(relative_out_path)
+            
+            logger.info(f"[{label}] Memory-optimized diff saved to {out_path}")
+            logger.info(f"[{label}] Memory-optimized relative diff saved to {relative_out_path}")
+    except Exception as e:
+        logger.error(f"Failed to compute {label}: {e}")
+    
+def remove_negative_values(obs_file_path: Path, obs_file_out: Path):
+    logger.info(f"Filtering negative values in {obs_file_path} ...")
+    try:
+        with xr.open_dataset(obs_file_path) as ds:
+            ds['vcd'] = ds['vcd'].where(ds['vcd'] >= 0, 0)  # Set negative values to 0
+            os.makedirs(obs_file_out.parent, exist_ok=True)
+            ds.to_netcdf(obs_file_out) 
+        logger.info(f"Negative values filtered successfully in {obs_file_out}.")
+    except Exception as e:
+        logger.error(f"Error filtering negative values in {obs_file_path}: {e}")
+        raise
+    

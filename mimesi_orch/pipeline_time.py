@@ -35,6 +35,10 @@ class TimeManager:
         self.last_perturbed_day = None
         self.end_file_date_control_run = self.start_time - timedelta(days=1)
         self.end_file_date = None
+        self.slot_time = None
+        self.run_hours = None
+        self.end_file_datetime = self.current_time - timedelta(hours=1)
+        self.prev_run_hours = None
 
         self.check_start_ahead_end()
 

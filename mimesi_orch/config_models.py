@@ -12,7 +12,7 @@ Design principles:
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from pathlib import Path
 from datetime import datetime
 from typing import Any, Literal, Optional
@@ -41,16 +41,18 @@ class PathsConfig(BaseModel):
     path_submit_bsh: Path
     path_filter: Path
     path_data: Path
+    case_name: Optional[Path] = None
     path_control_run: Optional[Path] = None
     chimere_par_template: Optional[Path] = None
     run_submit_replace_perturbations: Optional[Path] = None
     path_perturbed_emi: Optional[Path] = None
+    path_perturbed_meteo: Optional[Path] = None
     log_directory: Optional[Path] = None
     # CHIMERE input roots (read-only/shared inputs), resolved against base_path if relative.
     chimere_input_emissions_dir: Optional[Path] = None
     chimere_input_atm_dir: Optional[Path] = None
     chimere_input_ibc_dir: Optional[Path] = None
-
+    
     @field_validator("*", mode="before")
     @classmethod
     def expand_paths(cls, v):
@@ -112,13 +114,14 @@ class AssimilationConfig(BaseModel):
     """
     Data assimilation settings.
     """
-
+    model_config = ConfigDict(protected_namespaces=())
+    
     model_type: ModelType
     ass_var: str
     state_variable_qty: Optional[str] = None
     obs_type: str
 
-    case_dir: str
+    case_dir: Optional[str] = None
     case_emi_dir: Optional[str] = None
     # Preferred configuration: single mapping from emission variable -> perturbation subdir.
     # Example:
@@ -194,6 +197,7 @@ class DartConfig(BaseModel):
     preassim_dir: Path
     posteriors_dir: Path
     obs_converters_dir: Path
+    #case_name: Optional[Path] = None
 
     @field_validator("*", mode="before")
     @classmethod
@@ -243,7 +247,8 @@ class ModelDataConfig(BaseModel):
     """
     Satellite observation handling.
     """
-
+    model_config = ConfigDict(protected_namespaces=())
+    
     control_run_exp_name: Optional[str] = None
     domain: Optional[str] = None
     chimpart: Optional[str] = None
@@ -381,6 +386,8 @@ class AppConfig(BaseModel):
 
     This is the single entry point for all orchestration logic.
     """
+    model_config = ConfigDict(protected_namespaces=(),
+        extra="forbid")
 
     paths: PathsConfig
     time: TimeConfig
@@ -399,7 +406,5 @@ class AppConfig(BaseModel):
     # runtime-only (not from YAML)
     _config_path: Optional[Path] = None
 
-    class Config:
-        extra = "forbid"
 
 AppConfig.model_rebuild()

@@ -15,34 +15,30 @@ class Chimere2023Paths:
 
     def __init__(self, cfg: Chimere2023PipelineConfig):
         self.cfg = cfg
-        self.base_path = cfg.base_path.resolve()
+        self.base_path_ctm = cfg.base_path_ctm.resolve()
+        self.base_path_DART = cfg.base_path_DART.resolve()
+
+        # Core Orchestrator Paths
         self.env_python = self._resolve(cfg.env_python)
+        #self.case_name = self._resolve(cfg.case_name)
         self.listing_file = self._resolve(cfg.listing_file)
-        self.path_submit_bsh = self._resolve(cfg.path_submit_bsh)
-        self.path_filter = self._resolve(cfg.path_filter)
         self.path_data = self._resolve(cfg.path_data)
-        self.path_control_run = None
+        self.path_filter = self._resolve(cfg.path_filter)
+        
+        # Source Model Paths
+        self.path_control_run = self._resolve(cfg.path_control_run)
         self.path_perturbed_emi = self._resolve(cfg.path_perturbed_emi)
-        self.chimere_input_emissions_dir = self._resolve(cfg.chimere_input_emissions_dir)
-        self.chimere_input_atm_dir = self._resolve(cfg.chimere_input_atm_dir)
-        self.chimere_input_ibc_dir = self._resolve(cfg.chimere_input_ibc_dir)
-        self.run_submit_model_template = (
-            self._resolve(cfg.run_submit_model_template)
-            if cfg.run_submit_model_template is not None
-            else None
-        )
-        self.chimere_par_template = (
-            self._resolve(cfg.chimere_par_template)
-            if cfg.chimere_par_template is not None
-            else None
-        )
+        self.path_perturbed_meteo = self._resolve(cfg.path_perturbed_meteo)
+
+        self.path_data_dart: Path = self.path_data / 'OUT_DART' / cfg.case_name
+        self.path_data_ctm: Path = self.path_data / 'OUT_Chimere' / cfg.case_name
 
     def _resolve(self, p: Path | None) -> Path:
         if p is None:
             return None
         if p.is_absolute():
             return p.resolve()
-        return (self.base_path / p).resolve()
+        return (self.base_path_DART / p).resolve()
 
     # ------------------------------------------------------------------
     # CHIMERE v2023 paths

@@ -114,6 +114,8 @@ class BaseAssimilationPipeline(ABC):
                     self.current_window.run_hours,
                     self.current_window.has_assimilation,
                 )
+                self.time_manager.slot_time = self.current_window.end_time
+                self.time_manager.run_hours = self.current_window.run_hours
 
                 # Optional hook: e.g. emission perturbations, cleanup
                 self.before_step()
@@ -152,7 +154,7 @@ class BaseAssimilationPipeline(ABC):
 
                 # Perform data assimilation if applicable
                 try:
-                    self.run_assimilation_if_needed()
+                   self.run_assimilation_if_needed()
                 except pipeline_errors.SkipAssimilation as e:
                     logger.info(f"[DART] Skipped: {e}")
 
