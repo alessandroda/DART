@@ -136,11 +136,17 @@ class AssimilationConfig(BaseModel):
     run_assimilation_flag: bool = True
     
     update_restart: Optional[bool] = None
+    list_update_restart: Optional[list] = None
 
     var_list_3d: Optional[list] = None
     var_list_2d: Optional[list] = None
 
     obs_filter_negative: Optional[bool] = None
+
+    persistence_until_next_day: Optional[bool] = None 
+    extend_from_prev_slot: Optional[bool] = None
+    damping_active: Optional[bool] = None
+    hours_forward: Optional[int] = None
 
     @field_validator("model_type", mode="before")
     @classmethod
@@ -254,6 +260,9 @@ class ModelDataConfig(BaseModel):
     chimpart: Optional[str] = None
     submit_sequentially: Optional[bool] = None
     restart_from_controlrun: Optional[bool] = None
+    lastdate: Optional[str] = None
+    lasthours: Optional[int] = None
+    skip_model_part: Optional[bool] = None
     perturbation_names: Optional[list] = None
     ensemble_list: Optional[list] = None
     is_control_ensemble: Optional[bool] = None

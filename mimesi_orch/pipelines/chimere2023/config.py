@@ -26,9 +26,14 @@ class Chimere2023PipelineConfig(BaseModel):
     no_mems: int
     run_assimilation_flag: bool
     update_restart: bool
+    list_update_restart: list
     var_list_3d: list | None = None
     var_list_2d: list | None = None
     obs_filter_negative: bool
+    persistence_until_next_day: bool
+    extend_from_prev_slot: bool
+    damping_active: bool
+    hours_forward: int
 
     cluster_queue: str
     mail: str
@@ -50,6 +55,9 @@ class Chimere2023PipelineConfig(BaseModel):
     ensemble_list: list
     perturbation_names: list
     restart_from_controlrun: bool
+    lastdate: str
+    lasthours: int
+    skip_model_part: bool
     submit_sequentially: bool
 
     obs_name: str
@@ -79,9 +87,15 @@ class Chimere2023PipelineConfig(BaseModel):
             no_mems=app.assimilation.no_mems,
             run_assimilation_flag=app.assimilation.run_assimilation_flag,
             update_restart=app.assimilation.update_restart,
+            list_update_restart=app.assimilation.list_update_restart,
             var_list_3d=app.assimilation.var_list_3d,
             var_list_2d=app.assimilation.var_list_2d,
             obs_filter_negative=app.assimilation.obs_filter_negative,
+            persistence_until_next_day=app.assimilation.persistence_until_next_day,
+            extend_from_prev_slot=app.assimilation.extend_from_prev_slot,
+            damping_active=app.assimilation.damping_active,
+            hours_forward=app.assimilation.hours_forward,
+
 
             cluster_queue=app.cluster.cluster_queue,
             mail=app.cluster.mail,
@@ -103,6 +117,9 @@ class Chimere2023PipelineConfig(BaseModel):
             ensemble_list=app.model_data.ensemble_list,
             perturbation_names=app.model_data.perturbation_names,
             restart_from_controlrun=app.model_data.restart_from_controlrun,
+            lastdate=app.model_data.lastdate,
+            lasthours=app.model_data.lasthours,
+            skip_model_part=app.model_data.skip_model_part,
             submit_sequentially=app.model_data.submit_sequentially,
 
             obs_name=app.satellite_data.obs_name,

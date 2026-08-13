@@ -1,7 +1,7 @@
 assimilation:
   ass_var: c_NO2
-  damping_active: true
-  persistence_until_next_day: true 
+  damping_active: false
+  persistence_until_next_day: true
   extend_from_prev_slot: false
   hours_forward: 6
   list_update_restart:
@@ -75,7 +75,7 @@ model_data:
 paths:
   base_path_DART: /ccc/work/cont003/gen7232/demoling/DART/
   base_path_ctm: /ccc/work/cont003/gen7232/demoling/chimere_v2023_dart/
-  case_name: cyEMI_nxday_0607_15m_low_v2
+  case_name: cyEMI_0607_15m_low_v2
   env_python: /ccc/cont003/home/lisa/demoling/CHIMDART_env/bin/python
   listing_file: observations/obs_converters/S5P_TROPOMI_L3/data/NO2/C03__listing_02_mod_short.csv
   log_directory: logs_orchestrator

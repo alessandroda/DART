@@ -39,6 +39,8 @@ class TimeManager:
         self.run_hours = None
         self.end_file_datetime = self.current_time - timedelta(hours=1)
         self.prev_run_hours = None
+        self.next_slot_time = None
+        self.next_run_hours = None
 
         self.check_start_ahead_end()
 

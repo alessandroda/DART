@@ -92,7 +92,7 @@ class Chimere2023Paths:
     def chimere2023_BASH_SUBMIT_SCRIPT_RUN_DIR(self, mem: int, START_DATEHOUR: str) -> Path:
         return self.chimere2023_run_dir(mem) / f"submit_p_{mem}_{START_DATEHOUR}.sh"
 
-    def chimere2023_EMIS_FILE_SRC(self, is_pert: bool, domain: str, month: int, weekday: str, emi_id: int) -> Path:
+    def chimere2023_EMIS_FILE_SRC(self, is_pert: bool, domain: str, month: int, weekday: str, emi_id: Optional[int]) -> Path:
         if is_pert:
             return self.path_perturbed_emi / f"EMIS.{domain}.{month}.{weekday}.s.ens{emi_id:02d}.nc"
         else: 
@@ -113,6 +113,10 @@ class Chimere2023Paths:
     def chimere2023_out_file(self, mem: int, date_ymdH: str, NHOURS: int) -> Path:
         return self.chimere2023_run_dir(mem) / f"chim_ENS{mem}_{date_ymdH}_{NHOURS}_out.nc"
 
+    def dart_filter_input_list_file(self, mem: int, date_ymdH: str) -> Path:
+        return self.chimere2023_run_dir(mem) / f"chim_ENS{mem}_{date_ymdH}_1_out_toDART.nc"
+
+
     # ------------------------------------------------------------------
     # DART paths
     # ------------------------------------------------------------------
@@ -126,6 +130,9 @@ class Chimere2023Paths:
     def dart_preassim_dir(self, date_ymdH: str) -> Path:
         return self.path_data_dart / f"preassim/{date_ymdH}"
     
+    def ratio_memory_file(self, mem: int, pollutant: str) -> Path:
+        return self.path_data_dart / "ratio_memory" / f"ratio_memory_file_{pollutant}_ENS{mem}.nc"
+
     # ------------------------------------------------------------------
     # DART – filter
     # ------------------------------------------------------------------
@@ -148,8 +155,8 @@ class Chimere2023Paths:
     def dart_run_filter(self) -> Path:
         return self.base_path_DART / self.path_filter / "run_filter.bsh"
     
-    def dart_filter_output_list_file(self, mem: int, date_ymdH: str, NHOURS: int) -> Path:
-        return self.dart_posteriors_dir(date_ymdH) / f"chim_ENS{mem}_{date_ymdH}_{NHOURS}_out_posteriors.nc"
+    def dart_filter_output_list_file(self, mem: int, date_ymdH: str) -> Path:
+        return self.dart_posteriors_dir(date_ymdH) / f"chim_ENS{mem}_{date_ymdH}_1_out_fromDART.nc"
 
     # ------------------------------------------------------------------
     # DART – obs converters (S5P)

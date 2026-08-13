@@ -1,12 +1,11 @@
 assimilation:
   ass_var: c_NO2
   damping_active: true
-  persistence_until_next_day: true 
-  extend_from_prev_slot: false
+  persistence_until_next_day: true
+  extend_from_prev_slot: true
   hours_forward: 6
   list_update_restart:
-  - EMISA
-  - EMISB
+  - NO2
   model_type: chimere
   no_mems: 15
   obs_filter_negative: false
@@ -65,17 +64,17 @@ model_data:
   - '15'
   is_control_ensemble: false
   lastdate: '2020020601'
-  lasthours: 0
+  lasthours: 8
   nz: 20
   perturbation_names:
   - EmisID
-  restart_from_controlrun: true
+  restart_from_controlrun: false
   skip_model_part: false
   submit_sequentially: false
 paths:
   base_path_DART: /ccc/work/cont003/gen7232/demoling/DART/
   base_path_ctm: /ccc/work/cont003/gen7232/demoling/chimere_v2023_dart/
-  case_name: cyEMI_nxday_0607_15m_low_v2
+  case_name: cyICinfl2_0607_15m_low_v2
   env_python: /ccc/cont003/home/lisa/demoling/CHIMDART_env/bin/python
   listing_file: observations/obs_converters/S5P_TROPOMI_L3/data/NO2/C03__listing_02_mod_short.csv
   log_directory: logs_orchestrator
@@ -93,4 +92,4 @@ satellite_data:
 time:
   dt_seconds: 3600
   end_time: '2020-02-07 23:00:00'
-  start_time: '2020-02-06 00:00:00'
+  start_time: '2020-02-06 09:00:00'

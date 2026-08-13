@@ -117,6 +117,20 @@ class BaseAssimilationPipeline(ABC):
                 self.time_manager.slot_time = self.current_window.end_time
                 self.time_manager.run_hours = self.current_window.run_hours
 
+                # --- computing next slot time and hours ---
+                if self.current_window.end_time < self.time_manager.end_time:
+                    original_current_time = self.time_manager.current_time
+                    try:
+                        self.time_manager.current_time = self.current_window.end_time
+                        next_window = self.build_assim_window()
+                        self.time_manager.next_slot_time = next_window.end_time
+                        self.time_manager.next_run_hours = next_window.run_hours
+                    except Exception as e:
+                        logger.debug("Next window computation failed (es. final time reached): %s", e)
+                    finally:
+                        self.time_manager.current_time = original_current_time
+                # ---------------------------------------------------
+
                 # Optional hook: e.g. emission perturbations, cleanup
                 self.before_step()
 
