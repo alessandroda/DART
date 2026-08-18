@@ -589,6 +589,7 @@ class Chimere2023DartPipeline(BaseAssimilationPipeline):
             logger.info("No cycling flag was selected, skipping restart file update (Data Fusion)")
             return
         logger.info("---------->>> Running update_pollutant_in_end()")
+        breakpoint()
         date_ymdH_chim = self.time_manager.end_file_datetime.strftime("%Y%m%d%H")
         date_ymdH = self.time_manager.current_time.strftime("%Y%m%d%H")
         date_month = self.time_manager.current_time.strftime("%m")
@@ -598,12 +599,11 @@ class Chimere2023DartPipeline(BaseAssimilationPipeline):
         next_date_month = next_day.strftime("%m")
         next_date_weekday = next_day.strftime("%A")
 
-        # Percorso per il file CSV di output
         paris_tracking_csv = "/ccc/scratch/cont003/gen7232/demoling/OUT_orch_chimdart/paris_emissions_tracking.csv"
         
         for mem in range(1, self.no_mems + 1):
             for pollutant in self.list_update_restart:
-                next_emis_file = self.paths.chimere2023_EMI_FILE(mem, self.domain, next_date_month, next_date_weekday)
+                next_emis_file = self.paths.chimere2023_EMI_FILE(mem, self.domain, next_date_month, next_date_weekday) #following day
                 if not next_emis_file.exists():
                     #dict_mem da ripredere
                     safe_symlink(self.paths.chimere2023_EMIS_FILE_SRC(True, self.domain, next_date_month, next_date_weekday, mem), next_emis_file, do_copy=True)

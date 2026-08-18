@@ -1280,289 +1280,111 @@ def write_dart_filter_list(list_file_func: Path, out_file_func: Callable, no_mem
     except:
         logger.warning(f"Writing of the following failed: {list_file_func}")
 
-def update_pollutant_in_end_old(dart_file: Path, end_file: Path, out_file: Path, emis_file: Path, dart_in_file: Path, next_emis_file: Path, ratio_memory_file: Path, pollutant: str, next_slot_time: pd.Timestamp, persistence_until_next_day: bool = True, extend_from_prev_slot: bool = True, damping_active: bool = False, hours_forward: int = 6):
-    """
-    Replace pollutant values in the restart dataset using DART corrections.
+def _get_nc4_encoding(dataset: xr.Dataset) -> dict:
+    """Keep only the netCDF4-compression keys present in the source encoding."""
+    valid_keys = {
+        'shuffle', 'zlib', 'quantize_mode', 'blosc_shuffle',
+        'fletcher32', 'least_significant_digit', 'endian',
+        'complevel', 'szip_coding', 'dtype',
+        'szip_pixels_per_block', 'compression',
+        'significant_digits', '_FillValue'
+    }
+    return {
+        var: {key: value for key, value in dataset[var].encoding.items() if key in valid_keys}
+        for var in dataset.variables
+    }
 
-    For EMISA/EMISB:
-    - Compute posterior/prior emission ratio.
-    - Keep a spatial memory of previous satellite orbit corrections.
-    - New satellite footprints overwrite old ones in overlap regions.
-    - Previous corrections remain active outside the new orbit and decay
-      according to the prescribed damping time.
 
-    The memory file contains:
-        ratio       : last correction factor for each pixel
-        footprint   : pixels already observed by an orbit
-        assim_time  : time of the last update for each pixel
-    """
-    VALID_NC4_KEYS = {
-            'shuffle','zlib','quantize_mode','blosc_shuffle',
-            'fletcher32','least_significant_digit','endian',
-            'complevel','szip_coding','dtype',
-            'szip_pixels_per_block','compression',
-            'significant_digits','_FillValue'
-            }
+def _write_dataset_with_encoding(dataset: xr.Dataset, target: Path, *, unlimited_dims=None):
+    """Write dataset to disk preserving compression metadata only where supported."""
+    encoding = _get_nc4_encoding(dataset)
+    tmp_path = Path(str(target) + ".tmp")
+    dataset.to_netcdf(
+        tmp_path,
+        encoding=encoding,
+        unlimited_dims=unlimited_dims,
+    )
+    os.replace(tmp_path, target)
 
-    # Check files
-    for f in [dart_file, end_file, out_file, emis_file, dart_in_file]:
-        if not os.path.exists(f):
-            raise FileNotFoundError(f"{f} is missing")
 
-    # Open datasets
-    with xr.open_dataset(dart_file, decode_timedelta=True) as dart_ds, xr.open_dataset(end_file, decode_timedelta=True) as end_ds, xr.open_dataset(out_file, decode_timedelta=True) as out_ds, xr.open_dataset(emis_file, decode_timedelta=True) as emis_ds,  xr.open_dataset(dart_in_file, decode_timedelta=True) as dart_in_ds:
-        # Emission updates
-        if pollutant in ['EMISA', 'EMISB']:
-            poll_dart = dart_ds[pollutant].load()
-            poll_name = 'NO2' if pollutant=='EMISB' else 'NO'
-            
-            import pandas as pd
-            t_start = end_ds.Times.isel(Time=-2).item().decode("utf-8").replace("_", " ")
-            t_end = end_ds.Times.isel(Time=-1).item().decode("utf-8").replace("_", " ")
-            t_start = pd.to_datetime(t_start)
-            t_end = pd.to_datetime(t_end)
-            #t_start is basically the time of the emissions corrected by DART 
-            #t_end is the time of the emissions to be corrected to move forward in time 
+def _compute_emission_ratio(val_correct_da: xr.DataArray, val_prev_da: xr.DataArray, emis_prev_da: xr.DataArray):
+    """Compute the per-pixel correction ratio while tolerating vertical-dimension mismatches."""
+    logger.info("Computing the ratio...")
+    #prepare a matrix of ones
+    ratio = np.ones_like(emis_prev_da.values)
 
-            idx_start = t_start.hour
-            idx_end = t_end.hour
-            
-            emis_ds[poll_name] = emis_ds[poll_name].load()
-            poll_dart_in = dart_in_ds[pollutant].load()
-            
-            #dart corrections
-            val_correct_da = xr.where(poll_dart < 0, 0, poll_dart).isel(time_counter=0) # Rimuove il time_counter=1 -> (20, 85, 101)
-            #original emis (perturbed)
-            emis_prev_da = emis_ds[poll_name].isel(Time=idx_start)              # (7, 85, 101)
-            #original chimere out files 
-            val_prev_da = xr.where(poll_dart_in < 0, 0, poll_dart_in)#.isel(time_counter=0)
-            
-            #prepare a matrix of ones
-            ratio = np.ones_like(emis_prev_da.values)
-            
-            # Alignment check vertical levels (es. 20 vs 7 levels)
-            if "bottom_top" in val_correct_da.dims and "bottom_top" in emis_prev_da.dims:
-                if val_correct_da.sizes["bottom_top"] != emis_prev_da.sizes["bottom_top"]:
-                    logger.info(f" > [INFO] Vertical level mismatch detected (DART: {val_correct_da.sizes['bottom_top']}, EMIS: {emis_prev_da.sizes['bottom_top']}). Scaling LEVEL 0 only.")
-                    
-                    #select only first level 
-                    v_correct_lvl0 = val_correct_da.isel(bottom_top=0).values
-                    v_prev_lvl0 = val_prev_da.isel(bottom_top=0).values
-                    
-                    #compute ratio
-                    ratio_lvl0 = np.divide(v_correct_lvl0, v_prev_lvl0, out=np.zeros_like(v_correct_lvl0), where=v_prev_lvl0 != 0)
-                    
-                    #insert lvl0 ratio in the matrix
-                    ratio[0, :, :] = ratio_lvl0
-                    #if on the other end, we would like to use lvl0 ratio for all levels
-                    #ratio[:] = ratio_lvl0[np.newaxis, :, :]
-                else:
-                    #there is no vertical mismatch, ratios are specific of and computed at each level 
-                    ratio = np.divide(val_correct_da.values, val_prev_da.values, out=np.zeros_like(val_correct_da.values), where=val_prev_da.values != 0)
-            else:
-                # Fallback if bottom_top does not exist
-                ratio = np.divide(val_correct_da.values, val_prev_da.values, out=np.zeros_like(val_correct_da.values), where=val_prev_da.values != 0)
-            
-            if extend_from_prev_slot or persistence_until_next_day:
-                ## ADD PERCISTENCY 
-                # Load previous ratio memory if available; elsewhere mimic it with ones on current one
-                if os.path.exists(ratio_memory_file):
-                    logger.info(f"Loading orbit memory: {ratio_memory_file}")
-                    with xr.open_dataset(ratio_memory_file) as mem_ds:
-                        ratio_prev = mem_ds["ratio"].values
-                        footprint_prev = mem_ds["footprint"].values.astype(bool)
-                        assim_prev = mem_ds["assim_time"].values.astype("datetime64[ns]")
-                    #logger.info(np.nanmin(assim_prev))
-                    #logger.info(np.nanmax(assim_prev))
-                    #logger.info(np.unique(assim_prev[footprint_prev]))
-                else:
-                    logger.info("No previous orbit memory found.")
-                    ratio_prev = np.ones_like(ratio)
-                    footprint_prev = np.zeros_like(ratio, dtype=bool)
-                    assim_prev = np.full(ratio.shape, np.datetime64("NaT"), dtype="datetime64[ns]")
-            else:
-                logger.info("extend_from_prev_slot=False or persistence_until_next_day=False: avoid any type of persistency")
-                if ratio_memory_file.exists():
-                    logger.info("Removing persistent orbit memory that is probably a leftover")
-                    ratio_memory_file.unlink()
-                ratio_prev = np.ones_like(ratio)
-                footprint_prev = np.zeros_like(ratio, dtype=bool)
-                assim_prev = np.full(ratio.shape, np.datetime64("NaT"), dtype="datetime64[ns]") 
-            
-            # Define current orbit footprint
-            # Temporary solution: pixels where DART changed the emission are considered part of the satellite footprint.
-            # This should be replaced by the real observation mask whenever available.
-            # However, DART outputs have the whole domain. The only way would be to use the obs but it is not as straightforward as we would like 
-            footprint_new = np.abs(ratio - 1) > 1e-10
-            
-            # Update orbit memory with the previous satellite pass
-            ratio_memory = ratio_prev.copy()
-            footprint_memory = footprint_prev.copy()
-            assim_time_memory = assim_prev.copy()
-              
-            # Refine orbit memory with current overpass
-            if persistence_until_next_day:
-                curr_day_np = np.datetime64(t_end, "D")
-                prev_days_np = assim_prev.astype("datetime64[D]")
+    if "bottom_top" in val_correct_da.dims and "bottom_top" in emis_prev_da.dims:
+        # Alignment check vertical levels (es. 20 vs 7 levels)
+        if val_correct_da.sizes["bottom_top"] != emis_prev_da.sizes["bottom_top"]:
+            logger.info(
+                " Vertical level mismatch detected "
+                "(DART: %s, EMIS: %s). Scaling LEVEL 0 only.",
+                val_correct_da.sizes["bottom_top"],
+                emis_prev_da.sizes["bottom_top"],
+            )
+            v_correct_lvl0 = val_correct_da.isel(bottom_top=0).values
+            v_prev_lvl0 = val_prev_da.isel(bottom_top=0).values
+            ratio_lvl0 = np.divide(
+                v_correct_lvl0,
+                v_prev_lvl0,
+                out=np.zeros_like(v_correct_lvl0), #fallback if v_prev_lvl0 == 0
+                where=v_prev_lvl0 != 0,
+            )
+            #insert lvl0 ratio in the matrix
+            ratio[0, :, :] = ratio_lvl0
+            #if on the other end, we would like to use lvl0 ratio for all levels
+            #ratio[:] = ratio_lvl0[np.newaxis, :, :]
+            logger.info(f"Emission ratio computed: ready to apply it. Mean: {ratio.mean()}")
+            return ratio
+    
+    # if there is no vertical mismatch (or bottom_top does not exist), ratios are specific of and computed at each level
+    ratio = np.divide(
+        val_correct_da.values,
+        val_prev_da.values,
+        out=np.zeros_like(val_correct_da.values), #fallback if val_prev_da.values == 0
+        where=val_prev_da.values != 0,
+    )
+    logger.info(f"Emission ratio computed: ready to apply it. Mean: {ratio.mean()}")
+    return ratio
 
-                # Find pixels obsevred both now and previously this day
-                # valid_prev selects previous pixels with a valid assimilation time (not NaT) and of the previous orbit (footprint_prev = True)
-                valid_prev = ~np.isnat(assim_prev) & footprint_prev #np.isnat Test element-wise for NaT (not a time) and return result as a boolean array
-                #is_same_day will have True only where the 3 conditions are satisfied: it was previously observed in this day and it is also part of the current orbit
-                is_same_day = valid_prev & footprint_new & (prev_days_np == curr_day_np)
-                # is_new_or_next_day will have True where a pixel was observed for the last time on the previous day or was never observed
-                is_new_or_next_day = footprint_new & ~is_same_day
 
-                # for is_same_day we compute the average ratio
-                ratio_memory[is_same_day] = (ratio_prev[is_same_day] + ratio[is_same_day]) / 2.0
+def _load_or_init_ratio_memory(ratio: np.ndarray, ratio_memory_file: Optional[Path], *, extend_from_prev_slot: bool, persistence_until_next_day: bool, curr_time: pd.Timestamp): 
+    #when calling the function, since * is given as an input, the boolean inputs (since they follow *) need to be explicitly called out 
+    """Load existing memory or initialize it, preserving the legacy persistence semantics."""
+    if extend_from_prev_slot == False and persistence_until_next_day == False:
+        logger.info("extend_from_prev_slot=False and persistence_until_next_day=False: avoiding any type of persistency)")
+        if ratio_memory_file is not None and ratio_memory_file.exists():
+            logger.info("Removing persistent orbit memory that is probably a leftover")
+            ratio_memory_file.unlink()
+        return (
+            np.ones_like(ratio),
+            np.zeros_like(ratio, dtype=bool),
+            np.full(ratio.shape, np.datetime64("NaT"), dtype="datetime64[ns]"),
+        )
 
-                # for is_new_or_next_day we overwrite all pixels
-                ratio_memory[is_new_or_next_day] = ratio[is_new_or_next_day]
-
-                # Updates footprint and date memory from the current orbit 
-                footprint_memory[footprint_new] = True
-                assim_time_memory[footprint_new] = np.datetime64(t_end, "ns")
-
-            else:
-                # Add current overpass on top.
-                #Pixels belonging to the current orbit overwrite previous corrections, automatically handling:
-                #   - overlap areas: new orbit wins
-                #   - new areas: new correction is inserted
-                #   - old areas not covered anymore: previous correction is preserved
-                ratio_memory[footprint_new] = ratio[footprint_new]
-                footprint_memory[footprint_new] = True
-                assim_time_memory[footprint_new] = np.datetime64(t_end, "ns")
-            
-            # Apply ratio on emissions
-            if persistence_until_next_day:
-                current_ratio = np.where(footprint_memory, ratio_memory, 1.0)
-
-                # Update current day emission file from idx_start (t_end.hour) until day end (23:00)
-                num_hours_curr = emis_ds.sizes.get("Time", 24)
-                for h in range(idx_start, num_hours_curr):
-                    val_current = emis_ds[poll_name].isel(Time=h).values
-                    idx_tuple = tuple(h if dim == "Time" else slice(None) for dim in emis_ds[poll_name].dims)
-                    emis_ds[poll_name].values[idx_tuple] = val_current * current_ratio
-
-                # Save current day emission file 
-                file_encoding = {
-                    v: {k: val for k, val in emis_ds[v].encoding.items() if k in VALID_NC4_KEYS}
-                    for v in emis_ds.variables
-                }
-                tmp_emis = str(emis_file) + ".tmp"
-                emis_ds.to_netcdf(
-                    tmp_emis,
-                    encoding=file_encoding,
-                    unlimited_dims=['Time'] if 'Time' in emis_ds.dims else None
-                )
-
-                # Update next day emission file (all 24h)
-                if next_emis_file:
-                    logger.info(f"Applying persistent orbit corrections to next day's emission file: {next_emis_file}")
-                    with xr.open_dataset(next_emis_file, decode_timedelta=True) as next_emis_ds:
-                        next_emis_ds[poll_name] = next_emis_ds[poll_name].load()
-                        num_hours = next_emis_ds.sizes.get("Time", 24)
-
-                        for h in range(0, num_hours):
-                            val_current = next_emis_ds[poll_name].isel(Time=h).values
-                            idx_tuple = tuple(h if dim == "Time" else slice(None) for dim in next_emis_ds[poll_name].dims)
-                            next_emis_ds[poll_name].values[idx_tuple] = val_current * current_ratio
-
-                        file_encoding = {
-                            v: {k: val for k, val in next_emis_ds[v].encoding.items() if k in VALID_NC4_KEYS}
-                            for v in next_emis_ds.variables
-                        }
-                        tmp_next = str(next_emis_file) + ".tmp"
-                        next_emis_ds.to_netcdf(
-                            tmp_next,
-                            encoding=file_encoding,
-                            unlimited_dims=['Time'] if 'Time' in next_emis_ds.dims else None
-                        )
-                        os.replace(tmp_next, next_emis_file)
-
-            else:
-                if extend_from_prev_slot:
-                    ## Apply correction forward in time with pixel-based damping if requested
-                    # The corrections, either dampned or not, reach up hours_forward at max
-                    end_apply = min(next_slot_time, t_end + pd.Timedelta(hours=hours_forward))
-                    time_range = pd.date_range(start=t_end, end=end_apply, freq="1h")
-                else:
-                    # corrections are only for current timestep 
-                    time_range = pd.DatetimeIndex([t_end])
-                for t in time_range:
-                    # Compute elapsed time since the last update of each individual pixel
-                    elapsed_hours = (np.datetime64(t) - assim_time_memory) / np.timedelta64(1, "h")
-                    # Pixels never updated should not contribute
-                    elapsed_hours = np.where(footprint_memory, elapsed_hours, 999.)
-                    # Pixel-dependent damping
-                    if damping_active:
-                        weight = np.clip(1.0 - elapsed_hours / (hours_forward + 1), 0.0, 1.0)
-                        #linear decay
-                        current_ratio = (1.0 + (ratio_memory - 1.0)*weight)
-                    else:
-                        current_ratio = np.where(elapsed_hours <= hours_forward, ratio_memory, 1.0)
-                    # Apply correction to emission field
-                    idx_time = t.hour
-                    val_current = (emis_ds[poll_name].isel(Time=idx_time).values)
-                    logger.info(f"{poll_name} (t={t}) mean before update = {np.mean(val_current):.6e}")
-                    # Select the required timestep while keeping all spatial dimensions unchanged
-                    idx_tuple = tuple(idx_time if dim == "Time" else slice(None) for dim in emis_ds[poll_name].dims)
-                    emis_ds[poll_name].values[idx_tuple] = (val_current * current_ratio)
-                    logger.info(f"{poll_name} (t={t}) mean after update = {np.mean(val_current * current_ratio):.6e}")
-
-                file_encoding = {
-                    v: {k: val for k, val in emis_ds[v].encoding.items() if k in VALID_NC4_KEYS}
-                    for v in emis_ds.variables
-                }
-                tmp_emis = str(emis_file) + ".tmp"
-                emis_ds.to_netcdf(
-                    tmp_emis,
-                    encoding=file_encoding,
-                    unlimited_dims=['Time'] if 'Time' in emis_ds.dims else None
-                )
-
-                logger.info("Emission correction applied with pixel-based damping.")
-            
-            if extend_from_prev_slot or persistence_until_next_day:
-                # Save updated orbit memory for the next assimilation cycle
-                memory_ds = xr.Dataset(
-                    {
-                        "ratio": (val_correct_da.dims, ratio_memory),
-                        "footprint": (val_correct_da.dims, footprint_memory.astype(np.int8)),
-                        "assim_time": (val_correct_da.dims, assim_time_memory.astype("datetime64[ns]"))
-                    },
-                    coords=val_correct_da.coords
-                )
-                memory_tmp = str(ratio_memory_file) + ".tmp"
-                memory_ds.to_netcdf(memory_tmp)
-                os.replace(memory_tmp, ratio_memory_file)
-                logger.info(f"Orbit memory saved: {ratio_memory_file}")
-        
-            logger.info("Emission update completed using pixel-based orbit memory and damping.")
+    if ratio_memory_file is not None and ratio_memory_file.exists():
+        logger.info(f"Loading orbit memory: {ratio_memory_file}")
+        with xr.open_dataset(ratio_memory_file) as mem_ds:
+            ratio_prev = mem_ds["ratio"].values
+            footprint_prev = mem_ds["footprint"].values.astype(bool)
+            assim_prev = mem_ds["assim_time"].values.astype("datetime64[ns]")
+        valid_times = assim_prev[~np.isnat(assim_prev)]
+        # Condition: If there are no valid times (all NaT) OR the latest valid time is <= curr_time
+        if valid_times.size == 0 or pd.Timestamp(valid_times.max()) <= curr_time:
+            if not valid_times.size == 0:
+                logger.info(f"Latest valid time in the loaded file: {pd.Timestamp(valid_times.max())}")
+            return ratio_prev, footprint_prev, assim_prev
         else:
-            poll = dart_ds[pollutant].load() 
-            airm = out_ds['airm'].sel(time_counter=slice(out_ds['airm'].time_counter.values[-1], out_ds['airm'].time_counter.values[-1])).load() 
-            poll = xr.where(poll < 0, 0, poll) 
-            # Broadcast airm if shapes differ 
-            if poll.shape != airm.shape: 
-                logger.warning("Chimere original out file and dart outputs differ in shape") 
-            airm = airm.broadcast_like(poll) 
-            # Convert units 
-            poll_molec = (1e-9 * poll * airm).astype(end_ds[pollutant].dtype) 
-            poll_molec = poll_molec.rename({'y': 'south_north', 'x': 'west_east', 'time_counter': 'Time'}) 
-            # Replace last time step in end 
-            #end_ds[pollutant].isel(Time=-1).values[:] = poll_molec.values 
-            end_ds[pollutant].loc[dict(Time=end_ds.Time[-1])] = poll_molec.isel(Time=-1).values 
-            logger.info(f"DART's updated {pollutant} successfully replaced into {end_file}") 
-            tmp = str(end_file) + ".tmp" 
-            end_ds.to_netcdf(tmp)
+            logger.info(f"Ignoring orbit memory {ratio_memory_file} (assim_time > curr_time)")
 
-    #replacement of output files
-    if pollutant in ['EMISA', 'EMISB']:
-        os.replace(tmp_emis, emis_file)
-    else:
-        os.replace(tmp, end_file)
-            
+    logger.info("No previous orbit memory found.")
+    return (
+        np.ones_like(ratio),
+        np.zeros_like(ratio, dtype=bool),
+        np.full(ratio.shape, np.datetime64("NaT"), dtype="datetime64[ns]"),
+    )
+
+
 def _get_pixel(obj, h=None, x=35, y=34):
     """
     Legge DIRETTAMENTE lo scalare del pixel (x, y) dall'oggetto Xarray o Numpy,
@@ -1649,180 +1471,196 @@ def _record_paris_tracking(
 
 
 def update_pollutant_in_end(
-    dart_file: Path, end_file: Path, out_file: Path, emis_file: Path, 
-    dart_in_file: Path, next_emis_file: Path, ratio_memory_file: Path, 
-    pollutant: str, next_slot_time: pd.Timestamp, 
-    persistence_until_next_day: bool = True, extend_from_prev_slot: bool = True, 
-    damping_active: bool = False, hours_forward: int = 6,
+    dart_file: Path,
+    end_file: Path,
+    out_file: Path,
+    emis_file: Path,
+    emis_file_preIM: Path,
+    dart_in_file: Path,
+    next_emis_file: Path,
+    ratio_memory_file: Path,
+    pollutant: str,
+    next_slot_time: pd.Timestamp,
+    use_ratios_avg: bool = False,
+    persistence_until_next_day: bool = True,
+    extend_from_prev_slot: bool = True,
+    damping_active: bool = False,
+    hours_forward: int = 6,
     is_first_mem: bool = False,
     sim_start_time: pd.Timestamp = None,
     sim_end_time: pd.Timestamp = None,
     tracking_file: Path = None,
     paris_x: int = 35,
-    paris_y: int = 34
+    paris_y: int = 34,
 ):
-    VALID_NC4_KEYS = {
-        'shuffle','zlib','quantize_mode','blosc_shuffle',
-        'fletcher32','least_significant_digit','endian',
-        'complevel','szip_coding','dtype',
-        'szip_pixels_per_block','compression',
-        'significant_digits','_FillValue'
-    }
+    """
+    Apply DART-derived emission corrections using baseline snapshots to prevent re-correction.
+    
+    CRITICAL PATTERN: Capture a clean copy of emissions BEFORE any corrections, then apply
+    ratios to this baseline for ALL subsequent hours/days. This ensures idempotent corrections
+    and prevents cascading amplification (R² instead of R).
+    """
+    ratio_memory_path = Path(ratio_memory_file) if ratio_memory_file is not None else None
 
-    # Check files
-    for f in [dart_file, end_file, out_file, emis_file, dart_in_file]:
+    # === VALIDATION: Ensure all required input files exist ===
+    for f in [dart_file, end_file, out_file, emis_file, emis_file_preIM, dart_in_file]:
         if not os.path.exists(f):
             raise FileNotFoundError(f"{f} is missing")
 
-    # Open datasets
+    tmp_emis = None
+    tmp_end = None
+
+    # === LOAD DATASETS ===
     with xr.open_dataset(dart_file, decode_timedelta=True) as dart_ds, \
          xr.open_dataset(end_file, decode_timedelta=True) as end_ds, \
          xr.open_dataset(out_file, decode_timedelta=True) as out_ds, \
          xr.open_dataset(emis_file, decode_timedelta=True) as emis_ds, \
+         xr.open_dataset(emis_file_preIM, decode_timedelta=True) as emispreIM_ds, \
          xr.open_dataset(dart_in_file, decode_timedelta=True) as dart_in_ds:
 
+        # === EMISSION CORRECTION LOGIC (for EMISA/EMISB pollutants) ===
         if pollutant in ['EMISA', 'EMISB']:
-            poll_dart = dart_ds[pollutant].load()
-            poll_name = 'NO2' if pollutant=='EMISB' else 'NO'
+            # Map EMISA->NO, EMISB->NO2 for tracking in emissions file
+            poll_name = 'NO2' if pollutant == 'EMISB' else 'NO'
+            logger.info(f"Proceeding updating {poll_name} emissions ...")
 
+            # Extract current timestep boundaries
             t_start = end_ds.Times.isel(Time=-2).item().decode("utf-8").replace("_", " ")
             t_end = end_ds.Times.isel(Time=-1).item().decode("utf-8").replace("_", " ")
             t_start = pd.to_datetime(t_start)
             t_end = pd.to_datetime(t_end)
-
             idx_start = t_start.hour
-            idx_end = t_end.hour
-
-            emis_ds[poll_name] = emis_ds[poll_name].load()
+            #t_start is basically the time of the emissions corrected by DART
+            #t_end is the time of the emissions to be corrected to move forward in time
+           
+            # Load DART posterior 
+            poll_dart = dart_ds[pollutant].load()
+            # Load DART prior
             poll_dart_in = dart_in_ds[pollutant].load()
+            # Load original emis (perturbed)
+            emis_ds[poll_name] = emis_ds[poll_name].load()
 
+            # === COMPUTE CORRECTION RATIO ===
+            # Ratio = DART posterior / DART prior (correction factor)
             val_correct_da = xr.where(poll_dart < 0, 0, poll_dart).isel(time_counter=0)
-            emis_prev_da = emis_ds[poll_name].isel(Time=idx_start)
             val_prev_da = xr.where(poll_dart_in < 0, 0, poll_dart_in)
-
-            ratio = np.ones_like(emis_prev_da.values)
-
-            if "bottom_top" in val_correct_da.dims and "bottom_top" in emis_prev_da.dims:
-                if val_correct_da.sizes["bottom_top"] != emis_prev_da.sizes["bottom_top"]:
-                    logger.info(f" > [INFO] Vertical level mismatch detected. Scaling LEVEL 0 only.")
-                    v_correct_lvl0 = val_correct_da.isel(bottom_top=0).values
-                    v_prev_lvl0 = val_prev_da.isel(bottom_top=0).values
-                    ratio_lvl0 = np.divide(v_correct_lvl0, v_prev_lvl0, out=np.zeros_like(v_correct_lvl0), where=v_prev_lvl0 != 0)
-                    ratio[0, :, :] = ratio_lvl0
-                else:
-                    ratio = np.divide(val_correct_da.values, val_prev_da.values, out=np.zeros_like(val_correct_da.values), where=val_prev_da.values != 0)
-            else:
-                ratio = np.divide(val_correct_da.values, val_prev_da.values, out=np.zeros_like(val_correct_da.values), where=val_prev_da.values != 0)
-
-            if extend_from_prev_slot or persistence_until_next_day:
-                if os.path.exists(ratio_memory_file):
-                    logger.info(f"Loading orbit memory: {ratio_memory_file}")
-                    with xr.open_dataset(ratio_memory_file) as mem_ds:
-                        ratio_prev = mem_ds["ratio"].values
-                        footprint_prev = mem_ds["footprint"].values.astype(bool)
-                        assim_prev = mem_ds["assim_time"].values.astype("datetime64[ns]")
-                else:
-                    logger.info("No previous orbit memory found.")
-                    ratio_prev = np.ones_like(ratio)
-                    footprint_prev = np.zeros_like(ratio, dtype=bool)
-                    assim_prev = np.full(ratio.shape, np.datetime64("NaT"), dtype="datetime64[ns]")
-            else:
-                if ratio_memory_file.exists():
-                    ratio_memory_file.unlink()
-                ratio_prev = np.ones_like(ratio)
-                footprint_prev = np.zeros_like(ratio, dtype=bool)
-                assim_prev = np.full(ratio.shape, np.datetime64("NaT"), dtype="datetime64[ns]")
-
+            emis_prev_da = emis_ds[poll_name].isel(Time=idx_start) #used only to inherit shape 
+            ratio = _compute_emission_ratio(val_correct_da, val_prev_da, emis_prev_da)
+            # === IDENTIFY NEW FOOTPRINT ===
+            # Mark pixels where ratio changed significantly (new satellite observation)
+            # NB Temporary solution: should be replaced by the real observation mask (only in obs_seq.out/final or in original listed obs)
             footprint_new = np.abs(ratio - 1) > 1e-10
-
+            # === LOAD ORBITAL MEMORY ===
+            # Retrieve previous orbit footprints, ratios, and assimilation times to track
+            # which pixels were corrected and when if available; elsewhere mimic it with ones on current one
+            ratio_prev, footprint_prev, assim_prev = _load_or_init_ratio_memory(
+                ratio, #only its shape is used
+                ratio_memory_path,
+                extend_from_prev_slot=extend_from_prev_slot,
+                persistence_until_next_day=persistence_until_next_day,
+                curr_time=t_end
+            )
+            # Update orbit memory with the previous satellite pass
             ratio_memory = ratio_prev.copy()
             footprint_memory = footprint_prev.copy()
             assim_time_memory = assim_prev.copy()
+            
+            #  === UPDATE MEMORY WITH CURRENT OVERPASS ===
+            # Baseline Assignment: Add current overpass on top.
+            # Pixels belonging to the current orbit overwrite previous corrections, automatically handling:
+            #   - overlap areas: new orbit wins
+            #   - new areas: new correction is inserted
+            #   - old areas not covered anymore: previous correction is preserved
+            ratio_memory[footprint_new] = ratio[footprint_new]
+            footprint_memory[footprint_new] = True
+            assim_time_memory[footprint_new] = np.datetime64(t_end, "ns")
 
-            if persistence_until_next_day:
+            # Conditional Refinement: pixels obsevred both now and previously this day get overwritten 
+            #   - overlap areas: 
+                # If satellite corrected same pixel today: average the ratios
+                # If satellite corrected pixel today but corrected it on a different day: use new ratio
+            #   - new areas: new correction is inserted
+            #   - old areas not covered anymore: previous correction is preserved
+            if use_ratios_avg:
                 curr_day_np = np.datetime64(t_end, "D")
                 prev_days_np = assim_prev.astype("datetime64[D]")
-                valid_prev = ~np.isnat(assim_prev) & footprint_prev
+                # valid_prev selects previous pixels with a valid assim time (not NaT) and of the previous orbit (footprint_prev = True)
+                valid_prev = ~np.isnat(assim_prev) & footprint_prev #np.isnat Test element-wise for NaT and return result as a boolean array
+                # is_same_day has True where the 3 are satisfied: it was previously observed today and it is also part of the current orbit
                 is_same_day = valid_prev & footprint_new & (prev_days_np == curr_day_np)
-                is_new_or_next_day = footprint_new & ~is_same_day
-
+                # for is_same_day we compute the average ratio (this safely overwrites the baseline assignment made above)
                 ratio_memory[is_same_day] = (ratio_prev[is_same_day] + ratio[is_same_day]) / 2.0
-                ratio_memory[is_new_or_next_day] = ratio[is_new_or_next_day]
-
-                footprint_memory[footprint_new] = True
-                assim_time_memory[footprint_new] = np.datetime64(t_end, "ns")
-            else:
-                ratio_memory[footprint_new] = ratio[footprint_new]
-                footprint_memory[footprint_new] = True
-                assim_time_memory[footprint_new] = np.datetime64(t_end, "ns")
-
-            # Liste per tracciare lo stato grezzo dei dataset
+            
             track_times, track_before, track_after, track_ratios = [], [], [], []
+            # Pre IM emissions: necessary to avoid apply percistency ratios over and over again on following hours (only one should be used
+            baseline_emis = emispreIM_ds[poll_name].copy(deep=True)  # <-- KEY LINE
 
             if persistence_until_next_day:
+                # === APPLY RATIO TO CURRENT DAY (using baseline snapshot) ===
+                # Loop through each hour and apply ratio to baseline emissions.
+                # NEVER read from modified array; always use baseline_emis copy.
                 current_ratio = np.where(footprint_memory, ratio_memory, 1.0)
                 num_hours_curr = emis_ds.sizes.get("Time", 24)
                 base_date = t_end.floor("D")
 
                 for h in range(idx_start, num_hours_curr):
                     time_h = base_date + pd.Timedelta(hours=h)
-
-                    # 1. Lettura DIRETTA da dataset prima dell'aggiornamento
-                    val_curr_before = _get_pixel(emis_ds[poll_name], h=h, x=paris_x, y=paris_y)
-                    # 2. Lettura DIRETTA del ratio applicato
+                    # Capture BEFORE from baseline snapshot (not from already-modified array)
+                    val_curr_before = _get_pixel(baseline_emis, h=h, x=paris_x, y=paris_y)
                     r_pixel = _get_pixel(current_ratio, x=paris_x, y=paris_y)
-
-                    # Applicazione modifica
                     idx_tuple = tuple(h if dim == "Time" else slice(None) for dim in emis_ds[poll_name].dims)
-                    emis_ds[poll_name].values[idx_tuple] = emis_ds[poll_name].isel(Time=h).values * current_ratio
-
-                    # 3. Lettura DIRETTA da dataset DOPO l'aggiornamento
+                    # KEY: Apply ratio to baseline, never to already-corrected values
+                    base_values = baseline_emis.isel(Time=h).values
+                    emis_ds[poll_name].values[idx_tuple] = base_values * current_ratio
                     val_curr_after = _get_pixel(emis_ds[poll_name], h=h, x=paris_x, y=paris_y)
 
+                    # Record pixel values for CSV tracking
                     if is_first_mem:
                         track_times.append(time_h)
                         track_before.append(val_curr_before)
                         track_after.append(val_curr_after)
                         track_ratios.append(r_pixel)
 
-                file_encoding = {v: {k: val for k, val in emis_ds[v].encoding.items() if k in VALID_NC4_KEYS} for v in emis_ds.variables}
-                tmp_emis = str(emis_file) + ".tmp"
-                emis_ds.to_netcdf(tmp_emis, encoding=file_encoding, unlimited_dims=['Time'] if 'Time' in emis_ds.dims else None)
+                # Write modified emissions file (current day)
+                tmp_emis = Path(str(emis_file) + ".tmp")
+                _write_dataset_with_encoding(emis_ds, tmp_emis, unlimited_dims=['Time'] if 'Time' in emis_ds.dims else None)
 
                 if next_emis_file:
-                    logger.info(f"Applying persistent orbit corrections to next day's emission file: {next_emis_file}")
+                    logger.info("Applying persistent orbit corrections to next day's emission file: %s", next_emis_file)
+                    # === EXTEND CORRECTIONS TO NEXT DAY ===
+                    # Carry orbital memory forward: same corrections applied tomorrow using baseline snapshot
                     with xr.open_dataset(next_emis_file, decode_timedelta=True) as next_emis_ds:
                         next_emis_ds[poll_name] = next_emis_ds[poll_name].load()
+                        # Capture baseline for next day before any modifications
+                        baseline_next_emis = next_emis_ds[poll_name].copy(deep=True)
                         num_hours = next_emis_ds.sizes.get("Time", 24)
                         next_base_date = base_date + pd.Timedelta(days=1)
 
                         for h in range(0, num_hours):
                             time_h = next_base_date + pd.Timedelta(hours=h)
-
-                            # 1. Lettura DIRETTA da next_emis_ds prima
-                            val_curr_before = _get_pixel(next_emis_ds[poll_name], h=h, x=paris_x, y=paris_y)
-                            # 2. Lettura DIRETTA ratio
+                            # Capture BEFORE from baseline snapshot (not from already-modified array)
+                            val_curr_before = _get_pixel(baseline_next_emis, h=h, x=paris_x, y=paris_y)
                             r_pixel = _get_pixel(current_ratio, x=paris_x, y=paris_y)
-
-                            # Applicazione modifica
                             idx_tuple = tuple(h if dim == "Time" else slice(None) for dim in next_emis_ds[poll_name].dims)
-                            next_emis_ds[poll_name].values[idx_tuple] = next_emis_ds[poll_name].isel(Time=h).values * current_ratio
-
-                            # 3. Lettura DIRETTA da next_emis_ds DOPO
+                            # KEY: Apply ratio to baseline of NEXT DAY file
+                            base_values = baseline_next_emis.isel(Time=h).values
+                            next_emis_ds[poll_name].values[idx_tuple] = base_values * current_ratio
                             val_curr_after = _get_pixel(next_emis_ds[poll_name], h=h, x=paris_x, y=paris_y)
 
+                            # Record pixel values for CSV tracking
                             if is_first_mem:
                                 track_times.append(time_h)
                                 track_before.append(val_curr_before)
                                 track_after.append(val_curr_after)
                                 track_ratios.append(r_pixel)
 
-                        file_encoding = {v: {k: val for k, val in next_emis_ds[v].encoding.items() if k in VALID_NC4_KEYS} for v in next_emis_ds.variables}
-                        tmp_next = str(next_emis_file) + ".tmp"
-                        next_emis_ds.to_netcdf(tmp_next, encoding=file_encoding, unlimited_dims=['Time'] if 'Time' in next_emis_ds.dims else None)
+                        # Write modified emissions file (next day)
+                        tmp_next = Path(str(next_emis_file) + ".tmp")
+                        _write_dataset_with_encoding(next_emis_ds, tmp_next, unlimited_dims=['Time'] if 'Time' in next_emis_ds.dims else None)
                         os.replace(tmp_next, next_emis_file)
-
             else:
+                # === NON-PERSISTENCE MODE (damping or limited extension) ===
+                # Apply corrections for a limited time window with optional decay
                 if extend_from_prev_slot:
                     end_apply = min(next_slot_time, t_end + pd.Timedelta(hours=hours_forward))
                     time_range = pd.date_range(start=t_end, end=end_apply, freq="1h")
@@ -1830,40 +1668,44 @@ def update_pollutant_in_end(
                     time_range = pd.DatetimeIndex([t_end])
 
                 for t in time_range:
+                    # Compute time elapsed since each pixel was corrected
                     elapsed_hours = (np.datetime64(t) - assim_time_memory) / np.timedelta64(1, "h")
-                    elapsed_hours = np.where(footprint_memory, elapsed_hours, 999.)
+                    elapsed_hours = np.where(footprint_memory, elapsed_hours, 999.0)
+
                     if damping_active:
+                        # === DAMPING MODE: ratio decays over time ===
+                        # weight decreases linearly from 1 to 0, causing ratio to decay toward 1
                         weight = np.clip(1.0 - elapsed_hours / (hours_forward + 1), 0.0, 1.0)
-                        current_ratio = (1.0 + (ratio_memory - 1.0)*weight)
+                        current_ratio = 1.0 + (ratio_memory - 1.0) * weight
                     else:
+                        # === EXTENSION MODE: ratio persists, then stops ===
+                        # Apply correction within hours_forward window, then revert to no correction
                         current_ratio = np.where(elapsed_hours <= hours_forward, ratio_memory, 1.0)
 
                     idx_time = t.hour
-
-                    # 1. Lettura DIRETTA prima
-                    val_curr_before = _get_pixel(emis_ds[poll_name], h=idx_time, x=paris_x, y=paris_y)
-                    # 2. Lettura DIRETTA ratio
+                    # Capture BEFORE from baseline snapshot (not from already-modified array)
+                    val_curr_before = _get_pixel(baseline_emis, h=idx_time, x=paris_x, y=paris_y)
                     r_pixel = _get_pixel(current_ratio, x=paris_x, y=paris_y)
-
-                    # Applicazione modifica
                     idx_tuple = tuple(idx_time if dim == "Time" else slice(None) for dim in emis_ds[poll_name].dims)
-                    emis_ds[poll_name].values[idx_tuple] = emis_ds[poll_name].isel(Time=idx_time).values * current_ratio
-
-                    # 3. Lettura DIRETTA DOPO
+                    # KEY: Apply decayed/extended ratio to baseline
+                    base_values = baseline_emis.isel(Time=idx_time).values
+                    emis_ds[poll_name].values[idx_tuple] = base_values * current_ratio
                     val_curr_after = _get_pixel(emis_ds[poll_name], h=idx_time, x=paris_x, y=paris_y)
 
+                    # Record pixel values for CSV tracking
                     if is_first_mem:
                         track_times.append(t)
                         track_before.append(val_curr_before)
                         track_after.append(val_curr_after)
                         track_ratios.append(r_pixel)
 
-                file_encoding = {v: {k: val for k, val in emis_ds[v].encoding.items() if k in VALID_NC4_KEYS} for v in emis_ds.variables}
-                tmp_emis = str(emis_file) + ".tmp"
-                emis_ds.to_netcdf(tmp_emis, encoding=file_encoding, unlimited_dims=['Time'] if 'Time' in emis_ds.dims else None)
+                # Write modified emissions file
+                tmp_emis = Path(str(emis_file) + ".tmp")
+                _write_dataset_with_encoding(emis_ds, tmp_emis, unlimited_dims=['Time'] if 'Time' in emis_ds.dims else None)
 
-            # Scrittura su CSV dei dati letti direttamente
             if is_first_mem and tracking_file and sim_start_time and sim_end_time:
+                # === RECORD TRACKING CSV ===
+                # Log pixel values (BEFORE/AFTER/RATIO) for validation and debugging
                 _record_paris_tracking(
                     tracking_file=tracking_file,
                     call_time=t_end,
@@ -1873,23 +1715,31 @@ def update_pollutant_in_end(
                     updated_times=track_times,
                     vals_before=track_before,
                     vals_after=track_after,
-                    ratios_applied=track_ratios
+                    ratios_applied=track_ratios,
                 )
 
             if extend_from_prev_slot or persistence_until_next_day:
-                memory_ds = xr.Dataset(
-                    {
-                        "ratio": (val_correct_da.dims, ratio_memory),
-                        "footprint": (val_correct_da.dims, footprint_memory.astype(np.int8)),
-                        "assim_time": (val_correct_da.dims, assim_time_memory.astype("datetime64[ns]"))
-                    },
-                    coords=val_correct_da.coords
-                )
-                memory_tmp = str(ratio_memory_file) + ".tmp"
-                memory_ds.to_netcdf(memory_tmp)
-                os.replace(memory_tmp, ratio_memory_file)
+                # === PERSIST ORBITAL MEMORY ===
+                # Save ratio, footprint, and assimilation time for next update cycle
+                if ratio_memory_path is not None:
+                    memory_ds = xr.Dataset(
+                        {
+                            "ratio": (val_correct_da.dims, ratio_memory),
+                            "footprint": (val_correct_da.dims, footprint_memory.astype(np.int8)),
+                            "assim_time": (val_correct_da.dims, assim_time_memory.astype("datetime64[ns]")),
+                        },
+                        coords=val_correct_da.coords,
+                    )
+                    memory_tmp = Path(str(ratio_memory_path) + ".tmp")
+                    memory_ds.to_netcdf(memory_tmp)
+                    os.replace(memory_tmp, ratio_memory_path)
+                else:
+                    logger.info("No ratio-memory path provided; skipping orbit memory persistence.")
 
+            logger.info("Emission update completed using pixel-based orbit memory and damping.")
         else:
+            # === OTHER POLLUTANTS (non-EMISA/EMISB) ===
+            # Direct replacement of end_file values with DART posterior
             poll = dart_ds[pollutant].load()
             airm = out_ds['airm'].sel(time_counter=slice(out_ds['airm'].time_counter.values[-1], out_ds['airm'].time_counter.values[-1])).load()
             poll = xr.where(poll < 0, 0, poll)
@@ -1899,13 +1749,17 @@ def update_pollutant_in_end(
             poll_molec = (1e-9 * poll * airm).astype(end_ds[pollutant].dtype)
             poll_molec = poll_molec.rename({'y': 'south_north', 'x': 'west_east', 'time_counter': 'Time'})
             end_ds[pollutant].loc[dict(Time=end_ds.Time[-1])] = poll_molec.isel(Time=-1).values
-            tmp = str(end_file) + ".tmp"
-            end_ds.to_netcdf(tmp)
+            logger.info(f"DART's updated {pollutant} successfully replaced into {end_file}")
+            tmp_end = Path(str(end_file) + ".tmp")
+            end_ds.to_netcdf(tmp_end)
 
+    # === FINALIZE: Replace temporary files with actual output ===
     if pollutant in ['EMISA', 'EMISB']:
-        os.replace(tmp_emis, emis_file)
+        if tmp_emis is not None:
+            os.replace(tmp_emis, emis_file)
     else:
-        os.replace(tmp, end_file)
+        if tmp_end is not None:
+            os.replace(tmp_end, end_file)
 
 
 def save_diff(file_a: Path, file_b: Path, out_path: Path, label: str):
