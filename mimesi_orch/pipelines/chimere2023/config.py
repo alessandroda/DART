@@ -30,6 +30,7 @@ class Chimere2023PipelineConfig(BaseModel):
     var_list_3d: list | None = None
     var_list_2d: list | None = None
     obs_filter_negative: bool
+    use_ratios_avg: bool
     persistence_until_next_day: bool
     extend_from_prev_slot: bool
     damping_active: bool
@@ -91,6 +92,7 @@ class Chimere2023PipelineConfig(BaseModel):
             var_list_3d=app.assimilation.var_list_3d,
             var_list_2d=app.assimilation.var_list_2d,
             obs_filter_negative=app.assimilation.obs_filter_negative,
+            use_ratios_avg=app.assimilation.use_ratios_avg,
             persistence_until_next_day=app.assimilation.persistence_until_next_day,
             extend_from_prev_slot=app.assimilation.extend_from_prev_slot,
             damping_active=app.assimilation.damping_active,

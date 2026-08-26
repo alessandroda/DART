@@ -101,6 +101,9 @@ class Chimere2023Paths:
     def chimere2023_EMI_FILE(self, mem: int, domain: str, month: int, weekday) -> Path:
         return self.chimere2023_run_dir(mem) / f"EMIS.{domain}.{month}.{weekday}.s.nc"
     
+    def chimere2023_EMI_FILE_preIM(self, mem: int, domain: str, month: int, weekday) -> Path:
+        return self.chimere2023_run_dir(mem) / f"EMISpreIM.{domain}.{month}.{weekday}.s.nc"
+    
     def chimere2023_METEO_FILE_SRC(self, is_pert: bool, domain: str, date_ymd: str, meteo_id: Optional[int]) -> Path:
         if is_pert:
             return self.path_perturbed_meteo / f"exdomout_{date_ymd}00_24_{domain}.ens{meteo_id:02d}.nc"

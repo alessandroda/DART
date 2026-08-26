@@ -78,7 +78,6 @@ class Chimere2023DartPipeline(BaseAssimilationPipeline):
         self.var_list_2d = a.var_list_2d
         self.obs_filt = a.obs_filter_negative
         self.persistence_until_next_day = a.persistence_until_next_day
-        self.use_ratios_avg = a.use_ratios_avg
         self.extend_from_prev_slot = a.extend_from_prev_slot
         self.damping_active = a.damping_active
         self.hours_forward = a.hours_forward
@@ -591,7 +590,7 @@ class Chimere2023DartPipeline(BaseAssimilationPipeline):
             logger.info("No cycling flag was selected, skipping restart file update (Data Fusion)")
             return
         logger.info("---------->>> Running update_pollutant_in_end()")
-        #breakpoint()
+        breakpoint()
         date_ymdH_chim = self.time_manager.end_file_datetime.strftime("%Y%m%d%H")
         date_ymdH = self.time_manager.current_time.strftime("%Y%m%d%H")
         date_month = self.time_manager.current_time.strftime("%m")
@@ -608,7 +607,7 @@ class Chimere2023DartPipeline(BaseAssimilationPipeline):
             for pollutant in self.list_update_restart:
                 next_day_emis_file = self.paths.chimere2023_EMI_FILE(mem, self.domain, next_date_month, next_date_weekday) #following day
                 next_day_emis_file_preIM = self.paths.chimere2023_EMI_FILE_preIM(mem, self.domain, next_date_month, next_date_weekday)
-                if not next_day_emis_file.exists() or not next_day_emis_file_preIM.exists():
+                if not next_day_emis_file.exists():
                     #dict_mem da ripredere
                     safe_symlink(self.paths.chimere2023_EMIS_FILE_SRC(True, self.domain, next_date_month, next_date_weekday, mem), next_day_emis_file, do_copy=True)
                     safe_symlink(self.paths.chimere2023_EMIS_FILE_SRC(True, self.domain, next_date_month, next_date_weekday, mem), next_day_emis_file_preIM, do_copy=True)
@@ -621,7 +620,6 @@ class Chimere2023DartPipeline(BaseAssimilationPipeline):
                                         emis_file_preIM=self.paths.chimere2023_EMI_FILE_preIM(mem, self.domain, date_month, date_weekday),
                                         dart_in_file=self.paths.dart_filter_input_list_file(mem, date_ymdH),
                                         next_emis_file = next_day_emis_file,
-                                        next_emis_file_preIM = next_day_emis_file_preIM,
                                         ratio_memory_file=ratio_memory_file,
                                         pollutant=pollutant,
                                         next_slot_time=self.time_manager.next_slot_time,
@@ -630,6 +628,7 @@ class Chimere2023DartPipeline(BaseAssimilationPipeline):
                                         extend_from_prev_slot=self.extend_from_prev_slot,
                                         damping_active=self.damping_active,
                                         hours_forward=self.hours_forward,
+                                        # Argomenti aggiuntivi per il tracciamento
                                         is_first_mem=(mem == 1),
                                         sim_start_time=self.time_manager.start_time,
                                         sim_end_time=self.time_manager.end_time,

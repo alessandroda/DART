@@ -143,6 +143,7 @@ class AssimilationConfig(BaseModel):
 
     obs_filter_negative: Optional[bool] = None
 
+    use_ratios_avg: Optional[bool] = None
     persistence_until_next_day: Optional[bool] = None 
     extend_from_prev_slot: Optional[bool] = None
     damping_active: Optional[bool] = None
